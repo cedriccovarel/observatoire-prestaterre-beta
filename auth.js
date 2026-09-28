@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const AUTH_KEY = 'prestaterre-observatoire-v21-auth';
-  const EXPECTED_HASHES = new Set(['da7c267c72f7e0d4000e79268cc35c8dbf2054171d87096ebc2c61d0e193b0e8', 'e3a561f9cb2a9bc267524a2497a6d67313639618009c4b2584a10dcb157e0125']);
+  const EXPECTED_HASHES = new Set(['da7c267c72f7e0d4000e79268cc35c8dbf2054171d87096ebc2c61d0e193b0e8', 'e3a561f9cb2a9bc267524a2497a6d67313639618009c4b2584a10dcb157e0125', 'ca33cb505b973d2ebae8244d776da0c87682d03edbca70ed9aed1dc01b5ba24b']);
   const body = document.body;
   const screen = document.getElementById('authScreen');
   const shell = document.getElementById('appShell');
