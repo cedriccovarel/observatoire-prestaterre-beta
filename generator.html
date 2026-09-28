@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#06402B" />
+  <title>Générateur de slides - Observatoire</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
+  <link rel="apple-touch-icon" href="assets/favicon.png" />
+  <link rel="stylesheet" href="style.css?v=29.7.13" />
+  <link rel="stylesheet" href="privacy.css?v=5.0.0" />
+</head>
+<body class="auth-locked">
+  <section id="authScreen" class="auth-screen" aria-label="Accès au générateur">
+    <div class="auth-brand">
+      <img class="auth-logo" src="assets/prestaterre_logo_green.png" alt="Prestaterre Certification">
+      <div>
+        <p class="auth-eyebrow">OBSERVATOIRE DU BÂTIMENT DURABLE</p>
+        <h1>Générateur de slides</h1>
+        <p>Prestaterre Certification</p>
+      </div>
+    </div>
+    <form id="authForm" class="auth-card" autocomplete="off">
+      <div class="auth-card-icon" aria-hidden="true">●</div>
+      <h2>Accès Observatoire</h2>
+      <p>Renseignez le mot de passe pour accéder au générateur.</p>
+      <label for="authPassword">Mot de passe</label>
+      <div class="auth-password-row">
+        <input id="authPassword" type="password" autocomplete="current-password" required autofocus />
+        <button id="authToggle" class="auth-toggle" type="button" aria-label="Afficher ou masquer le mot de passe">Afficher</button>
+      </div>
+      <button class="auth-submit" type="submit">Accéder au générateur</button>
+      <div id="authError" class="auth-error" role="alert" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <div id="appShell" class="app-shell" aria-hidden="true">
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">OBSERVATOIRE DU BÂTIMENT DURABLE</p>
+      <h1>Générateur de slides</h1>
+      <p class="app-subtitle">Slides modulables · saisie libre · export PNG 4K 16:9</p>
+    </div>
+    <div class="header-actions">
+      <button id="loadSaveBtn" class="btn btn-secondary" type="button">Charger</button>
+      <button id="saveProjectBtn" class="btn btn-save" type="button">Sauvegarder</button>
+      <button id="dataSourceBtn" class="btn btn-data-source" type="button" title="Connecter une source Google Sheets / Apps Script"><span id="dataSourceDot" class="data-source-dot"></span><span id="dataSourceLabel">Données</span></button>
+      <div class="add-slide-wrap">
+        <select id="addSlideSelect" class="btn btn-secondary add-slide-select" aria-label="Ajouter une slide">
+          <option value="">Ajouter slide ▾</option>
+        </select>
+      </div>
+      <button id="presentationBtn" class="btn btn-secondary" type="button" title="Afficher les slides en plein écran avec les onglets">Présentation</button>
+      <button id="exportBtn" class="btn btn-primary" type="button" title="Export PNG 4K">PNG 4K</button>
+      <button id="exportSvgBtn" class="btn btn-secondary" type="button" title="Export SVG">SVG</button>
+      <button id="exportWorkbookBtn" class="btn btn-secondary" type="button" title="Ouvrir le dialogue d’impression pour imprimer ou enregistrer tout le classeur en PDF">Export classeur</button>
+      <input id="loadSaveInput" type="file" accept="application/json,.json" hidden />
+    </div>
+  </header>
+
+  <nav id="tabsNav" class="tabs" aria-label="Slides"></nav>
+
+  <section id="globalFilterStrip" class="global-filter-strip" aria-label="Filtres de la slide active">
+    <div id="slideFilterToolbar" class="slide-filter-toolbar" aria-label="Filtres de la slide active"></div>
+  </section>
+
+  <main class="workspace">
+    <aside class="control-panel">
+      <div class="control-panel-title">
+        <span>PARAMÈTRES</span>
+        <span id="saveStatus">Enregistré automatiquement</span>
+      </div>
+      <div id="controls"></div>
+    </aside>
+
+    <section class="preview-area">
+      <div class="preview-toolbar">
+        <div>
+          <strong>Aperçu 16:9</strong>
+          <span>Export : 3840 × 2160 px</span>
+        </div>
+        <div class="preview-controls">
+          <div class="zoom-control">
+            <label for="globalTextScaleRange">Textes globaux</label>
+            <input id="globalTextScaleRange" type="range" min="70" max="160" value="100" />
+            <span id="globalTextScaleValue">100 %</span>
+          </div>
+          <div class="zoom-control">
+            <label for="slideTextScaleRange">Textes slide</label>
+            <input id="slideTextScaleRange" type="range" min="70" max="160" value="100" />
+            <span id="slideTextScaleValue">100 %</span>
+          </div>
+          <div class="zoom-control">
+            <label for="zoomRange">Zoom aperçu</label>
+            <input id="zoomRange" type="range" min="15" max="100" value="52" />
+            <button id="fitPreviewBtn" class="preview-fit-btn" type="button" title="Afficher la slide entière dans la zone d’aperçu">Ajuster</button>
+            <span id="zoomValue">52 %</span>
+          </div>
+        </div>
+      </div>
+      <div id="slideViewport" class="slide-viewport">
+        <div id="slideStage" class="slide-stage">
+          <section id="slide" class="slide" aria-label="Aperçu de la slide"></section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="dataConnectModal" class="data-modal" hidden>
+    <div class="data-modal-backdrop" data-data-close="1"></div>
+    <section class="data-modal-card" role="dialog" aria-modal="true" aria-labelledby="dataModalTitle">
+      <div class="data-modal-head"><div><span class="data-kicker">V29.7.13 · DATA CONNECTED</span><h2 id="dataModalTitle">Source de données</h2><p>Les slides compatibles se recalculent depuis une même base d’opérations, avec des filtres indépendants par slide.</p></div><button type="button" class="data-close" data-data-close="1">×</button></div>
+      <div class="data-modal-grid">
+        <div class="data-source-card">
+          <label>Mode</label>
+          <select id="dataMode"><option value="demo">Démonstration intégrée</option><option value="appsScript">Google Apps Script (JSON)</option><option value="googleSheet">Google Sheet public (CSV)</option></select>
+          <label>URL de la source</label><input id="dataUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec ou URL Google Sheet">
+          <label>Nom de l’onglet Google Sheet</label><input id="dataTab" type="text" value="OPERATIONS">
+          <div class="data-actions"><button id="dataConnectBtn" class="btn btn-primary" type="button">Connecter / actualiser</button><button id="dataDisconnectBtn" class="btn btn-secondary" type="button">Revenir au mode manuel</button></div><div class="data-resource-actions"><button id="dataShowGsBtn" class="btn btn-secondary btn-small" type="button">Code .gs</button><button id="dataCopyColumnsBtn" class="btn btn-secondary btn-small" type="button">Colonnes Excel</button><button id="dataHelpBtn" class="btn btn-secondary btn-small" type="button">Aide connexion</button></div>
+          <div id="dataFeedback" class="data-feedback">Aucune source connectée.</div>
+        </div>
+        <div class="data-filter-card data-filter-info-card">
+          <div class="data-filter-title"><b>Filtres par slide</b><span id="dataFilteredCount">0 opération</span></div>
+          <div class="data-connected-help"><b>Les filtres sont maintenant dans la barre horizontale générale, sous les onglets.</b><br>Chaque slide conserve son propre jeu de filtres : Année, Référentiel, Mentions, Maître d’ouvrage et Évaluation : Statut.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="dataHelpModal" class="data-modal data-help-modal" hidden>
+    <div class="data-modal-backdrop" data-data-help-close="1"></div>
+    <section class="data-modal-card data-help-card" role="dialog" aria-modal="true" aria-labelledby="dataHelpTitle">
+      <div class="data-modal-head"><div><span class="data-kicker">ASSISTANT DE CONNEXION</span><h2 id="dataHelpTitle">Aide</h2></div><button type="button" class="data-close" data-data-help-close="1">×</button></div>
+      <div id="dataHelpBody" class="data-help-body"></div>
+      <div class="data-actions data-help-footer"><button id="dataHelpCopy" class="btn btn-primary" type="button">Copier</button><button class="btn btn-secondary" type="button" data-data-help-close="1">Fermer</button></div>
+    </section>
+  </div>
+
+  <aside id="dataExplorer" class="data-explorer" aria-hidden="true">
+    <div class="data-explorer-backdrop" data-explorer-close="1"></div>
+    <section class="data-explorer-panel">
+      <div class="data-explorer-head"><div><span class="data-kicker">OPÉRATIONS SOURCES</span><h2 id="dataExplorerTitle">Détail</h2><p id="dataExplorerSub"></p></div><button type="button" class="data-close" data-explorer-close="1">×</button></div>
+      <div class="data-explorer-tools"><input id="dataExplorerSearch" type="search" placeholder="Rechercher une opération, un MOA, un référentiel…"><button id="dataExplorerCopy" class="btn btn-secondary" type="button">Copier la liste</button><button id="dataExplorerCsv" class="btn btn-primary" type="button">Exporter CSV</button></div>
+      <div id="dataExplorerList" class="data-explorer-list"></div>
+    </section>
+  </aside>
+  <label class="generator-privacy-switch" title="Le mode anonymisé est partagé avec NEWOSB">
+    <span><b>Mode anonymisé</b><small data-privacy-state>INACTIF</small></span>
+    <span class="obs-switch"><input data-privacy-toggle type="checkbox" role="switch" aria-label="Activer le mode anonymisé"><i></i></span>
+  </label>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script src="auth.js?v=291"></script>
+  <script src="privacy.js?v=5.0.0"></script>
+  <script src="app.js?v=29.7.13-newosb5.28"></script>
+</body>
+</html>
