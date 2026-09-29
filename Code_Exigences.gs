@@ -1,5 +1,5 @@
 /**
- * NEWOSB V05.4 — SOURCE EXIGENCES
+ * NEWOSB V6.5 — SOURCE EXIGENCES
  *
  * Ce script est à coller dans Extensions > Apps Script du Google Sheet
  * contenant l'onglet RAPPORT.
@@ -106,6 +106,19 @@ const NEWOSB_EXIGENCES_ALIASES = {
   operationCode: [
     'Évaluation: Opération: Code interne',
     'Evaluation: Operation: Code interne'
+  ],
+  operationYear: [
+    'Évaluation: Opération: Année',
+    'Evaluation: Operation: Annee',
+    'Année opération',
+    'Annee operation',
+    'Année'
+  ],
+  socialZone: [
+    'Évaluation: Opération: Zonage logement social 1/2/3',
+    'Evaluation: Operation: Zonage logement social 1/2/3',
+    'Zonage logement social 1/2/3',
+    'Zonage'
   ],
   region: [
     'Évaluation: Opération: Région',
@@ -482,6 +495,8 @@ function getNewosbExigences_() {
       rowCode: newosbExigencesValue_(displayRow, cols.rowCode),
       evaluationCode: evaluationCode,
       operationCode: newosbExigencesValue_(displayRow, cols.operationCode),
+      operationYear: newosbExigencesValue_(displayRow, cols.operationYear),
+      socialZone: newosbExigencesValue_(displayRow, cols.socialZone),
       region: newosbExigencesValue_(displayRow, cols.region),
       department: newosbExigencesValue_(displayRow, cols.department),
       referential: referential,

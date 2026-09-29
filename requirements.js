@@ -6,8 +6,8 @@
   const TARGET_NAMES={'1':'Éco-Conception & Management du projet','2':'Le bâtiment dans son environnement','3':'Sobriété et Efficacité du bâtiment','4':'Usages & qualité de vie'};
   const state={
     url:localStorage.getItem(STORAGE_KEY)||'', rows:[], connected:false, loading:false, error:'', loadedUrl:'',
-    filters:{referential:[],period:[],nature:[],profile:[],region:[],department:[],mention:[],moaSector:[],theme:[],status:[]},
-    requirement:'', mentionFocus:'', search:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
+    filters:{year:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[],period:[],nature:[],mention:[],moaSector:[],theme:[]},
+    filterSearch:{}, requirement:'', mentionFocus:'', search:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
     loadedAt:'',
     views:{chronology:'list',topGlobal:'list',target1:'list',target2:'list',target3:'list',target4:'list',evolution:'list',mentions:'list',mentionReqs:'list'},
     pages:{}
@@ -65,8 +65,10 @@
       mentions:String(pick(r.mentions,alias(r,['Mention ','Évaluation: Opération: Mentions']))),
       profile:String(pick(r.profile,alias(r,['Profil spécifique']))), performance:String(pick(r.performance,alias(r,['Évaluation: Opération: Performance']))),
       status:String(pick(r.status,alias(r,['Évaluation: Statut']))), moa:String(pick(r.moa,alias(r,["Évaluation: Opération: Maître d'ouvrage: Nom de la société"]))),
-      moaSector:String(pick(r.moaSector,alias(r,["Évaluation: Opération: Maître d'ouvrage: Secteur d'activité"]))), group:String(pick(r.group,alias(r,["Évaluation: Opération: Maître d'ouvrage: Groupe principal Nom"]))),
+      moaSector:String(pick(r.moaSector,alias(r,["Évaluation: Opération: Maître d'ouvrage: Secteur d'activité"]))), group:String(pick(r.moaGroup,r.group,alias(r,["Évaluation: Opération: Maître d'ouvrage: Groupe principal Nom"]))),
       groupSector:String(pick(r.groupSector,alias(r,["Évaluation: Opération: Maître d'ouvrage: Groupe principal Secteur d'activité"]))),
+      operationYear:Number(pick(r.operationYear,alias(r,['Évaluation: Opération: Année','Evaluation: Operation: Annee','Année opération','Annee operation'])))||0,
+      socialZone:String(pick(r.socialZone,alias(r,['Évaluation: Opération: Zonage logement social 1/2/3','Evaluation: Operation: Zonage logement social 1/2/3','Zonage logement social 1/2/3','Zonage']))),
       requirementReference:String(requirementReference), requirementLabel:String(requirementLabel), requirementCode:String(requirementCode), requirementNumber:String(requirementNumber),
       associatedRequirementReferenceTitle:String(associatedRequirementReferenceTitle), target:String(pick(r.target,'')),
       theme:String(theme), requirement:String(requirement), nature:String(pick(r.nature,natureFromRef(referential))), sector:String(pick(r.sector,sectorFromRef(referential)))
@@ -102,14 +104,18 @@
     return state.rows.filter(r=>{
       if(options.forceReferential&&norm(r.referential)!==norm(options.forceReferential))return false;
       if(!options.forceReferential&&!matchesFilter('referential',r.referential))return false;
-      if(!options.ignorePeriod&&hasFilter('period')&&!filterValues('period').some(p=>periodMatch(r.year,p)))return false;
-      if(!matchesFilter('nature',r.nature))return false;
-      if(!matchesFilter('profile',r.profile))return false;
+      if(hasFilter('year')&&!filterValues('year').some(v=>String(r.operationYear)===String(v)))return false;
+      if(!matchesFilter('moaGroup',r.group||'Non précisé'))return false;
+      if(!matchesFilter('status',r.status))return false;
+      if(!matchesFilter('moa',r.moa))return false;
       if(!matchesFilter('region',r.region))return false;
       if(!matchesFilter('department',r.department))return false;
+      if(!matchesFilter('profile',r.profile))return false;
+      if(!matchesFilter('socialZone',r.socialZone||'Non précisé'))return false;
+      if(!options.ignorePeriod&&hasFilter('period')&&!filterValues('period').some(p=>periodMatch(r.year,p)))return false;
+      if(!matchesFilter('nature',r.nature))return false;
       if(!rowHasAnyMention(r,filterValues('mention')))return false;
       if(!matchesFilter('moaSector',r.moaSector))return false;
-      if(!matchesFilter('status',r.status))return false;
       if(!options.ignoreTheme&&hasFilter('theme')&&!filterValues('theme').includes(rowTarget(r)))return false;
       if(req&&norm(r.requirement)!==norm(req))return false;
       return true;
@@ -227,18 +233,19 @@
     const selectedRegions=filterValues('region');
     const depBase=selectedRegions.length?evs.filter(r=>selectedRegions.some(v=>norm(r.region)===norm(v))):evs;
     return {
-      referential:uniq(evs.map(r=>r.referential)), nature:uniq(evs.map(r=>r.nature)), profile:uniq(evs.map(r=>r.profile)), region, department:uniq(depBase.map(r=>r.department)),
-      mention:uniq(evs.flatMap(r=>splitMulti(r.mentions))), moaSector:uniq(evs.map(r=>r.moaSector)), status:uniq(evs.map(r=>r.status)), theme:['1','2','3','4']
+      year:uniq(evs.map(r=>r.operationYear).filter(Boolean)), referential:uniq(evs.map(r=>r.referential)), moaGroup:uniq(evs.map(r=>r.group||'Non précisé')), status:uniq(evs.map(r=>r.status)), moa:uniq(evs.map(r=>r.moa)), region, department:uniq(depBase.map(r=>r.department)), profile:uniq(evs.map(r=>r.profile)), socialZone:uniq(evs.map(r=>r.socialZone||'Non précisé')),
+      nature:uniq(evs.map(r=>r.nature)), mention:uniq(evs.flatMap(r=>splitMulti(r.mentions))), moaSector:uniq(evs.map(r=>r.moaSector)), theme:['1','2','3','4']
     };
   }
   function checkFilter(key,label,values,lab=v=>v){
-    const selected=filterValues(key),count=selected.length,summary=count?`${count} sélectionné${count>1?'s':''}`:'Tous';
-    return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu"><div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>`<label><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${filterHas(key,v)?'checked':''}><span>${esc(lab(v))}</span></label>`).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
+    const selected=filterValues(key),count=selected.length,summary=count?`${count} sélectionné${count>1?'s':''}`:'Tous',query=norm(state.filterSearch?.[key]||'');
+    const search=`<label class="req-check-search"><span>⌕</span><input type="search" data-req-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(`Rechercher dans ${String(label).toLowerCase()}…`)}" autocomplete="off"></label>`;
+    return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu">${search}<div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=lab(v),hidden=query&&!norm(text).includes(query);return `<label data-req-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${filterHas(key,v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
   }
   function filtersHtml(){
     const o=filterOptions();
     const activeCount=Object.keys(state.filters).reduce((n,k)=>n+filterValues(k).length,0);
-    return `<div class="req-filterbar req-filterbar-checks">${checkFilter('referential','Référentiel',o.referential)}${checkFilter('period','Période',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}${checkFilter('nature','Nature',o.nature)}${checkFilter('profile','Profil',o.profile)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('status','Statut évaluation',o.status)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
+    return `<div class="req-filterbar req-filterbar-checks">${checkFilter('year','Année',o.year)}${checkFilter('referential','Référentiel',o.referential)}${checkFilter('moaGroup','Groupe MOA',o.moaGroup)}${checkFilter('status','Avancement',o.status)}${checkFilter('moa','Maître d’ouvrage',o.moa)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('profile','Profil',o.profile)}${checkFilter('socialZone','Zonage',o.socialZone)}${checkFilter('nature','Nature',o.nature)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}${checkFilter('period','Période réf.',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
   }
 
   function sourceCard(){
@@ -373,8 +380,10 @@
     const req=e.target.closest('[data-req-requirement]');if(req){const v=dec(req.dataset.reqRequirement);state.requirement=norm(state.requirement)===norm(v)?'':v;emit();return true;}
     if(e.target.closest('[data-req-clear-requirement]')){state.requirement='';emit();return true;}
     const clear=e.target.closest('[data-req-filter-clear]');if(clear){state.openFilter=clear.dataset.reqFilterClear;state.filters[clear.dataset.reqFilterClear]=[];if(clear.dataset.reqFilterClear==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
-    const all=e.target.closest('[data-req-filter-all]');if(all){const key=all.dataset.reqFilterAll;state.openFilter=key;state.filters[key]=[...document.querySelectorAll(`[data-req-filter-check="${key}"]`)].map(i=>i.value);if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
-    if(e.target.closest('[data-req-reset-filters]')){Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.openFilter='';emit();return true;}
+    const all=e.target.closest('[data-req-filter-all]');if(all){const key=all.dataset.reqFilterAll;state.openFilter=key;const visible=[...document.querySelectorAll(`[data-req-filter-check="${key}"]`)].filter(i=>!i.closest('[data-req-filter-option]')?.hidden).map(i=>i.value);state.filters[key]=uniq([...filterValues(key),...visible]);if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
+    if(e.target.closest('[data-req-reset-filters]')){Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openFilter='';emit();return true;}
+    const filterSearch=e.target.closest('[data-req-filter-search]');if(filterSearch){e.stopPropagation();try{filterSearch.focus({preventScroll:true});}catch{filterSearch.focus();}return true;}
+    const summary=e.target.closest('.req-check-filter>summary');if(summary){const details=summary.parentElement;setTimeout(()=>{if(details?.open){const input=details.querySelector('[data-req-filter-search]');try{input?.focus({preventScroll:true});}catch{input?.focus();}}},0);}
     return false;
   }
   function handleChange(e){
@@ -382,11 +391,17 @@
     const mf=e.target.closest('[data-req-mention-focus]');if(mf){state.mentionFocus=mf.value||'';emit();return true;}
     return false;
   }
+  function applyRequirementFilterSearch(fs){
+    if(!fs)return false;const key=fs.dataset.reqFilterSearch||'';state.filterSearch[key]=fs.value||'';state.openFilter=key;const q=norm(fs.value||''),menu=fs.closest('.req-check-menu');
+    menu?.querySelectorAll(`[data-req-filter-option="${key}"]`).forEach(label=>{const hide=Boolean(q&&!norm(label.textContent).includes(q));label.classList.toggle('is-search-hidden',hide);label.hidden=hide;});return true;
+  }
   function handleInput(e){
+    const fs=e.target.closest('[data-req-filter-search]');if(fs)return applyRequirementFilterSearch(fs);
     const s=e.target.closest('[data-req-search]');if(s){state.search=s.value||'';state.searchEditing=true;emit();return true;}return false;
   }
+  function handleKeyup(e){const fs=e.target.closest('[data-req-filter-search]');return fs?applyRequirementFilterSearch(fs):false;}
   function status(){return {connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,loadedAt:state.loadedAt};}
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
   window.addEventListener('newosb:privacychange',emit);
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,load,status,auditInfo};
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,status,auditInfo};
 })();

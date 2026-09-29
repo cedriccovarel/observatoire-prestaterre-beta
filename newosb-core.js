@@ -33,9 +33,11 @@
     {key:'moaType',label:'Famille de maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Secteur/famille du maître d’ouvrage.',method:'Colonne Groupe principal / Secteur d’activité quand disponible.'},
     {key:'department',label:'Département',unit:'',source:'OPERATIONS',type:'normalized',definition:'Code département de l’opération.',method:'Valeur source ou déduction depuis CP/adresse par le moteur historique.'},
     {key:'region',label:'Région',unit:'',source:'Calcul NEWOSB',type:'calculated',definition:'Région administrative associée au département.',method:'Table de correspondance département → région.'},
-    {key:'year',label:'Année',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année analytique de l’opération.',method:'Année source retenue par le mapping existant.'},
+    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année utilisée par les filtres et chronologies de certification.',method:'Priorité à la date de décision CD, puis AP, puis date de création de l’évaluation. La colonne Année de la feuille OPERATIONS n’est jamais utilisée pour ce filtre.'},
+    {key:'constructionYear',label:'Année de construction',unit:'',source:'OPERATIONS',type:'source',definition:'Année de construction du bâtiment en particulier pour les opérations de rénovation.',method:'Colonne Année de la feuille OPERATIONS. Donnée descriptive du bâtiment, distincte de l’année de certification.'},
     {key:'referential',label:'Référentiel',unit:'',source:'OPERATIONS',type:'normalized',definition:'Référentiel de certification.',method:'Valeur source normalisée.'},
     {key:'nature',label:'Nature',unit:'',source:'OPERATIONS',type:'normalized',definition:'Neuf / rénovation / autre nature renseignée.',method:'Valeur source normalisée.'},
+    {key:'tags',label:'Tags projet',unit:'',source:'OPERATIONS',type:'source',definition:'Mots-clés représentatifs du projet ou de l’opération technique.',method:'Dernière colonne Tags de la feuille OPERATIONS ; plusieurs tags sont séparés par des virgules.'},
     {key:'status',label:'Avancement',unit:'',source:'Calcul NEWOSB',type:'calculated',definition:'Étape normalisée du tunnel de certification.',method:'Mapping des statuts sources vers les étapes NEWOSB.'},
     {key:'affairStage',label:'Affaire : Étape',unit:'',source:'OPERATIONS',type:'source',definition:'Étape commerciale de l’affaire.',method:'Utilisée notamment pour exclure perdu / abandonné / annulé des statistiques actives.'},
     {key:'dwellings',label:'Logements',unit:'logements',source:'OPERATIONS',type:'source',definition:'Nombre de logements associé à l’opération.',method:'Valeur numérique source.'},
@@ -101,8 +103,9 @@
       let s=0;
       if(normalize(o.referential)===normalize(target.referential))s+=4;
       if(normalize(o.nature)===normalize(target.nature))s+=3;
-      if(String(o.year)===String(target.year))s+=2;
-      else if(Number.isFinite(Number(o.year))&&Number.isFinite(Number(target.year))&&Math.abs(Number(o.year)-Number(target.year))<=1)s+=1;
+      const oy=o.constructionYear||o.year, ty=target.constructionYear||target.year;
+      if(String(oy)===String(ty))s+=2;
+      else if(Number.isFinite(Number(oy))&&Number.isFinite(Number(ty))&&Math.abs(Number(oy)-Number(ty))<=1)s+=1;
       if(normalize(o.moaType)===normalize(target.moaType)&&normalize(target.moaType))s+=1;
       if(normalize(o.department)===normalize(target.department))s+=1;
       const td=Number(target.dwellings)||0,od=Number(o.dwellings)||0;

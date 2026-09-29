@@ -29,10 +29,12 @@
     notStarted:'Non démarrée', incomplete:'Dossier incomplet', planned:'Analyse planifiée',
     analysis:'Analyse réalisée', visit:'Visite réalisée', compliant:'Évaluation conforme', cancelled:'Annulée / abandonnée'
   };
+  const CHRONOLOGY_STATUS_LABELS = {...STATUS_LABELS,lostAffair:'Affaire perdue',abandonedAffair:'Affaire abandonnée',cancelledAffair:'Affaire annulée'};
   const STATUS_COLORS = {
     notStarted:'#9aa8a2', incomplete:'#d49a32', planned:'#6f9cb9', analysis:'#4b9881',
     visit:'#16864f', compliant:'#06402b', cancelled:'#dc5b4d'
   };
+  const CHRONOLOGY_STATUS_COLORS = {...STATUS_COLORS,lostAffair:'#9c3f3f',abandonedAffair:'#c96c45',cancelledAffair:'#dc5b4d'};
   const ANALYTIC_PAGES = new Set(['territories','stakeholders','certification','performance','solutions','energy','carbon','crossdata','operations','quality','dictionary']);
   const PRESENTATION_STORAGE_KEY = 'newosb_v0518_presentation';
   const pageMeta = {
@@ -46,7 +48,7 @@
     energy:['Énergie & transitions','Explorer les transitions chauffage / ECS et les niveaux de performance énergétique.'],
     carbon:['Carbone & DPE','Analyser les indicateurs carbone, le respect des seuils et les évolutions DPE / GES.'],
     crossdata:['Croiser les données','Explorer les relations entre deux indicateurs avec un nuage de points et les jalons carbone 2028 / 2031.'],
-    presentation:['Présentation','Composer une restitution type OSBslide à partir des graphes et tableaux de NEWOSB, puis exporter en PNG 4K ou SVG.'],
+    presentation:['Présentation','Composer une restitution type OSBslide à partir des graphes et tableaux de l’Observatoire Prestaterre, puis exporter en PNG 4K ou SVG.'],
     operations:['Projets & opérations','Explorer les projets uniques puis leurs opérations techniques ligne par ligne.'],
     quality:['Qualité & données','Contrôler la fiabilité, la complétude, les incohérences et les anomalies de la sélection.'],
     dictionary:['Dictionnaire','Comprendre chaque donnée : définition, source, unité, calcul et règles de lecture.'],
@@ -66,7 +68,7 @@
     osmMapView:{lat:46.55,lng:2.35,zoom:5},
     mapBasemap:'ign',
     osmTileProviderIndex:0,
-    flowFocus:{heating:'',ecs:''},
+    flowFocus:{heating:'',ecs:'',dpeEnergy:'',dpeGes:''},
     solutionMetric:'ubat',
     solutionViews:{},
     mapFocusRegion:'',
@@ -86,11 +88,19 @@
     territoryTableView:'list',
     moaTableView:'list',
     statusYearView:'list',
+    statusYearShowExcluded:true,
     statusYearPage:1,
     mentionTableView:'list',
     performanceTableView:'list',
     performanceMatrixView:'matrix',
     performanceMatrixPage:1,
+    performanceMatrixMention:'',
+    performanceMatrixPerformance:'',
+    energyCepViews:{usage:'pie',vector:'pie'},
+    activeProject:null,
+    projectWindowTab:'general',
+    projectWindowTechnicalCode:'',
+    projectTagFilter:'',
     operationsTableView:'list',
     operationsEntityView:'operations',
     activeMoaGroup:'',
@@ -103,7 +113,7 @@
     dictionarySearch:'',
     mentionSearch:'',
     performanceSearch:'',
-    filterSearch:{moa:'',moaGroup:''},
+    filterSearch:{},
     autoMoaFromGroup:[],
     openGlobalFilter:'',
     renderToken:0,
@@ -211,7 +221,7 @@
     return ['Arial, sans-serif','Helvetica, Arial, sans-serif','Georgia, serif','Times New Roman, serif','Trebuchet MS, sans-serif','Verdana, sans-serif'];
   }
   function activeFilterScopeText(){
-    const defs=[['year','Année'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
+    const defs=[['year','Année certification'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
     const parts=defs.map(([key,label])=>{
       const vals=globalFilterValues(key);
       if(!vals.length)return '';
@@ -411,7 +421,7 @@
     const editor=presentationEditor(slide);
     const controls=slide?`<div class="obs-pres-slide-actions">${slide.type!=='cover'?`<button type="button" class="obs-card-action" data-pres-duplicate="${attr(slide.id)}">Dupliquer</button><button type="button" class="obs-card-action" data-pres-move="up" data-pres-id="${attr(slide.id)}">Monter</button><button type="button" class="obs-card-action" data-pres-move="down" data-pres-id="${attr(slide.id)}">Descendre</button>`:''}<button type="button" class="obs-card-action" data-pres-fullscreen="1">Plein écran</button><button type="button" class="obs-card-action" data-pres-export="png" data-pres-id="${attr(slide.id)}">PNG 4K</button><button type="button" class="obs-card-action" data-pres-export="svg" data-pres-id="${attr(slide.id)}">SVG</button><button type="button" class="obs-card-action danger" data-pres-delete="${attr(slide.id)}">Supprimer</button></div>`:`<div class="obs-pres-slide-actions"><button type="button" class="obs-card-action" data-pres-cover="1">Créer une couverture</button></div>`;
     return `${pageHead('presentation',right)}
-      <div class="obs-pres-help">Les textes restent éditables dans NEWOSB. Le bouton Google Slides reproduit fidèlement chaque slide NEWOSB dans Drive, graphiques et mises en page compris. Le rendu est envoyé comme visuel haute définition afin d’éviter toute déformation des graphiques. Le PPTX reste disponible comme export secondaire.</div>
+      <div class="obs-pres-help">Les textes restent éditables dans l’Observatoire Prestaterre. Le bouton Google Slides reproduit fidèlement chaque slide dans Drive, graphiques et mises en page compris. Le rendu est envoyé comme visuel haute définition afin d’éviter toute déformation des graphiques. Le PPTX reste disponible comme export secondaire.</div>
       <div class="obs-presentation-layout">
         <aside class="obs-presentation-side">
           <div class="obs-pres-side-head"><h3>Slides</h3><div class="obs-pres-side-actions"><button type="button" class="obs-card-action" data-pres-cover="1">+ Couverture</button><button type="button" class="obs-card-action danger" data-pres-clear="1">Vider</button></div></div>
@@ -477,7 +487,7 @@
   function exportPresentationSlide(id,format='png'){
     const slide=state.presentationSlides.find(s=>s.id===id);if(!slide)return;
     const node=document.getElementById('obsPresentationStage');
-    exportStageNode(node,`NEWOSB_${slide.type==='cover'?'couverture':String(slide.title||'slide').replace(/[^a-z0-9_-]+/gi,'_').slice(0,60)}`,format);
+    exportStageNode(node,`Observatoire_Prestaterre_${slide.type==='cover'?'couverture':String(slide.title||'slide').replace(/[^a-z0-9_-]+/gi,'_').slice(0,60)}`,format);
   }
   function exportAllPresentationSlides(format='png'){
     if(!state.presentationSlides.length)return;
@@ -576,14 +586,14 @@
   async function buildGoogleSlidesPayload(){
     const slides=[];
     for(let i=0;i<state.presentationSlides.length;i++){const model=state.presentationSlides[i];slides.push({type:'snapshot',title:model.title||'',slideNumber:i+1,imageData:await googleSlideSnapshot(model)});}
-    return {title:`NEWOSB – Observatoire du bâtiment durable – ${new Date().toLocaleDateString('fr-FR')}`,createdAt:new Date().toISOString(),renderMode:'snapshot-v1',slides};
+    return {title:`Observatoire Prestaterre – ${new Date().toLocaleDateString('fr-FR')}`,createdAt:new Date().toISOString(),renderMode:'snapshot-v1',slides};
   }
 
   async function exportPresentationGoogleSlides(){
     if(!state.presentationSlides.length)return;
     if(typeof engine.createGoogleSlides!=='function'){alert('Le pont Google Slides n’est pas disponible dans cette version.');return;}
     const target=window.open('about:blank','newosb_google_slides');
-    if(target){try{target.document.write('<title>NEWOSB → Google Slides</title><div style="font-family:Arial;padding:32px">Création de la présentation Google Slides en cours…</div>');}catch{}}
+    if(target){try{target.document.write('<title>Observatoire Prestaterre → Google Slides</title><div style="font-family:Arial;padding:32px">Création de la présentation Google Slides en cours…</div>');}catch{}}
     try{
       const payload=await buildGoogleSlidesPayload();
       const result=await engine.createGoogleSlides(payload);
@@ -599,7 +609,7 @@
   async function exportPresentationPptx(){
     if(!state.presentationSlides.length)return;
     if(typeof window.PptxGenJS!=='function'){alert('Le module PPTX est indisponible. Recharge la page puis réessaie.');return;}
-    const Pptx=window.PptxGenJS,pptx=new Pptx();pptx.layout='LAYOUT_WIDE';pptx.author='Prestaterre Certifications';pptx.subject='NEWOSB – Observatoire du bâtiment durable';pptx.title='NEWOSB – Présentation';pptx.company='Prestaterre Certifications';pptx.lang='fr-FR';pptx.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'fr-FR'};
+    const Pptx=window.PptxGenJS,pptx=new Pptx();pptx.layout='LAYOUT_WIDE';pptx.author='Prestaterre Certifications';pptx.subject='Observatoire Prestaterre';pptx.title='Observatoire Prestaterre – Présentation';pptx.company='Prestaterre Certifications';pptx.lang='fr-FR';pptx.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'fr-FR'};
     let logoData='',coverData='';
     try{[logoData,coverData]=await Promise.all([assetDataUrl('assets/prestaterre_logo_green.png'),assetDataUrl('assets/cover_template_base.png')]);}catch{}
     for(let i=0;i<state.presentationSlides.length;i++){
@@ -621,14 +631,14 @@
         s.addText(String(model.confidentialText||''),{x:11.2,y:.18,w:1.45,h:.28,fontFace:font,fontSize:8.5,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0,fill:{color:'06402B'},fit:'shrink'});
         let body='';try{body=await bodyPngForSlide(model);}catch{}
         if(body)s.addImage({data:body,x:.46,y:1.52,w:12.40,h:4.72,transparency:0});
-        else s.addText('Visuel indisponible lors de l’export – conserve la slide NEWOSB pour réexporter.',{x:1.0,y:3.2,w:11.3,h:.5,fontFace:font,fontSize:16,color:'728279',align:'center',margin:0});
+        else s.addText('Visuel indisponible lors de l’export – conserve la slide de l’Observatoire Prestaterre pour réexporter.',{x:1.0,y:3.2,w:11.3,h:.5,fontFace:font,fontSize:16,color:'728279',align:'center',margin:0});
         s.addShape(pptx.ShapeType.line,{x:.46,y:6.48,w:12.4,h:0,line:{color:'C9D8D1',width:1}});
         s.addText(String(model.scope||''),{x:.46,y:6.60,w:8.4,h:.48,fontFace:font,fontSize:Math.max(8.5,Math.min(12,(Number(model.footerSize)||16)*.65)),color:'38544A',margin:0,fit:'shrink'});
         s.addText(String(model.notes||''),{x:9.0,y:6.60,w:3.15,h:.48,fontFace:font,fontSize:Math.max(8.5,Math.min(12,(Number(model.footerSize)||16)*.65)),color:'38544A',align:'right',margin:0,fit:'shrink'});
         s.addText(String(i+1),{x:12.33,y:7.05,w:.45,h:.18,fontFace:font,fontSize:8,color:'7A8882',align:'right',margin:0});
       }
     }
-    const fn=`NEWOSB_Presentation_${new Date().toISOString().slice(0,10)}.pptx`;
+    const fn=`Observatoire_Prestaterre_Presentation_${new Date().toISOString().slice(0,10)}.pptx`;
     await pptx.writeFile({fileName:fn});
   }
   function decoratePresentationButtons(){
@@ -663,7 +673,7 @@
     const technicalPage=['solutions','energy','carbon','crossdata'].includes(state.page); const ops=technicalPage?filteredTechnicalOperations():filteredOperations(), all=technicalPage?sourceTechnicalOperations():sourceOperations(), excluded=excludedOperations();
     const key=metric||inferredDictionaryMetric(title), d=key?core?.dictByKey?.[key]:null, cov=key&&core?.coverage?core.coverage(ops,key):null;
     const selectedCodes=new Set(ops.map(o=>String(o.code))); const missingOps=key?ops.filter(o=>String(rawValue(o,key)??'').trim()===''):[];
-    return `<div class="obs-audit-content"><div class="obs-audit-kpis"><div><span>${technicalPage?'Opérations techniques':'Projets actifs'}</span><b>${fmt(ops.length)}</b></div><div><span>Hors statistiques</span><b>${fmt(excluded.length)}</b></div>${cov?`<div><span>Valeurs disponibles</span><b>${fmt(cov.available)} / ${fmt(cov.population)}</b></div><div><span>Couverture</span><b>${fmt(cov.rate,1)} %</b></div>`:''}</div><div class="obs-audit-section"><h4>Périmètre</h4><p>${esc(activeFilterScopeText())}</p><p>${fmt(all.length)} ${technicalPage?'opérations techniques':'projets'} chargés · ${fmt(excluded.length)} perdues/abandonnées/annulées exclues des statistiques actives.</p><p>Source : ${esc(runtime().connected?(runtime().mode||'connectée'):'démonstration')} · ${runtime().lastLoadedAt?`dernière actualisation ${esc(new Date(runtime().lastLoadedAt).toLocaleString('fr-FR'))}`:'date d’actualisation non disponible'}</p></div>${d?`<div class="obs-audit-section"><h4>${esc(d.label)}</h4><dl><dt>Définition</dt><dd>${esc(d.definition)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Nature</dt><dd>${esc(d.type)}</dd><dt>Unité</dt><dd>${esc(d.unit||'—')}</dd><dt>Méthode</dt><dd>${esc(d.method)}</dd></dl></div>`:`<div class="obs-audit-section"><h4>Calcul / agrégation</h4><p>Ce visuel est calculé à partir de la population filtrée NEWOSB. Les projets identifiés comme perdus, abandonnés ou annulés via <b>Affaire: Étape</b> sont exclus avant agrégation.</p></div>`}${missingOps.length?`<div class="obs-audit-section"><h4>Données manquantes</h4><p>${fmt(missingOps.length)} opération${missingOps.length>1?'s':''} de la sélection sans valeur pour cet indicateur.</p></div>`:''}</div>`;
+    return `<div class="obs-audit-content"><div class="obs-audit-kpis"><div><span>${technicalPage?'Opérations techniques':'Projets actifs'}</span><b>${fmt(ops.length)}</b></div><div><span>Hors statistiques</span><b>${fmt(excluded.length)}</b></div>${cov?`<div><span>Valeurs disponibles</span><b>${fmt(cov.available)} / ${fmt(cov.population)}</b></div><div><span>Couverture</span><b>${fmt(cov.rate,1)} %</b></div>`:''}</div><div class="obs-audit-section"><h4>Périmètre</h4><p>${esc(activeFilterScopeText())}</p><p>${fmt(all.length)} ${technicalPage?'opérations techniques':'projets'} chargés · ${fmt(excluded.length)} perdues/abandonnées/annulées exclues des statistiques actives.</p><p>Source : ${esc(runtime().connected?(runtime().mode||'connectée'):'démonstration')} · ${runtime().lastLoadedAt?`dernière actualisation ${esc(new Date(runtime().lastLoadedAt).toLocaleString('fr-FR'))}`:'date d’actualisation non disponible'}</p></div>${d?`<div class="obs-audit-section"><h4>${esc(d.label)}</h4><dl><dt>Définition</dt><dd>${esc(d.definition)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Nature</dt><dd>${esc(d.type)}</dd><dt>Unité</dt><dd>${esc(d.unit||'—')}</dd><dt>Méthode</dt><dd>${esc(d.method)}</dd></dl></div>`:`<div class="obs-audit-section"><h4>Calcul / agrégation</h4><p>Ce visuel est calculé à partir de la population filtrée de l’Observatoire Prestaterre. Les projets identifiés comme perdus, abandonnés ou annulés via <b>Affaire: Étape</b> sont exclus avant agrégation.</p></div>`}${missingOps.length?`<div class="obs-audit-section"><h4>Données manquantes</h4><p>${fmt(missingOps.length)} opération${missingOps.length>1?'s':''} de la sélection sans valeur pour cet indicateur.</p></div>`:''}</div>`;
   }
   function openAudit(title,metric=''){
     let modal=document.getElementById('obsAuditModal');if(!modal){modal=document.createElement('div');modal.id='obsAuditModal';modal.className='obs-audit-modal';modal.innerHTML='<div class="obs-audit-backdrop" data-audit-close="1"></div><section class="obs-audit-panel"><header><div><span>TRAÇABILITÉ</span><h3 id="obsAuditTitle"></h3></div><button type="button" data-audit-close="1">×</button></header><div id="obsAuditBody"></div></section>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target.closest('[data-audit-close]'))modal.classList.remove('is-open');});}
@@ -718,6 +728,17 @@
     return ['structure','roofStructure','wallStructure','floorStructure','wallInsulation','roofInsulation','floorInsulation','windowMaterial','windowGlazing','windowShading','ventilation','cooling','heatingBefore','heatingAfter','heatingModeAfter','ecsBefore','ecsAfter','dpeEnergyBefore','dpeEnergyAfter','dpeGesBefore','dpeGesAfter'].includes(key)||key.startsWith('range:')||key.startsWith('threshold:')||key.startsWith('dpeGain:')||key.startsWith('transition:');
   }
 
+  function chronologyStatus(op){
+    const stage=norm(operationAffairStage(op)||''), raw=norm(op?.rawStatus||''), combined=`${stage} ${raw}`.trim();
+    if(isLostAbandonedOperation(op)||op?.status==='cancelled'||/(^| )(perdu|perdue|perte|abandon|abandonne|abandonnee|annul|annule|annulee)( |$)/.test(combined)){
+      if(/annul/.test(combined)) return 'cancelledAffair';
+      if(/abandon/.test(combined)) return 'abandonedAffair';
+      if(/perdu|perte/.test(combined)) return 'lostAffair';
+      return 'cancelledAffair';
+    }
+    return op?.status||'notStarted';
+  }
+
   function matchesCross(op,f){
     const value=f.value;
     if(Array.isArray(op?.rawRows)&&op.rawRows.length>1&&isTechnicalCrossKey(f.key)){
@@ -744,12 +765,12 @@
     }
     if(f.key==='statusYear'){
       const [year,status]=String(value).split('\u0001');
-      return String(op.year)===String(year) && op.status===status;
+      return String(op.year)===String(year) && chronologyStatus(op)===status;
     }
     if(f.key.startsWith('transition:')){
       const [,beforeKey,afterKey]=f.key.split(':');
       const [before,after]=String(value).split('\u0001');
-      return norm(op[beforeKey]||'Non précisé')===norm(before) && norm(op[afterKey]||'Non précisé')===norm(after);
+      return norm(transitionValue(op,beforeKey))===norm(before) && norm(transitionValue(op,afterKey))===norm(after);
     }
     if(f.key.startsWith('range:')){
       const metric=f.key.slice(6), [loRaw,hiRaw]=String(value).split('\u0001');
@@ -779,6 +800,11 @@
     }
     if(['dpeEnergyBefore','dpeEnergyAfter','dpeGesBefore','dpeGesAfter'].includes(f.key)) return dpeLetter(op,f.key)===String(value).toUpperCase();
     return true;
+  }
+
+  function transitionValue(op,key){
+    if(['dpeEnergyBefore','dpeEnergyAfter','dpeGesBefore','dpeGesAfter'].includes(key)) return dpeLetter(op,key)||'Non précisé';
+    return String(op?.[key]||'Non précisé').trim()||'Non précisé';
   }
 
   function normalizedTokens(value){
@@ -969,7 +995,7 @@
       if(!globalFilterMatch('department',String(o.department))) return false;
       if(!globalFilterMatch('profile',o.profile||'Non précisé')) return false;
       if(!globalFilterMatch('socialZone',o.socialZone||'Non précisé')) return false;
-      if(q && ![o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance].some(v=>norm(v).includes(q))) return false;
+      if(q && ![o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance,o.tags].some(v=>norm(v).includes(q))) return false;
       for(const cf of state.crossFilters){
         if(ignoreCrossKeys.has(cf.key)) continue;
         if(!matchesCross(o,cf)) return false;
@@ -1210,7 +1236,7 @@
     ])}
     <div class="obs-grid-map obs-grid-map-focus">
       <article class="obs-card obs-map-card"><div class="obs-card-head obs-map-head"><div><span>CARTE TERRITORIALE</span><h2>Répartition des projets</h2></div><div class="obs-map-head-actions"><small>${state.mapFocusRegion?`Région sélectionnée : ${esc(state.mapFocusRegion)} · répartition départementale`:'Clique sur une région pour la détailler'}</small>${state.mapFocusRegion?'<button type="button" class="obs-card-action" data-map-reset-region="1">← Retour France</button>':''}<button type="button" class="obs-card-action obs-map-fullscreen-btn" data-map-fullscreen="1">⛶ Plein écran</button></div></div>
-        <div class="obs-map-basemapbar"><b>Fond</b><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='legacy'?'is-active':''}" data-map-basemap="legacy">Historique</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='ign'?'is-active':''}" data-map-basemap="ign">IGN</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='osm'?'is-active':''}" data-map-basemap="osm">OSM</button><label class="obs-map-group-switch ${state.mapFocusRegion?'is-locked':''}"><span>Département</span><input type="checkbox" data-map-grouping-toggle="1" ${groupingRegion?'checked':''} ${state.mapFocusRegion?'disabled':''}><i></i><span>Région</span></label></div>
+        <div class="obs-map-basemapbar"><b>Fond</b><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='legacy'?'is-active':''}" data-map-basemap="legacy">Neutre</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='ign'?'is-active':''}" data-map-basemap="ign">IGN</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='osm'?'is-active':''}" data-map-basemap="osm">OSM</button><label class="obs-map-group-switch ${state.mapFocusRegion?'is-locked':''}"><span>Département</span><input type="checkbox" data-map-grouping-toggle="1" ${groupingRegion?'checked':''} ${state.mapFocusRegion?'disabled':''}><i></i><span>Région</span></label></div>
         <div class="obs-map-layerbar"><b>Couches</b>${layer('regions','Régions','▱')}${layer('departments','Départements','▦')}${layer('intercommunalities','Intercommunalités','◎')}${layer('operations',`Opérations · ${groupingRegion?'région':'département'}`,'●')}${layer('zoning','Zonage 1·2·3','◫')}</div>
         <div id="obsTerritoryMap" class="obs-map-stage"><div class="obs-map-loading">Chargement du fond de carte…</div></div>
       </article>
@@ -1245,13 +1271,11 @@
       {label:'Part du 1er portefeuille',value:top?`${fmt(pct(top.value,ops.length),1)} %`:'—',note:top?.name||'aucune donnée'},
       {label:'Logements',value:fmt(sum(ops,o=>o.dwellings)),note:'portefeuille sélectionné'}
     ])}
-    <div class="obs-grid-2wide obs-stakeholder-grid">
+    <div class="obs-stakeholder-top">
       <article class="obs-card obs-portfolio-card"><div class="obs-card-head"><div><span>PORTEFEUILLES</span><h2>Maîtres d’ouvrage</h2></div><div class="obs-card-head-tools"><small>15 par page</small>${tableViewToggle('moa',state.moaTableView,['list','bar'])}</div></div>${moaTable(moas,ops)}</article>
-      <div class="obs-stack">
-        <article class="obs-card"><div class="obs-card-head"><div><span>FAMILLES</span><h2>Familles de maîtres d’ouvrage</h2></div><small>Groupe principal · Secteur d’activité</small></div>${crossBars(types,{maxItems:15,key:'moaType',labelPrefix:'Famille MOA'})}</article>
-        <article class="obs-card"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Statuts des portefeuilles</h2></div></div>${crossBars(statuses,{maxItems:15,key:'statusLabelProxy',labelPrefix:'Avancement'})}</article>
-      </div>
-    </div>`;
+      <article class="obs-card obs-family-pie-card"><div class="obs-card-head"><div><span>FAMILLES</span><h2>Familles de maîtres d’ouvrage</h2></div><small>Groupe principal · Secteur d’activité</small></div>${pieDistribution(types,{key:'moaType',labelPrefix:'Famille MOA',maxItems:12})}</article>
+    </div>
+    <article class="obs-card obs-stakeholder-progress"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Statuts des portefeuilles</h2></div><small>Toute la largeur pour comparer les étapes</small></div>${crossBars(statuses,{maxItems:15,key:'statusLabelProxy',labelPrefix:'Avancement'})}</article>`;
   }
 
   function moaTable(moas,currentOps){
@@ -1267,34 +1291,52 @@
 
 
   function renderCertification(){
-    const ops=filteredOperations(), statusUniverse=filteredOperations({ignoreCrossKey:'status'});
-    const a=engine.aggregateTunnel(ops), compliant=a.counts.compliant||0;
+    const ops=filteredOperations(), statusUniverse=filteredOperations({ignoreCrossKey:'status'}), excluded=filteredExcludedOperations({ignoreCrossKey:'status'});
+    const inactiveByCode=new Map();[...ops.filter(o=>['lostAffair','abandonedAffair','cancelledAffair'].includes(chronologyStatus(o))),...excluded].forEach(o=>inactiveByCode.set(String(o.code||o.name),o));
+    const inactive=[...inactiveByCode.values()],a=engine.aggregateTunnel(ops), compliant=a.counts.compliant||0;
     return `${pageHead('certification')}${analyticsToolbar()}${kpiGrid([
       {label:'Opérations',value:fmt(ops.length),note:'population croisée'},
       {label:'Évaluations conformes',value:fmt(compliant),note:`${fmt(pct(compliant,ops.length),1)} % de la sélection`,crossKey:'status',crossValue:'compliant',crossLabel:'Évaluation conforme'},
       {label:'Soldés',value:fmt(a.sold),note:'dossiers marqués soldés',crossKey:'sold',crossValue:'true',crossLabel:'Dossiers soldés'},
-      {label:'Annulés / abandonnés',value:fmt(a.cancelled),note:'hors tunnel actif',crossKey:'status',crossValue:'cancelled',crossLabel:'Annulés / abandonnés'}
+      {label:'Perdus / abandonnés / annulés',value:fmt(inactive.length),note:'hors tunnel actif'}
     ])}
     <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>TUNNEL INTERACTIF</span><h2>Avancement des projets</h2></div><small>Chaque étape filtre l’ensemble du dashboard</small></div>${tunnel(statusUniverse,{analytic:true})}</article>
-    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année</h2></div><div class="obs-card-head-tools"><small>Clique pour croiser</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div>${statusYearMatrix(filteredOperations({ignoreCrossKey:'statusYear'}))}</article>`;
+    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>`;
   }
 
   function statusYearMatrix(ops){
     const years=uniq(ops.map(o=>o.year)).filter(v=>/^\d{4}$/.test(String(v))).sort((a,b)=>Number(a)-Number(b));
-    const statuses=['notStarted','incomplete','planned','analysis','visit','compliant'];
+    const activeStatuses=['notStarted','incomplete','planned','analysis','visit','compliant'];
+    const excludedStatuses=['lostAffair','abandonedAffair','cancelledAffair'];
+    const statuses=state.statusYearShowExcluded?[...activeStatuses,...excludedStatuses]:activeStatuses;
     if(!years.length) return '<div class="obs-empty">Aucune année disponible.</div>';
+    const count=(year,status)=>ops.filter(o=>String(o.year)===String(year)&&chronologyStatus(o)===status).length;
     if(state.statusYearView==='histogram'){
-      const totals=years.map(y=>({year:y,total:ops.filter(o=>String(o.year)===String(y)).length})),mx=Math.max(1,...totals.map(x=>x.total));
-      return `<div class="obs-status-year-chart">${totals.map(({year,total})=>`<div class="obs-status-year-col"><div class="obs-status-year-stack" style="height:${Math.max(10,100*total/mx)}%">${statuses.map(s=>{const v=ops.filter(o=>String(o.year)===String(year)&&o.status===s).length,share=total?100*v/total:0,value=`${year}\u0001${s}`;return v?`<button type="button" style="height:${share}% ;--status-color:${STATUS_COLORS[s]}" ${crossAttrs('statusYear',value,`${year} · ${STATUS_LABELS[s]}`)} title="${attr(STATUS_LABELS[s])} : ${fmt(v)}"></button>`:''}).join('')}</div><strong>${fmt(total)}</strong><span>${esc(year)}</span></div>`).join('')}</div><div class="obs-status-year-legend">${statuses.map(s=>`<span><i style="background:${STATUS_COLORS[s]}"></i>${esc(STATUS_LABELS[s])}</span>`).join('')}</div>`;
+      const totals=years.map(y=>({year:y,total:statuses.reduce((n,s)=>n+count(y,s),0)})),mx=Math.max(1,...totals.map(x=>x.total));
+      return `<div class="obs-status-year-chart">${totals.map(({year,total})=>`<div class="obs-status-year-col"><div class="obs-status-year-stack" style="height:${Math.max(10,100*total/mx)}%">${statuses.map(s=>{const v=count(year,s),share=total?100*v/total:0,value=`${year}\u0001${s}`,excluded=excludedStatuses.includes(s);return v?`<button type="button" class="${excluded?'is-excluded-status':''}" style="height:${share}% ;--status-color:${CHRONOLOGY_STATUS_COLORS[s]||'#8b9892'}" ${excluded?'':crossAttrs('statusYear',value,`${year} · ${CHRONOLOGY_STATUS_LABELS[s]||s}`)} title="${attr(CHRONOLOGY_STATUS_LABELS[s]||s)} : ${fmt(v)}${excluded?' · hors statistiques actives':''}"></button>`:''}).join('')}</div><strong>${fmt(total)}</strong><span>${esc(year)}</span></div>`).join('')}</div><div class="obs-status-year-legend">${statuses.map(s=>`<span class="${excludedStatuses.includes(s)?'is-excluded-status':''}"><i style="background:${CHRONOLOGY_STATUS_COLORS[s]||'#8b9892'}"></i>${esc(CHRONOLOGY_STATUS_LABELS[s]||s)}${excludedStatuses.includes(s)?' · hors stats':''}</span>`).join('')}</div>`;
     }
-    const max=Math.max(1,...years.flatMap(y=>statuses.map(s=>ops.filter(o=>String(o.year)===String(y)&&o.status===s).length))),model=paged(years,state.statusYearPage,15);state.statusYearPage=model.page;
-    return `<div class="obs-heatmap"><table><thead><tr><th>Année</th>${statuses.map(s=>`<th>${esc(shorten(STATUS_LABELS[s],13))}</th>`).join('')}</tr></thead><tbody>${model.items.map(y=>`<tr><th>${esc(y)}</th>${statuses.map(s=>{const v=ops.filter(o=>String(o.year)===String(y)&&o.status===s).length, key='statusYear', value=`${y}\u0001${s}`, active=activeCross(key,value);return `<td class="${v?'':'is-zero'} ${active?'is-active':''}" style="--heat:${v/max}" ${v?crossAttrs(key,value,`${y} · ${STATUS_LABELS[s]}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table>${paginationHtml('status-year-list',model)}</div>`;
+    const max=Math.max(1,...years.flatMap(y=>statuses.map(s=>count(y,s)))),model=paged(years,state.statusYearPage,15);state.statusYearPage=model.page;
+    return `<div class="obs-heatmap"><table><thead><tr><th>Année</th>${statuses.map(s=>`<th>${esc(shorten(CHRONOLOGY_STATUS_LABELS[s]||s,15))}</th>`).join('')}</tr></thead><tbody>${model.items.map(y=>`<tr><th>${esc(y)}</th>${statuses.map(s=>{const v=count(y,s), key='statusYear', value=`${y}\u0001${s}`, active=!excludedStatuses.includes(s)&&activeCross(key,value),excluded=excludedStatuses.includes(s);return `<td class="${v?'':'is-zero'} ${active?'is-active':''} ${excluded?'is-excluded-status':''}" style="--heat:${v/max}" ${v&&!excluded?crossAttrs(key,value,`${y} · ${CHRONOLOGY_STATUS_LABELS[s]||s}`):''} title="${excluded&&v?'Hors statistiques actives':''}">${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table>${paginationHtml('status-year-list',model)}</div>`;
   }
 
 
+  const operationTagCache=new WeakMap();
+  function cachedOperationTags(op,kind){
+    if(!op)return[];let rec=operationTagCache.get(op);if(!rec){rec={};operationTagCache.set(op,rec);}if(!rec[kind])rec[kind]=(engine.aggregateTags([op],kind)||[]).map(x=>x.name);return rec[kind];
+  }
+  function aggregateCachedTags(ops,kind){
+    const map=new Map();
+    (ops||[]).forEach(o=>cachedOperationTags(o,kind).forEach(name=>{const k=norm(name);if(!map.has(k))map.set(k,{name,value:0,dwellings:0,buildings:0});const x=map.get(k);x.value++;x.dwellings+=Number(o.dwellings)||0;x.buildings+=Number(o.buildings)||0;}));
+    return [...map.values()].sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'fr'));
+  }
+  function performanceIndex(ops){
+    const mentions=aggregateCachedTags(ops,'mention'),performances=aggregateCachedTags(ops,'performance'),pairs=new Map();
+    (ops||[]).forEach(o=>{const ms=cachedOperationTags(o,'mention'),ps=cachedOperationTags(o,'performance');ms.forEach(m=>ps.forEach(p=>{const k=`${norm(m)}\u0000${norm(p)}`;pairs.set(k,(pairs.get(k)||0)+1);}));});
+    return {mentions,performances,pairs};
+  }
   function renderPerformance(){
-    const ops=filteredOperations(), mentionUniverse=filteredOperations({ignoreCrossKey:'mention'}), perfUniverse=filteredOperations({ignoreCrossKey:'performance'});
-    const mentionCoverage=ops.filter(o=>engine.aggregateTags([o],'mention').length>0).length, perfCoverage=ops.filter(o=>engine.aggregateTags([o],'performance').length>0).length;
+    const ops=filteredOperations(), mentionUniverse=filteredOperations({ignoreCrossKey:'mention'}), perfUniverse=filteredOperations({ignoreCrossKey:'performance'}),idx=performanceIndex(ops);
+    const mentionCoverage=ops.filter(o=>cachedOperationTags(o,'mention').length>0).length, perfCoverage=ops.filter(o=>cachedOperationTags(o,'performance').length>0).length;
     return `${pageHead('performance')}${analyticsToolbar()}${kpiGrid([
       {label:'Opérations',value:fmt(ops.length),note:'population croisée'},
       {label:'Avec mention / label',value:fmt(mentionCoverage),note:`${fmt(pct(mentionCoverage,ops.length),1)} % renseignées`},
@@ -1305,40 +1347,43 @@
       <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>MENTIONS</span><h2>Mentions et labels</h2></div><div class="obs-card-head-tools">${tableSearchHtml('mention',state.mentionSearch,'Rechercher une mention…')}${tableViewToggle('mention',state.mentionTableView,['list','bar','tiles'])}</div></div>${tagTable(mentionUniverse,'mention')}</article>
       <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>PERFORMANCES</span><h2>Niveaux de performance</h2></div><div class="obs-card-head-tools">${tableSearchHtml('performance',state.performanceSearch,'Rechercher une performance…')}${tableViewToggle('performance',state.performanceTableView,['list','bar','tiles'])}</div></div>${tagTable(perfUniverse,'performance')}</article>
     </div>
-    <article class="obs-card"><div class="obs-card-head"><div><span>CROISEMENT</span><h2>Mentions × performances</h2></div><div class="obs-card-head-tools"><small>15 combinaisons max en liste</small>${tableViewToggle('performance-matrix',state.performanceMatrixView,['list','matrix'])}</div></div>${tagMatrix(filteredOperations({ignoreCrossKey:'mentionPerformance'}))}</article>`;
+    <article class="obs-card"><div class="obs-card-head"><div><span>CROISEMENT</span><h2>Mentions × performances</h2></div><div class="obs-card-head-tools"><small>Sélection personnalisable + matrice rapide</small>${tableViewToggle('performance-matrix',state.performanceMatrixView,['list','matrix'])}</div></div>${tagMatrix(ops,idx)}</article>`;
   }
 
   function tagTable(ops,kind){
-    const all=engine.aggregateTags(ops,kind), key=kind==='mention'?'mention':'performance', query=norm(kind==='mention'?state.mentionSearch:state.performanceSearch);
+    const all=aggregateCachedTags(ops,kind), key=kind==='mention'?'mention':'performance', query=norm(kind==='mention'?state.mentionSearch:state.performanceSearch);
     const items=query?all.filter(x=>norm(x.name).includes(query)):all;
     if(!items.length) return '<div class="obs-empty">Aucun résultat pour cette recherche.</div>';
     const pageKey=kind==='mention'?'mentionPage':'performancePage',view=kind==='mention'?state.mentionTableView:state.performanceTableView,model=paged(items,state[pageKey],15);state[pageKey]=model.page;
     if(view==='bar'){
-      const total=items.reduce((s,x)=>s+(Number(x.value)||0),0)||1;
+      const total=items.reduce((ss,x)=>ss+(Number(x.value)||0),0)||1;
       return `${tableBarRows(model.items,{name:x=>x.name,value:x=>x.value,secondary:x=>`${fmt(x.dwellings)} lgts · ${fmt(x.buildings)} bât.`,crossKey:key,crossValue:x=>x.name,crossLabel:x=>`${kind==='mention'?'Mention':'Performance'} : ${x.name}`,total})}${paginationHtml(kind,model)}`;
     }
     if(view==='tiles'){
-      const max=Math.max(1,...model.items.map(x=>x.value)),total=items.reduce((s,x)=>s+(Number(x.value)||0),0)||1;
+      const max=Math.max(1,...model.items.map(x=>x.value)),total=items.reduce((ss,x)=>ss+(Number(x.value)||0),0)||1;
       return `<div class="obs-table-tiles">${model.items.map(x=>`<button type="button" class="obs-table-tile ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)} style="--tile-weight:${Math.max(.12,x.value/max)}"><span>${escLines(x.name)}</span><strong>${fmt(x.value)}</strong><small>${fmt(pct(x.value,total),1)} % · ${fmt(x.dwellings)} lgts</small></button>`).join('')}</div>${paginationHtml(kind,model)}`;
     }
     return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Libellé</th><th>Opérations</th><th>Logements</th><th>Bâtiments</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>`<tr class="obs-cross-row ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)}><td><strong>${escLines(x.name)}</strong></td><td>${fmt(x.value)}</td><td>${fmt(x.dwellings)}</td><td>${fmt(x.buildings)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`).join('')}</tbody></table>${paginationHtml(kind,model)}</div>`;
   }
 
-
-  function tagMatrix(ops){
-    const mentions=engine.aggregateTags(ops,'mention').slice(0,8), performances=engine.aggregateTags(ops,'performance').slice(0,8);
-    if(!mentions.length||!performances.length) return '<div class="obs-empty">Pas assez de données pour croiser mentions et performances.</div>';
-    const combos=[];
-    mentions.forEach(m=>performances.forEach(p=>{const v=ops.filter(o=>operationHasTag(o,'mention',m.name)&&operationHasTag(o,'performance',p.name)).length;if(v)combos.push({mention:m.name,performance:p.name,value:v});}));
-    combos.sort((a,b)=>b.value-a.value||a.mention.localeCompare(b.mention,'fr'));
+  function tagMatrix(ops,idx=performanceIndex(ops)){
+    const allM=idx.mentions,allP=idx.performances;
+    if(!allM.length||!allP.length) return '<div class="obs-empty">Pas assez de données pour croiser mentions et performances.</div>';
+    if(!state.performanceMatrixMention||!allM.some(x=>norm(x.name)===norm(state.performanceMatrixMention)))state.performanceMatrixMention=allM[0].name;
+    if(!state.performanceMatrixPerformance||!allP.some(x=>norm(x.name)===norm(state.performanceMatrixPerformance)))state.performanceMatrixPerformance=allP[0].name;
+    const pairCount=(m,p)=>idx.pairs.get(`${norm(m)}\u0000${norm(p)}`)||0;
+    const selectedOps=ops.filter(o=>cachedOperationTags(o,'mention').some(x=>norm(x)===norm(state.performanceMatrixMention))&&cachedOperationTags(o,'performance').some(x=>norm(x)===norm(state.performanceMatrixPerformance)));
+    const selector=`<div class="obs-matrix-selector"><label><span>Mention ciblée</span><select data-performance-matrix-select="mention">${allM.map(x=>`<option value="${attr(x.name)}" ${norm(x.name)===norm(state.performanceMatrixMention)?'selected':''}>${escLines(x.name)}</option>`).join('')}</select></label><b>×</b><label><span>Performance ciblée</span><select data-performance-matrix-select="performance">${allP.map(x=>`<option value="${attr(x.name)}" ${norm(x.name)===norm(state.performanceMatrixPerformance)?'selected':''}>${escLines(x.name)}</option>`).join('')}</select></label><div class="obs-matrix-selection-kpis"><strong>${fmt(selectedOps.length)}<small>opérations</small></strong><strong>${fmt(sum(selectedOps,o=>o.dwellings))}<small>logements</small></strong><strong>${fmt(sum(selectedOps,o=>o.buildings))}<small>bâtiments</small></strong><strong>${fmt(pct(selectedOps.length,ops.length),1)} %<small>de la sélection</small></strong></div></div>`;
+    const combos=[];idx.pairs.forEach((value,k)=>{const [mk,pk]=k.split('\u0000'),m=allM.find(x=>norm(x.name)===mk)?.name||mk,p=allP.find(x=>norm(x.name)===pk)?.name||pk;combos.push({mention:m,performance:p,value});});combos.sort((a,b)=>b.value-a.value||a.mention.localeCompare(b.mention,'fr'));
     if(state.performanceMatrixView==='list'){
       const model=paged(combos,state.performanceMatrixPage,15);state.performanceMatrixPage=model.page;
-      return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Mention</th><th>Performance</th><th>Opérations</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>{const value=`${x.mention}\u0001${x.performance}`;return `<tr class="obs-cross-row ${activeCross('mentionPerformance',value)?'is-active':''}" ${crossAttrs('mentionPerformance',value,`${x.mention} + ${x.performance}`)}><td><strong>${escLines(x.mention)}</strong></td><td>${escLines(x.performance)}</td><td>${fmt(x.value)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`}).join('')}</tbody></table>${paginationHtml('performance-matrix',model)}</div>`;
+      return `${selector}<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Mention</th><th>Performance</th><th>Opérations</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>{const value=`${x.mention}\u0001${x.performance}`;return `<tr class="obs-cross-row ${activeCross('mentionPerformance',value)?'is-active':''}" ${crossAttrs('mentionPerformance',value,`${x.mention} + ${x.performance}`)}><td><strong>${escLines(x.mention)}</strong></td><td>${escLines(x.performance)}</td><td>${fmt(x.value)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`}).join('')}</tbody></table>${paginationHtml('performance-matrix',model)}</div>`;
     }
-    const topM=mentions.slice(0,6),topP=performances.slice(0,6),max=Math.max(1,...topM.flatMap(m=>topP.map(p=>ops.filter(o=>operationHasTag(o,'mention',m.name)&&operationHasTag(o,'performance',p.name)).length)));
-    return `<div class="obs-heatmap"><table><thead><tr><th>Mention ↓</th>${topP.map(p=>`<th title="${attr(p.name)}">${esc(shorten(p.name,14))}</th>`).join('')}</tr></thead><tbody>${topM.map(m=>`<tr><th title="${attr(m.name)}">${esc(shorten(m.name,18))}</th>${topP.map(p=>{const v=ops.filter(o=>operationHasTag(o,'mention',m.name)&&operationHasTag(o,'performance',p.name)).length,value=`${m.name}\u0001${p.name}`,active=activeCross('mentionPerformance',value);return `<td class="${v?'':'is-zero'} ${active?'is-active':''}" style="--heat:${v/max}" ${v?crossAttrs('mentionPerformance',value,`${m.name} + ${p.name}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const topM=allM.slice(0,6),topP=allP.slice(0,6),selectedM=allM.find(x=>norm(x.name)===norm(state.performanceMatrixMention)),selectedP=allP.find(x=>norm(x.name)===norm(state.performanceMatrixPerformance));
+    if(selectedM&&!topM.some(x=>norm(x.name)===norm(selectedM.name)))topM.push(selectedM);if(selectedP&&!topP.some(x=>norm(x.name)===norm(selectedP.name)))topP.push(selectedP);
+    const max=Math.max(1,...topM.flatMap(m=>topP.map(p=>pairCount(m.name,p.name))));
+    return `${selector}<div class="obs-heatmap obs-performance-heatmap"><table><thead><tr><th>Mention ↓</th>${topP.map(p=>`<th class="${norm(p.name)===norm(state.performanceMatrixPerformance)?'is-selected-axis':''}" title="${attr(p.name)}">${esc(shorten(p.name,14))}</th>`).join('')}</tr></thead><tbody>${topM.map(m=>`<tr class="${norm(m.name)===norm(state.performanceMatrixMention)?'is-selected-axis':''}"><th title="${attr(m.name)}">${esc(shorten(m.name,18))}</th>${topP.map(p=>{const v=pairCount(m.name,p.name),value=`${m.name}\u0001${p.name}`,active=activeCross('mentionPerformance',value),selected=norm(m.name)===norm(state.performanceMatrixMention)&&norm(p.name)===norm(state.performanceMatrixPerformance);return `<td class="${v?'':'is-zero'} ${active?'is-active':''} ${selected?'is-target-cell':''}" style="--heat:${v/max}" ${v?crossAttrs('mentionPerformance',value,`${m.name} + ${p.name}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
   }
-
 
   function solutionCardView(cardKey){ return state.solutionViews?.[cardKey]==='pie'?'pie':'bar'; }
   function solutionViewToggle(cardKey){
@@ -1349,7 +1394,23 @@
     const crossKey=`norm:${key}`, universe=filteredTechnicalOperations({ignoreCrossKey:crossKey});
     return {items:countBy(universe,o=>normalizedValue(o,key)),crossKey,...options};
   }
-  function pieDistribution(items,{key='',labelPrefix='',maxItems=10}={}){
+  function vectorColor(value){
+    const s=norm(value);
+    if(/gaz/.test(s)) return '#e58a2b';
+    if(/electric|electr|elec/.test(s)) return '#e2b600';
+    if(/rcu|reseau de chaleur/.test(s)) return '#7b61d1';
+    if(/pac|pompe a chaleur|thermodynam|cet/.test(s)) return '#2f80ed';
+    if(/bois|biomasse/.test(s)) return '#5b8f45';
+    if(/fioul/.test(s)) return '#8b6f61';
+    if(/solair/.test(s)) return '#f2a900';
+    if(/hybrid/.test(s)) return '#009a93';
+    if(/aucun|sans/.test(s)) return '#a8b3ad';
+    if(/autre/.test(s)) return '#7c8d85';
+    return '#168456';
+  }
+  function vectorColorStyle(value){return `--vector-color:${vectorColor(value)}`;}
+
+  function pieDistribution(items,{key='',labelPrefix='',maxItems=10,colorFn=null}={}){
     if(!items.length) return '<div class="obs-empty">Aucune donnée disponible pour cette sélection.</div>';
     const total=items.reduce((a,x)=>a+(Number(x.value)||0),0)||1;
     let rows=items.slice(0,maxItems).map(x=>({...x}));
@@ -1357,11 +1418,11 @@
     if(rest) rows.push({name:'Autres',value:rest,isOther:true});
     const palette=['#06402b','#168456','#4b9881','#79a98f','#a4bcae','#d4a24c','#7d9bb0','#8a769d','#b96d69','#8d9a94','#c2a98a'];
     let acc=0; const stops=[];
-    rows.forEach((x,i)=>{const a=100*acc/total;acc+=Number(x.value)||0;const b=100*acc/total;stops.push(`${palette[i%palette.length]} ${a.toFixed(2)}% ${b.toFixed(2)}%`);x._color=palette[i%palette.length];});
+    rows.forEach((x,i)=>{const a=100*acc/total;acc+=Number(x.value)||0;const b=100*acc/total;const color=colorFn?colorFn(x.name):palette[i%palette.length];stops.push(`${color} ${a.toFixed(2)}% ${b.toFixed(2)}%`);x._color=color;});
     return `<div class="obs-pie-layout"><div class="obs-pie-chart" style="background:conic-gradient(${stops.join(',')})" role="img" aria-label="Répartition en camembert"></div><div class="obs-pie-legend">${rows.map(x=>{const clickable=key&&!x.isOther;return `<${clickable?'button':'div'} ${clickable?`type="button" class="${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${labelPrefix||key} : ${x.name}`)}`:'class="obs-pie-legend-static"'}><i style="background:${x._color}"></i><span>${esc(x.name)}</span><strong>${fmt(x.value)}<small>${fmt(pct(x.value,total),1)} %</small></strong></${clickable?'button':'div'}>`;}).join('')}</div></div>`;
   }
-  function distributionVisual(items,{view='bar',key='',labelPrefix='',maxItems=12}={}){
-    return view==='pie'?pieDistribution(items,{key,labelPrefix,maxItems}):tileDistribution(items,{key,labelPrefix,maxItems});
+  function distributionVisual(items,{view='bar',key='',labelPrefix='',maxItems=12,colorFn=null}={}){
+    return view==='pie'?pieDistribution(items,{key,labelPrefix,maxItems,colorFn}):tileDistribution(items,{key,labelPrefix,maxItems,colorFn});
   }
   function envelopeCard(title,cardKey,materialKey,materialLabel,rKey,thicknessKey,structureNormKey=''){
     const view=solutionCardView(cardKey), material=normalizedDistribution(materialKey), r=averageRaw(filteredTechnicalOperations(),rKey), th=averageRaw(filteredTechnicalOperations(),thicknessKey);
@@ -1373,13 +1434,13 @@
     </article>`;
   }
 
-  function tileDistribution(items,{key='',labelPrefix='',maxItems=12}={}){
+  function tileDistribution(items,{key='',labelPrefix='',maxItems=12,colorFn=null}={}){
     const rows=items.slice(0,maxItems), total=items.reduce((a,x)=>a+(Number(x.value)||0),0)||1, max=Math.max(1,...rows.map(x=>x.value));
     if(!rows.length) return '<div class="obs-empty">Aucune donnée disponible pour cette sélection.</div>';
     return `<div class="obs-visual-dist">${rows.map((item,index)=>{
       const fixed=key?crossKeyValueFix(key,item.name,`${labelPrefix||key} : ${item.name}`):null;
       const active=fixed&&activeCross(fixed.key,fixed.value), share=pct(item.value,total);
-      return `<button type="button" class="obs-visual-dist-row ${active?'is-active':''}" ${key?crossAttrs(key,item.name,`${labelPrefix||key} : ${item.name}`):''}><i class="obs-visual-dist-icon">${visualIconFor(item.name)}</i><span><b>${esc(item.name)}</b><em><u style="width:${Math.max(3,100*item.value/max).toFixed(1)}%"></u></em></span><strong><b>${fmt(item.value)}</b><small>${fmt(share,1)} %</small></strong></button>`;
+      return `<button type="button" class="obs-visual-dist-row ${active?'is-active':''}" ${key?crossAttrs(key,item.name,`${labelPrefix||key} : ${item.name}`):''}><i class="obs-visual-dist-icon">${visualIconFor(item.name)}</i><span><b>${esc(item.name)}</b><em><u style="width:${Math.max(3,100*item.value/max).toFixed(1)}%;${colorFn?`background:${colorFn(item.name)}`:''}"></u></em></span><strong><b>${fmt(item.value)}</b><small>${fmt(share,1)} %</small></strong></button>`;
     }).join('')}</div>`;
   }
 
@@ -1389,8 +1450,8 @@
   }
 
   function technicalCard(title,cardKey,normKey){
-    const view=solutionCardView(cardKey),dist=normalizedDistribution(normKey);
-    return `<article class="obs-card obs-technical-card"><div class="obs-card-head"><div><span>SYSTÈMES NORMALISÉS</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle(cardKey)}</div></div>${distributionVisual(dist.items,{view,key:dist.crossKey,maxItems:12,labelPrefix:title})}</article>`;
+    const view=solutionCardView(cardKey),dist=normalizedDistribution(normKey),isVector=['heatingVector','ecsVector'].includes(normKey);
+    return `<article class="obs-card obs-technical-card ${isVector?'obs-vector-card':''}"><div class="obs-card-head"><div><span>SYSTÈMES NORMALISÉS</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle(cardKey)}</div></div>${distributionVisual(dist.items,{view,key:dist.crossKey,maxItems:12,labelPrefix:title,colorFn:isVector?vectorColor:null})}</article>`;
   }
 
   function solutionMetricKpi(ops){
@@ -1420,22 +1481,20 @@
       ${solutionRGauge('Plancher bas · R moyen',floorR,'▱',10,3)}
       ${solutionMetricKpi(ops)}
     </div>
-    <div class="obs-section-title"><div><span>01</span><h2>Enveloppe du bâtiment</h2></div><p>Les libellés détaillés restent conservés dans la source ; les statistiques sont regroupées automatiquement en grandes familles comparables.</p></div>
-    <div class="obs-grid-2">
-      ${normalizedSingleCard('Mode constructif','construction','structure')}
-      ${envelopeCard('Toitures / planchers hauts','roof','roofInsulation','Famille d’isolant','roofR','roofThickness','roofStructure')}
-      ${envelopeCard('Façades / parois verticales','walls','wallInsulation','Famille d’isolant','wallR','wallThickness','wallStructure')}
-      ${envelopeCard('Planchers bas','floors','floorInsulation','Famille d’isolant','floorR','floorThickness','floorSolution')}
-      <article class="obs-card obs-envelope-card"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>Menuiseries extérieures</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle('windows')}</div></div>
-        <div class="obs-subsection-title">Matériau</div>${distributionVisual(winMat.items,{view:windowsView,key:winMat.crossKey,maxItems:8,labelPrefix:'Menuiseries'})}
-        <div class="obs-subsection-title">Vitrage</div>${distributionVisual(winGlass.items,{view:windowsView,key:winGlass.crossKey,maxItems:8,labelPrefix:'Vitrage'})}
-        <div class="obs-subsection-title">Occultations</div>${distributionVisual(winShade.items,{view:windowsView,key:winShade.crossKey,maxItems:8,labelPrefix:'Occultations'})}
+    <div class="obs-section-title"><div><span>01</span><h2>Enveloppe du bâtiment</h2></div><p>Lecture compacte par grandes familles ; les valeurs détaillées restent conservées dans les données source.</p></div>
+    <div class="obs-solutions-grid">
+      <div class="obs-solutions-construction">${normalizedSingleCard('Mode constructif','construction','structure')}</div>
+      <div>${envelopeCard('Toitures / planchers hauts','roof','roofInsulation','Famille d’isolant','roofR','roofThickness','roofStructure')}</div>
+      <div>${envelopeCard('Façades / parois verticales','walls','wallInsulation','Famille d’isolant','wallR','wallThickness','wallStructure')}</div>
+      <div>${envelopeCard('Planchers bas','floors','floorInsulation','Famille d’isolant','floorR','floorThickness','floorSolution')}</div>
+      <article class="obs-card obs-envelope-card obs-windows-wide"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>Menuiseries extérieures</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle('windows')}</div></div>
+        <div class="obs-window-distributions"><section><div class="obs-subsection-title">Matériau</div>${distributionVisual(winMat.items,{view:windowsView,key:winMat.crossKey,maxItems:8,labelPrefix:'Menuiseries'})}</section><section><div class="obs-subsection-title">Vitrage</div>${distributionVisual(winGlass.items,{view:windowsView,key:winGlass.crossKey,maxItems:8,labelPrefix:'Vitrage'})}</section><section><div class="obs-subsection-title">Occultations</div>${distributionVisual(winShade.items,{view:windowsView,key:winShade.crossKey,maxItems:8,labelPrefix:'Occultations'})}</section></div>
       </article>
     </div>
     <div class="obs-section-title"><div><span>02</span><h2>Systèmes techniques</h2></div><p>Chauffage, ECS, ventilation et refroidissement sont ramenés à des familles homogènes ; chaque encart peut basculer entre barres et camembert.</p></div>
-    <div class="obs-grid-3">
-      ${technicalCard('Vecteur chauffage','heating-vector','heatingVector')}${technicalCard('Famille chauffage','heating-system','heatingSystem')}
-      ${technicalCard('Vecteur ECS','ecs-vector','ecsVector')}${technicalCard('Famille ECS','ecs-system','ecsSystem')}
+    <div class="obs-systems-grid">
+      ${technicalCard('Vecteur chauffage','heating-vector','heatingVector')}
+      ${technicalCard('Vecteur ECS','ecs-vector','ecsVector')}
       ${technicalCard('Ventilation','ventilation','ventilationFamily')}${technicalCard('Refroidissement','cooling','coolingFamily')}
     </div>`;
   }
@@ -1468,6 +1527,10 @@
     return `<div class="obs-bars obs-metric-bars">${rows.map(x=>`<div class="obs-bar-row obs-metric-row"><span title="${attr(x.label)}">${esc(x.label)}</span><span class="obs-bar-track"><i class="obs-bar-fill" style="width:${Math.max(2,100*x.avg/max).toFixed(1)}%"></i></span><strong>${fmt(x.avg,1)}</strong><small>${fmt(x.count)} op.</small></div>`).join('')}</div>`;
   }
 
+  function energyCepViewToggle(cardKey){const view=state.energyCepViews?.[cardKey]||'pie';return `<div class="obs-view-toggle" role="group" aria-label="Mode d’affichage CEP"><button type="button" class="${view==='bar'?'is-active':''}" data-energy-cep-view="${attr(cardKey)}" data-view="bar" title="Barres">▥</button><button type="button" class="${view==='pie'?'is-active':''}" data-energy-cep-view="${attr(cardKey)}" data-view="pie" title="Camembert">◕</button></div>`;}
+  function metricAverageItems(ops,defs){return defs.map(([key,label])=>{const a=averageRaw(ops,key);return {key,name:label,value:a.avg,count:a.count};}).filter(x=>x.count&&x.value!==null&&x.value>=0);}
+  function metricAverageVisual(ops,defs,cardKey){const rows=metricAverageItems(ops,defs);if(!rows.length)return '<div class="obs-empty">Aucune donnée de décomposition CEP renseignée.</div>';const view=state.energyCepViews?.[cardKey]||'pie',colorFn=cardKey==='vector'?vectorColor:null;if(view==='pie')return pieDistribution(rows,{maxItems:10,colorFn});const max=Math.max(1,...rows.map(x=>x.value));return `<div class="obs-bars obs-metric-bars">${rows.map(x=>`<div class="obs-bar-row obs-metric-row"><span title="${attr(x.name)}">${esc(x.name)}</span><span class="obs-bar-track"><i class="obs-bar-fill" style="width:${Math.max(2,100*x.value/max).toFixed(1)}%;${colorFn?`background:${colorFn(x.name)}`:''}"></i></span><strong>${fmt(x.value,1)}</strong><small>${fmt(x.count)} op.</small></div>`).join('')}</div>`;}
+
   function renderEnergy(){
     const ops=filteredTechnicalOperations();
     const cepStats=metricPairStats(ops,'cep','cepMax'), cepnrStats=metricPairStats(ops,'cepnr','cepnrMax'), bbioStats=metricPairStats(ops,'bbio','bbioMax');
@@ -1497,16 +1560,18 @@
     </div>
     <div class="obs-section-title"><div><span>03</span><h2>D’où vient le Cep ?</h2></div><p>Décomposition moyenne des usages et vecteurs lorsqu’ils sont renseignés dans la source.</p></div>
     <div class="obs-grid-2">
-      <article class="obs-card"><div class="obs-card-head"><div><span>PAR USAGE</span><h2>Contribution moyenne au Cep</h2></div><small>kWhEP/m².an</small></div>${metricAverageBars(ops,[['cepCooling','Refroidissement'],['cepLighting','Éclairage'],['cepAuxVent','Auxiliaires ventilation'],['cepAuxDist','Auxiliaires distribution'],['cepMobility','Déplacement occupants']])}</article>
-      <article class="obs-card"><div class="obs-card-head"><div><span>PAR VECTEUR</span><h2>Contribution moyenne au Cep</h2></div><small>kWhEP/m².an</small></div>${metricAverageBars(ops,[['cepElectricity','Électricité'],['cepGas','Gaz'],['cepDistrict','Réseau de chaleur'],['cepWood','Bois / biomasse']])}</article>
+      <article class="obs-card"><div class="obs-card-head"><div><span>PAR USAGE</span><h2>Contribution moyenne au Cep</h2></div><div class="obs-card-head-tools"><small>kWhEP/m².an</small>${energyCepViewToggle('usage')}</div></div>${metricAverageVisual(ops,[['cepCooling','Refroidissement'],['cepLighting','Éclairage'],['cepAuxVent','Auxiliaires ventilation'],['cepAuxDist','Auxiliaires distribution'],['cepMobility','Déplacement occupants']],'usage')}</article>
+      <article class="obs-card"><div class="obs-card-head"><div><span>PAR VECTEUR</span><h2>Contribution moyenne au Cep</h2></div><div class="obs-card-head-tools"><small>kWhEP/m².an</small>${energyCepViewToggle('vector')}</div></div>${metricAverageVisual(ops,[['cepElectricity','Électricité'],['cepGas','Gaz'],['cepDistrict','Réseau de chaleur'],['cepWood','Bois / biomasse']],'vector')}</article>
     </div>`;
   }
 
   function transitionFlow(ops,beforeKey,afterKey,label,focusKey){
-    const before=countBy(ops,o=>o[beforeKey]||'Non précisé').slice(0,12), after=countBy(ops,o=>o[afterKey]||'Non précisé').slice(0,12);
+    const dpeMode=['dpeEnergyBefore','dpeGesBefore'].includes(beforeKey);
+    const flowOps=dpeMode?(ops||[]).filter(o=>dpeLetter(o,beforeKey)&&dpeLetter(o,afterKey)):(ops||[]);
+    const before=countBy(flowOps,o=>transitionValue(o,beforeKey)).slice(0,12), after=countBy(flowOps,o=>transitionValue(o,afterKey)).slice(0,12);
     if(!before.length||!after.length) return '<div class="obs-empty">Données de transition insuffisantes.</div>';
     const matrix=new Map();
-    ops.forEach(o=>{const a=o[beforeKey]||'Non précisé',b=o[afterKey]||'Non précisé';matrix.set(`${a}\u0000${b}`,(matrix.get(`${a}\u0000${b}`)||0)+1);});
+    flowOps.forEach(o=>{const a=transitionValue(o,beforeKey),b=transitionValue(o,afterKey);matrix.set(`${a}\u0000${b}`,(matrix.get(`${a}\u0000${b}`)||0)+1);});
     const transitionKey=`transition:${beforeKey}:${afterKey}`;
     const activeTransition=state.crossFilters.find(f=>f.key===transitionKey);
     const activeParts=activeTransition?String(activeTransition.value).split('\u0001'):[];
@@ -1516,12 +1581,17 @@
     const focusRow=before.findIndex(x=>norm(x.name)===norm(focus));
     const flows=focus?after.map((b,j)=>({name:b.name,count:matrix.get(`${focus}\u0000${b.name}`)||0,j})).filter(x=>x.count>0):[];
     const maxFlow=Math.max(1,...flows.map(x=>x.count));
-    const curves=focusRow>=0?flows.map(x=>{const y1=ys(focusRow,before.length),y2=ys(x.j,after.length),w=2+12*Math.sqrt(x.count/maxFlow),value=`${focus}\u0001${x.name}`,active=activeTransition&&String(activeTransition.value)===value;return `<g class="obs-flow-link ${active?'is-active':''}" ${crossAttrs(transitionKey,value,`${label} : ${focus} → ${x.name}`)}><path d="M5 ${y1.toFixed(1)} C135 ${y1.toFixed(1)},265 ${y2.toFixed(1)},395 ${y2.toFixed(1)}" style="--flow-width:${w.toFixed(1)}"></path><text x="200" y="${((y1+y2)/2-5).toFixed(1)}" text-anchor="middle">${fmt(x.count)}</text></g>`;}).join(''):'';
+    const curves=focusRow>=0?flows.map(x=>{const y1=ys(focusRow,before.length),y2=ys(x.j,after.length),w=2+12*Math.sqrt(x.count/maxFlow),value=`${focus}\u0001${x.name}`,active=activeTransition&&String(activeTransition.value)===value;return `<g class="obs-flow-link ${active?'is-active':''}" style="${dpeMode?'':vectorColorStyle(focus)}" ${crossAttrs(transitionKey,value,`${label} : ${focus} → ${x.name}`)}><path d="M5 ${y1.toFixed(1)} C135 ${y1.toFixed(1)},265 ${y2.toFixed(1)},395 ${y2.toFixed(1)}" style="--flow-width:${w.toFixed(1)}"></path><text x="200" y="${((y1+y2)/2-5).toFixed(1)}" text-anchor="middle">${fmt(x.count)}</text></g>`;}).join(''):'';
     const rightCounts=new Map(after.map(x=>[x.name,focus?(matrix.get(`${focus}\u0000${x.name}`)||0):x.value]));
-    return `<div class="obs-flow-caption"><span>AVANT TRAVAUX</span><b>${focus?`Trajectoires depuis « ${esc(focus)} »`:'Choisis un vecteur à gauche'}</b><span>APRÈS TRAVAUX</span></div><div class="obs-flow" style="--flow-h:${H}px">
-      <div class="obs-flow-column before">${before.map(x=>`<button type="button" class="obs-flow-node ${norm(x.name)===norm(focus)?'is-selected':''}" data-flow-focus="${focusKey}" data-flow-before="${attr(encodeURIComponent(x.name))}"><span>${esc(x.name)}</span><b>${fmt(x.value)}</b><small>opération${x.value>1?'s':''} avant travaux</small></button>`).join('')}</div>
-      <div class="obs-flow-canvas">${focus?`<svg viewBox="0 0 400 ${H}" preserveAspectRatio="none">${curves}</svg>`:'<div class="obs-flow-hint"><b>←</b><span>Clique sur un vecteur avant travaux pour révéler les transitions.</span><b>→</b></div>'}</div>
-      <div class="obs-flow-column after">${after.map(x=>{const c=rightCounts.get(x.name)||0,value=`${focus}\u0001${x.name}`,active=focus&&activeTransition&&String(activeTransition.value)===value;return `<button type="button" class="obs-flow-node ${focus?'is-reachable':''} ${c?'has-value':''} ${active?'is-selected':''}" ${focus&&c?crossAttrs(transitionKey,value,`${label} : ${focus} → ${x.name}`):''}><span>${esc(x.name)}</span><b>${fmt(c)}</b><small>${focus?`transition${c>1?'s':''} depuis ${esc(shorten(focus,18))}`:`opération${c>1?'s':''} après travaux`}</small></button>`}).join('')}</div>
+    const nodeTitle=name=>{
+      const letter=String(name||'').toUpperCase();
+      if(dpeMode&&/^[A-G]$/.test(letter)) return `<span class="obs-flow-dpe-name"><i class="obs-dpe-letter dpe-${letter.toLowerCase()}">${letter}</i><em>Classe ${letter}</em></span>`;
+      return `<span class="obs-flow-vector-name"><i style="background:${vectorColor(name)}"></i>${esc(name)}</span>`;
+    };
+    return `<div class="obs-flow-caption"><span>AVANT TRAVAUX</span><b>${focus?`Trajectoires depuis « ${esc(focus)} »`:(dpeMode?'Choisis une classe à gauche':'Choisis un vecteur à gauche')}</b><span>APRÈS TRAVAUX</span></div><div class="obs-flow ${dpeMode?'obs-flow-dpe':''}" style="--flow-h:${H}px">
+      <div class="obs-flow-column before">${before.map(x=>`<button type="button" class="obs-flow-node ${dpeMode?'':'obs-vector-node'} ${norm(x.name)===norm(focus)?'is-selected':''}" style="${dpeMode?'':vectorColorStyle(x.name)}" data-flow-focus="${focusKey}" data-flow-before="${attr(encodeURIComponent(x.name))}">${nodeTitle(x.name)}<b>${fmt(x.value)}</b><small>opération${x.value>1?'s':''} avant travaux</small></button>`).join('')}</div>
+      <div class="obs-flow-canvas">${focus?`<svg viewBox="0 0 400 ${H}" preserveAspectRatio="none">${curves}</svg>`:`<div class="obs-flow-hint"><b>←</b><span>${dpeMode?'Clique sur une classe avant travaux pour révéler les transitions.':'Clique sur un vecteur avant travaux pour révéler les transitions.'}</span><b>→</b></div>`}</div>
+      <div class="obs-flow-column after">${after.map(x=>{const c=rightCounts.get(x.name)||0,value=`${focus}\u0001${x.name}`,active=focus&&activeTransition&&String(activeTransition.value)===value;return `<button type="button" class="obs-flow-node ${dpeMode?'':'obs-vector-node'} ${focus?'is-reachable':''} ${c?'has-value':''} ${active?'is-selected':''}" style="${dpeMode?'':vectorColorStyle(x.name)}" ${focus&&c?crossAttrs(transitionKey,value,`${label} : ${focus} → ${x.name}`):''}>${nodeTitle(x.name)}<b>${fmt(c)}</b><small>${focus?`transition${c>1?'s':''} depuis ${esc(shorten(focus,18))}`:`opération${c>1?'s':''} après travaux`}</small></button>`}).join('')}</div>
     </div>`;
   }
 
@@ -1550,7 +1620,7 @@
       <article class="obs-card obs-carbon-gauge"><div class="obs-card-head"><div><span>IC CONSTRUCTION</span><h2>Projet vs IC Construction max</h2></div><small>${iccStats.count?`${fmt(iccStats.rate,1)} % sous le seuil`:'maximum non renseigné'}</small></div>${performanceGauge(iccStats,'IC Construction',{unit:'kgCO₂e/m²',referenceLabel:'IC Construction max moyen'})}</article>
     </div>
     <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Lecture des classes énergie et GES avant et après travaux.</p></div>
-    <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>DPE ÉNERGIE</span><h2>Répartition avant / après</h2></div><small>${db.label} → ${da.label} en moyenne</small></div>${dpeCompare(ops,'dpeEnergyBefore','dpeEnergyAfter','DPE énergie')}</article><article class="obs-card"><div class="obs-card-head"><div><span>DPE GES</span><h2>Répartition avant / après</h2></div><small>${gb.label} → ${ga.label} en moyenne</small></div>${dpeCompare(ops,'dpeGesBefore','dpeGesAfter','DPE GES')}</article></div>
+    <div class="obs-grid-2"><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE ÉNERGIE</span><h2>Classes avant → après travaux</h2></div><small>${db.label} → ${da.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeEnergyBefore:dpeEnergyAfter'}),'dpeEnergyBefore','dpeEnergyAfter','DPE énergie','dpeEnergy')}</article><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE GES</span><h2>Classes avant → après travaux</h2></div><small>${gb.label} → ${ga.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeGesBefore:dpeGesAfter'}),'dpeGesBefore','dpeGesAfter','DPE GES','dpeGes')}</article></div>
     <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>GAIN DPE</span><h2>Évolution énergie</h2></div></div>${dpeGainBars(filteredOperations({ignoreCrossKey:'dpeGain:energy'}),'energy')}</article><article class="obs-card"><div class="obs-card-head"><div><span>GAIN GES</span><h2>Évolution GES</h2></div></div>${dpeGainBars(filteredOperations({ignoreCrossKey:'dpeGain:ges'}),'ges')}</article></div>`;
   }
 
@@ -1616,7 +1686,7 @@
   }
 
   function renderDictionary(){
-    return `${pageHead('dictionary')}<article class="obs-card"><div class="obs-card-head"><div><span>RÉFÉRENTIEL DES DONNÉES</span><h2>Définitions, calculs et règles de lecture</h2></div><small>${fmt((core?.dictionary||[]).length)} variables documentées</small></div><div class="obs-dictionary-help"><b>Comment lire ce dictionnaire ?</b><span>Chaque ligne précise ce que mesure la donnée, son unité, sa source et la règle appliquée par NEWOSB. Les données calculées ou normalisées sont explicitement distinguées des données sources.</span></div>${dictionaryTable()}</article>`;
+    return `${pageHead('dictionary')}<article class="obs-card"><div class="obs-card-head"><div><span>RÉFÉRENTIEL DES DONNÉES</span><h2>Définitions, calculs et règles de lecture</h2></div><small>${fmt((core?.dictionary||[]).length)} variables documentées</small></div><div class="obs-dictionary-help"><b>Comment lire ce dictionnaire ?</b><span>Chaque ligne précise ce que mesure la donnée, son unité, sa source et la règle appliquée par l’Observatoire Prestaterre. Les données calculées ou normalisées sont explicitement distinguées des données sources.</span></div>${dictionaryTable()}</article>`;
   }
 
 
@@ -1639,9 +1709,9 @@
     if(['roofR','wallR','floorR'].includes(k))return 'Plus R est élevé, plus la résistance thermique de la paroi est importante.';
     if(['ubatBefore','ubatAfter'].includes(k))return 'Plus Ubat est faible, plus l’enveloppe est performante thermiquement.';
     if(k.startsWith('dpe'))return 'Classe A = meilleure performance ; classe G = moins bonne. Lire avant/après pour mesurer l’évolution.';
-    if(k==='dwellings'||k==='buildings')return 'Effectif brut du projet ; les agrégats généraux NEWOSB dédupliquent les projets par Code interne.';
+    if(k==='dwellings'||k==='buildings')return 'Effectif brut du projet ; les agrégats généraux de l’Observatoire Prestaterre dédupliquent les projets par Code interne.';
     if(k==='status')return 'Étape normalisée du tunnel ; les affaires perdues/abandonnées/annulées restent hors statistiques actives.';
-    return d?.type==='calculated'?'Valeur calculée par NEWOSB à partir des données sources et des règles documentées.':'Valeur issue de la source ; l’interpréter selon sa définition, son unité et le périmètre filtré.';
+    return d?.type==='calculated'?'Valeur calculée par l’Observatoire Prestaterre à partir des données sources et des règles documentées.':'Valeur issue de la source ; l’interpréter selon sa définition, son unité et le périmètre filtré.';
   }
   function dictionaryTable(){
     const q=norm(state.dictionarySearch), rows=(core?.dictionary||[]).filter(d=>!q||norm([d.label,d.key,d.definition,d.source,d.unit,d.method,dictionaryReading(d)].join(' ')).includes(q));
@@ -1714,24 +1784,24 @@
   function renderFilters(){
     const scrollSnapshot=captureUiScroll();
     const options=filterOptions();
-    const defs=[['year','Année',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
+    const defs=[['year','Année certification',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
     filtersEl.innerHTML=defs.map(([key,label,labeller])=>{
-      const values=options[key]||[],selected=globalFilterValues(key),query=(key==='moa'||key==='moaGroup')?norm(state.filterSearch?.[key]||''):'';
-      const shown=query?values.filter(v=>norm(labeller(v)).includes(query)):values;
-      const search=(key==='moa'||key==='moaGroup')?`<label class="obs-check-search"><span>⌕</span><input type="search" data-global-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${key==='moa'?'Rechercher un maître d’ouvrage…':'Rechercher un groupe MOA…'}" autocomplete="off"></label>`:'';
-      return `<details class="obs-check-filter ${selected.length?'has-selection':''}" ${state.openGlobalFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(selected.length===1?labeller(selected[0]):globalFilterSummary(key))}</b></summary><div class="obs-check-menu">${search}<div class="obs-check-actions"><button type="button" data-global-filter-all="${key}">Tout cocher</button><button type="button" data-global-filter-clear="${key}">Effacer</button></div>${shown.length?shown.map(v=>`<label data-filter-option="${key}"><input type="checkbox" data-global-filter-check="${key}" value="${attr(v)}" ${globalFilterHas(key,v)?'checked':''}><span>${esc(labeller(v))}</span></label>`).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
+      const values=options[key]||[],selected=globalFilterValues(key),query=norm(state.filterSearch?.[key]||'');
+      const placeholder=`Rechercher dans ${String(label).toLowerCase()}…`;
+      const search=`<label class="obs-check-search"><span>⌕</span><input type="search" data-global-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(placeholder)}" autocomplete="off"></label>`;
+      return `<details class="obs-check-filter ${selected.length?'has-selection':''}" ${state.openGlobalFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(selected.length===1?labeller(selected[0]):globalFilterSummary(key))}</b></summary><div class="obs-check-menu">${search}<div class="obs-check-actions"><button type="button" data-global-filter-all="${key}">Tout cocher</button><button type="button" data-global-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=labeller(v),hidden=query&&!norm(text).includes(query);return `<label data-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-global-filter-check="${key}" value="${attr(v)}" ${globalFilterHas(key,v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
     }).join('');
     restoreUiScroll(scrollSnapshot);
   }
 
   function updateDataModalWording(){
     const modal=document.getElementById('dataConnectModal'); if(!modal)return;
-    const kicker=modal.querySelector('.data-kicker'); if(kicker)kicker.textContent='NEWOSB V04 · OBSERVATOIRE MULTI-SOURCES';
-    const intro=modal.querySelector('.data-modal-head p'); if(intro)intro.textContent='NEWOSB et le générateur de rapports utilisent la même base de projets et opérations techniques. Les dashboards V04 ajoutent une source dédiée Exigences (onglet RAPPORT) en plus de la base d’opérations, tout en conservant la cartographie, les flux énergétiques et le traitement enveloppe / Cep.';
+    const kicker=modal.querySelector('.data-kicker'); if(kicker)kicker.textContent='OBSERVATOIRE PRESTATERRE · MULTI-SOURCES';
+    const intro=modal.querySelector('.data-modal-head p'); if(intro)intro.textContent='L’Observatoire Prestaterre et le générateur de rapports utilisent la même base de projets et opérations techniques. Les dashboards V04 ajoutent une source dédiée Exigences (onglet RAPPORT) en plus de la base d’opérations, tout en conservant la cartographie, les flux énergétiques et le traitement enveloppe / Cep.';
     const help=modal.querySelector('.data-connected-help'); if(help)help.innerHTML='<b>Les filtres globaux et analytiques se combinent.</b><br>Un clic dans un graphique applique un filtre analytique persistant, visible sous forme de pastille dans chaque dashboard.';
     const title=modal.querySelector('.data-filter-title b'); if(title)title.textContent='Filtres globaux de l’Observatoire';
     const modalCount=document.getElementById('dataFilteredCount'); if(modalCount)modalCount.textContent=`${runtime().connected?runtime().count:0} opération${runtime().count>1?'s':''}`;
-    if(runtime().connected){const feedback=document.getElementById('dataFeedback');if(feedback)feedback.textContent=`${runtime().count} projets chargés. NEWOSB et le générateur utilisent cette source.`;}
+    if(runtime().connected){const feedback=document.getElementById('dataFeedback');if(feedback)feedback.textContent=`${runtime().count} projets chargés. L’Observatoire Prestaterre et le générateur utilisent cette source.`;}
   }
 
   function updateSourceStatus(){
@@ -1773,6 +1843,95 @@
     return {key,value,label};
   }
 
+  let projectWindowEl=null;
+  function projectTechnicalOperations(project){return (sourceTechnicalOperations()||[]).filter(o=>String(o.projectCode||'')===String(project?.code||''));}
+  function projectTechnicalLabel(op,index){
+    const raw=op?.raw||{},candidate=Object.entries(raw).find(([k,v])=>/^(batiment|bâtiment|operation technique|opération technique)$/i.test(String(k).trim())&&String(v??'').trim());
+    return candidate?String(candidate[1]).trim():`Bâtiment / opération ${index+1}`;
+  }
+  function splitProjectTags(value){return String(value||'').split(',').map(x=>x.trim()).filter(Boolean);}
+  function projectTags(project,tech){
+    const out=[],seen=new Set(),add=v=>{String(v||'').split(/\n|<br\s*\/?\s*>/i).forEach(part=>{const x=part.trim();if(!x)return;const k=norm(x);if(!seen.has(k)){seen.add(k);out.push(x);}});};
+    const addCustom=o=>{splitProjectTags(o?.tags).forEach(add);const h=o?.fields?.tags;if(h)(o.rawRows||[o.raw||{}]).forEach(r=>splitProjectTags(r?.[h]).forEach(add));};
+    addCustom(project);addCustom(tech);add(project?.nature);add(project?.profile);add(project?.referential);add(project?.moaType);
+    cachedOperationTags(project,'mention').forEach(add);cachedOperationTags(project,'performance').forEach(add);
+    if(tech){add(tech.structure);add(tech.wallInsulation);add(tech.roofInsulation);add(tech.heatingAfter);add(tech.ventilation);}
+    const cy=tech?.constructionYear||project?.constructionYear;if(cy)add(`Construction ${cy}`);
+    return out.slice(0,18);
+  }
+  function projectHasTag(project,tag){const techs=projectTechnicalOperations(project);return [project,...techs].some(o=>projectTags(project,o).some(t=>norm(t)===norm(tag)));}
+  function projectAutoDescription(project,tech){
+    const parts=[],loc=[project.city,departmentName(project.department)].filter(Boolean).join(' · '),cy=tech?.constructionYear||project.constructionYear;
+    parts.push(`${project.name||project.code} est ${/renov/.test(norm(project.nature))?'une opération de rénovation':(/neuf/.test(norm(project.nature))?'une opération neuve':'un projet suivi par Prestaterre')}`);
+    if(project.dwellings)parts.push(`portant sur ${fmt(project.dwellings)} logement${Number(project.dwellings)>1?'s':''}`);if(project.buildings)parts.push(`et ${fmt(project.buildings)} bâtiment${Number(project.buildings)>1?'s':''}`);if(loc)parts.push(`situé à ${loc}`);if(cy&&/renov/.test(norm(project.nature)))parts.push(`dans un bâti datant de ${cy}`);if(project.referential)parts.push(`Le projet est suivi selon le référentiel ${project.referential}`);if(project.rawStatus)parts.push(`avec un avancement actuellement indiqué « ${project.rawStatus} »`);
+    return parts.join(' ')+'.';
+  }
+  function energyChargeEstimate(op){
+    const prices={electricity:.25,gas:.12,district:.14,wood:.10}, factors={electricity:2.3,gas:1,district:1,wood:1};
+    const rows=[['electricity','cepElectricity'],['gas','cepGas'],['district','cepDistrict'],['wood','cepWood']].map(([kind,key])=>({kind,key,ep:rawNumber(op,key)})).filter(x=>x.ep!==null&&x.ep>0);
+    let cost=0,basis='';
+    if(rows.length){rows.forEach(x=>{cost+=(x.ep/factors[x.kind])*prices[x.kind];});basis='décomposition CEP par vecteur renseignée';}
+    else{
+      const cep=rawNumber(op,'cep')??rawNumber(op,'cepAfter');if(cep===null)return {cost:null,basis:'CEP non renseigné'};
+      const vector=norm(`${op.heatingAfter||''} ${op.ecsAfter||''}`);let kind=/rcu|reseau de chaleur/.test(vector)?'district':(/bois|biomasse/.test(vector)?'wood':(/gaz/.test(vector)?'gas':'electricity'));
+      cost=(cep/factors[kind])*prices[kind];basis=`CEP global affecté au vecteur dominant ${kind==='district'?'réseau de chaleur':kind==='wood'?'bois / biomasse':kind==='gas'?'gaz':'électricité / PAC'}`;
+    }
+    return {cost,basis,assumptions:'Hypothèses V6.8 : électricité 0,25 €/kWhEF avec conversion EP→EF 2,30 ; gaz 0,12 €/kWh ; réseau de chaleur 0,14 €/kWh ; bois/biomasse 0,10 €/kWh. Estimation énergétique conventionnelle uniquement : hors abonnement, maintenance, usages non couverts par le CEP, météo réelle et comportement des occupants.'};
+  }
+  function projectMetric(label,value,unit=''){return `<div class="obs-project-metric"><span>${esc(label)}</span><b>${String(value??'').trim()===''?'—':esc(value)}</b><small>${esc(unit)}</small></div>`;}
+  function projectGeneralHtml(project,tech){
+    const tags=projectTags(project,tech),selectedTag=state.projectTagFilter,tagResults=selectedTag?baseOperations().filter(p=>projectHasTag(p,selectedTag)):[];
+    const tagResultHtml=selectedTag?`<section class="obs-project-tag-results"><header><div><span>TAG SÉLECTIONNÉ</span><h3>${esc(selectedTag)}</h3></div><button type="button" data-project-tag-clear="1">Fermer</button></header><p>${fmt(tagResults.length)} projet${tagResults.length>1?'s':''} partage${tagResults.length>1?'nt':''} ce tag.</p><div>${tagResults.slice(0,20).map(p=>`<button type="button" data-project-open="${attr(p.code)}"><b>${esc(p.code)}</b><span>${esc(p.name)}</span><small>${esc(p.moa)}</small></button>`).join('')}</div></section>`:'';
+    return `<div class="obs-project-general"><section class="obs-project-story"><span>DESCRIPTION AUTOMATIQUE</span><p>${esc(projectAutoDescription(project,tech))}</p></section><section class="obs-project-tags"><div class="obs-project-section-head"><div><span>TAGS</span><h3>Caractéristiques représentatives</h3></div><small>Les tags de la colonne Tags sont séparés par des virgules.</small></div><div class="obs-project-tag-cloud">${tags.length?tags.map(t=>`<button type="button" class="${norm(selectedTag)===norm(t)?'is-active':''}" data-project-tag="${attr(t)}">${esc(t)}</button>`).join(''):'<span class="obs-empty-inline">Aucun tag disponible.</span>'}</div></section>${tagResultHtml}<section class="obs-project-cert-frame"><div class="obs-project-section-head"><div><span>CERTIFICATION</span><h3>Cadre général</h3></div></div><div class="obs-project-cert-grid">${projectMetric('Référentiel',project.referential)}${projectMetric('Mention / label',project.mentions||'—')}${projectMetric('Performance',project.performance||'—')}${projectMetric('Profil',project.profile||'—')}${projectMetric('Avancement',project.rawStatus||STATUS_LABELS[project.status])}${projectMetric('Décision AP',rawValue(project,'certificationApDate')||'—')}${projectMetric('Décision CD',rawValue(project,'certificationCdDate')||'—')}${projectMetric('Année certification',project.year||'—')}${projectMetric('Année construction',tech?.constructionYear||project.constructionYear||'—')}</div></section></div>`;
+  }
+  function projectThermalCard(title,icon,structure,insulation,rValue,thickness){
+    const rawR=String(rValue??'').trim(),m=rawR.match(/-?\d+(?:[.,]\d+)?/),rv=m?Number(m[0].replace(',','.')):null,th=String(thickness??'').trim(),bar=Number.isFinite(rv)?Math.max(3,Math.min(100,rv/10*100)):0;
+    return `<article class="obs-project-envelope-card"><header><i>${icon}</i><div><span>${esc(title)}</span><b>${esc(structure||'Structure non renseignée')}</b></div></header><div class="obs-project-envelope-material"><small>Isolation</small><strong>${esc(insulation||'Non renseignée')}</strong></div><div class="obs-project-thermal-line"><div><span>R thermique</span><b>${rawR?esc(rawR):'—'}<small>${rawR&&!/m²|m2|k\/w/i.test(rawR)?' m²·K/W':''}</small></b></div><div><span>Épaisseur</span><b>${th?esc(th):'—'}<small>${th&&!/mm|cm|m\b/i.test(th)?' mm':''}</small></b></div></div><div class="obs-project-rbar"><i style="width:${bar.toFixed(1)}%"></i></div></article>`;
+  }
+  function projectVectorCep(op,vector){
+    const v=normalizeEnergyVectorFamily(vector);const key=v==='Gaz'?'cepGas':v==='Électricité'||v==='PAC'?'cepElectricity':v==='RCU'?'cepDistrict':v==='Bois / biomasse'?'cepWood':'';return key?rawNumber(op,key):null;
+  }
+  function projectSystemCard(title,icon,vector,description,cepValue,cepLabel){
+    const v=vector||'Non renseigné',cep=cepValue===null||cepValue===undefined?null:Number(cepValue);
+    return `<article class="obs-project-system-card" style="${vectorColorStyle(v)}"><header><i>${icon}</i><div><span>${esc(title)}</span><b>${esc(v)}</b></div></header><p>${esc(description||'Description non renseignée')}</p><div class="obs-project-system-foot"><span>${esc(cepLabel||'CEP associé')}</span><strong>${Number.isFinite(cep)?`${fmt(cep,1)} <small>kWhEP/m².an</small>`:'—'}</strong></div></article>`;
+  }
+  function projectBuildingHtml(project,op){
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';
+    const heatVector=op.heatingAfter||op.heatingBefore||'',ecsVector=op.ecsAfter||op.ecsBefore||'',heatCep=projectVectorCep(op,heatVector),ecsCep=projectVectorCep(op,ecsVector),ventCep=rawNumber(op,'cepAuxVent'),coolCep=rawNumber(op,'cepCooling');
+    const vectorRows=[['Électricité','cepElectricity'],['Gaz','cepGas'],['Réseau de chaleur','cepDistrict'],['Bois / biomasse','cepWood']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    const usageRows=[['Refroidissement','cepCooling'],['Éclairage','cepLighting'],['Aux. ventilation','cepAuxVent'],['Aux. distribution','cepAuxDist'],['Déplacement','cepMobility']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    return `<div class="obs-project-building"><section class="obs-project-building-hero"><div><span>BÂTIMENT & ÉQUIPEMENTS</span><h3>Analyse du système constructif & enveloppe</h3><p>Typologie structurelle, menuiseries et lecture thermique des parois pour l'opération / bâtiment sélectionné.</p></div><div class="obs-project-building-kpis">${projectMetric('Structure',normalizeStructureFamily(op.structure||op.wallStructure)||op.structure||'—')}${projectMetric('Ubat projet',rawValue(op,'ubatAfter'),'W/m²·K')}${projectMetric('R façade',rawValue(op,'wallR'),'m²·K/W')}${projectMetric('R toiture',rawValue(op,'roofR'),'m²·K/W')}</div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>01 · ENVELOPPE</span><h3>Parois et performances thermiques</h3></div><small>Valeurs du bâtiment sélectionné</small></div><div class="obs-project-envelope-grid">${projectThermalCard('Toiture / plancher haut','⌂',op.roofStructure,op.roofInsulation,rawValue(op,'roofR'),rawValue(op,'roofThickness'))}${projectThermalCard('Façades / parois verticales','▦',op.wallStructure,op.wallInsulation,rawValue(op,'wallR'),rawValue(op,'wallThickness'))}${projectThermalCard('Plancher bas','▱',op.floorStructure,op.floorInsulation,rawValue(op,'floorR'),rawValue(op,'floorThickness'))}</div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>02 · MENUISERIES</span><h3>Composition des baies</h3></div></div><div class="obs-project-window-grid"><article><i>▤</i><span>Matériau</span><b>${esc(op.windowMaterial||'—')}</b></article><article><i>◫</i><span>Vitrage</span><b>${esc(op.windowGlazing||'—')}</b></article><article><i>▥</i><span>Occultations</span><b>${esc(op.windowShading||'—')}</b></article></div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>03 · CVC & ECS</span><h3>Équipements techniques & consommations CEP associées</h3></div><small>Le CEP par vecteur est un total bâtiment : il n'est pas attribué à un usage lorsqu'il n'est pas distingué dans la source.</small></div><div class="obs-project-system-grid">${projectSystemCard('Chauffage','♨',heatVector,op.heatingModeAfter||op.heatingAfter,heatCep,'CEP du vecteur bâtiment')}${projectSystemCard('Eau chaude sanitaire','♨',ecsVector,op.ecs||op.ecsAfter,ecsCep,'CEP du vecteur bâtiment')}${projectSystemCard('Ventilation','↻','Électricité',op.ventilation,ventCep,'CEP auxiliaires ventilation')}${projectSystemCard('Rafraîchissement','❄',op.cooling&&norm(op.cooling)!=='aucun'?'Électricité':'Aucun',op.cooling||'Aucun',coolCep,'CEP refroidissement')}</div><div class="obs-grid-2 obs-project-building-charts"><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR VECTEUR</span><h3>Répartition énergétique déclarée</h3></div></div>${vectorRows.length?pieDistribution(vectorRows,{maxItems:8,colorFn:vectorColor}):'<div class="obs-empty">Pas de CEP par vecteur renseigné.</div>'}</article><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR USAGE</span><h3>Usages disponibles dans OPERATIONS</h3></div></div>${usageRows.length?pieDistribution(usageRows,{maxItems:8}):'<div class="obs-empty">Pas de décomposition CEP par usage disponible.</div>'}</article></div></section></div>`;
+  }
+
+  function projectEnergyHtml(project,op){
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';
+    const charges=energyChargeEstimate(op),usage=[['Refroidissement','cepCooling'],['Éclairage','cepLighting'],['Aux. ventilation','cepAuxVent'],['Aux. distribution','cepAuxDist'],['Déplacement','cepMobility']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0),vectors=[['Électricité','cepElectricity'],['Gaz','cepGas'],['Réseau de chaleur','cepDistrict'],['Bois / biomasse','cepWood']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    return `<div class="obs-project-energy"><div class="obs-project-route-grid"><article><span>CHAUFFAGE</span><b class="obs-project-vector-pill" style="${vectorColorStyle(op.heatingBefore||'')}">${esc(op.heatingBefore||'—')}</b><i>→</i><b class="obs-project-vector-pill" style="${vectorColorStyle(op.heatingAfter||'')}">${esc(op.heatingAfter||'—')}</b><small>${esc(op.heatingModeAfter||'')}</small></article><article><span>ECS</span><b class="obs-project-vector-pill" style="${vectorColorStyle(op.ecsBefore||'')}">${esc(op.ecsBefore||'—')}</b><i>→</i><b class="obs-project-vector-pill" style="${vectorColorStyle(op.ecsAfter||op.ecs||'')}">${esc(op.ecsAfter||op.ecs||'—')}</b><small>${esc(op.ecs||'')}</small></article></div><div class="obs-project-metric-grid">${projectMetric('CEP projet',rawValue(op,'cep'),'kWhEP/m².an')}${projectMetric('CEP max',rawValue(op,'cepMax'),'kWhEP/m².an')}${projectMetric('Bbio projet',rawValue(op,'bbio'),'points')}${projectMetric('Bbio max',rawValue(op,'bbioMax'),'points')}${projectMetric('DH projet',rawValue(op,'dh'),'°C·h')}${projectMetric('DH max',rawValue(op,'dhMax'),'°C·h')}${projectMetric('TIC projet',rawValue(op,'tic'),'°C')}${projectMetric('TIC ref',rawValue(op,'ticRef'),'°C')}${projectMetric('Ubat initial',rawValue(op,'ubatBefore'),'W/m²·K')}${projectMetric('Ubat projet',rawValue(op,'ubatAfter'),'W/m²·K')}</div><section class="obs-project-charge"><div><span>ESTIMATION DES CHARGES ÉNERGÉTIQUES</span><strong>${charges.cost===null?'—':`${fmt(charges.cost,1)} €/m².an`}</strong><p>${esc(charges.basis)}</p></div><small>${esc(charges.assumptions||'Le CEP est une consommation conventionnelle et ne constitue pas une facture prévisionnelle.')}</small></section><div class="obs-grid-2 obs-project-cep-split"><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR USAGE</span><h3>Répartition déclarée</h3></div></div>${usage.length?pieDistribution(usage,{maxItems:8}):'<div class="obs-empty">Pas de décomposition par usage.</div>'}</article><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR VECTEUR</span><h3>Répartition déclarée</h3></div></div>${vectors.length?pieDistribution(vectors,{maxItems:8,colorFn:vectorColor}):'<div class="obs-empty">Pas de décomposition par vecteur.</div>'}</article></div></div>`;
+  }
+  function projectDpeBadge(letter){const l=String(letter||'').toUpperCase().match(/[A-G]/)?.[0]||'';return l?`<b class="obs-dpe-chevron dpe-${l.toLowerCase()}">${l}</b>`:'<b class="obs-dpe-chevron">—</b>';}
+  function projectValueGauge(label,value,max,unit=''){
+    const v=(value===null||value===undefined||value==='')?NaN:Number(value),m=(max===null||max===undefined||max==='')?NaN:Number(max),ok=Number.isFinite(v)&&Number.isFinite(m)&&m>0,ratio=ok?Math.max(0,Math.min(1.25,v/m)):0;
+    return `<article class="obs-project-value-gauge"><header><span>${esc(label)}</span><b>${Number.isFinite(v)?fmt(v,1):'—'} <small>${esc(unit)}</small></b></header>${ok?`<div class="obs-project-value-track"><i style="width:${Math.min(100,ratio*100).toFixed(1)}%"></i><b style="left:${Math.min(100,100).toFixed(1)}%"></b></div><footer><span>0</span><strong>Seuil ${fmt(m,1)}</strong></footer>`:'<div class="obs-project-gauge-empty">Seuil ou valeur non renseigné</div>'}</article>`;
+  }
+  function projectCarbonHtml(project,op){
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';const deB=dpeLetter(op,'dpeEnergyBefore'),deA=dpeLetter(op,'dpeEnergyAfter'),dgB=dpeLetter(op,'dpeGesBefore'),dgA=dpeLetter(op,'dpeGesAfter');
+    return `<div class="obs-project-carbon"><div class="obs-project-carbon-gauges">${projectValueGauge('IC Énergie',rawNumber(op,'icEnergy'),rawNumber(op,'icEnergyMax'),'kgCO₂e/m²')}${projectValueGauge('IC Construction',rawNumber(op,'icConstruction'),rawNumber(op,'icConstructionMax'),'kgCO₂e/m²')}</div><div class="obs-project-threshold-grid">${projectMetric('Seuil construction 2028',rawValue(op,'icConstruction2028'),'kgCO₂e/m²')}${projectMetric('Seuil construction 2031',rawValue(op,'icConstruction2031'),'kgCO₂e/m²')}</div><div class="obs-project-dpe-grid"><article><span>DPE ÉNERGIE</span><div><small>Avant</small>${projectDpeBadge(deB)}<i>→</i>${projectDpeBadge(deA)}<small>Après</small></div></article><article><span>DPE GES</span><div><small>Avant</small>${projectDpeBadge(dgB)}<i>→</i>${projectDpeBadge(dgA)}<small>Après</small></div></article></div></div>`;
+  }
+  function projectEconomicsHtml(){return `<div class="obs-project-economics"><div class="obs-project-econ-intro"><span>DONNÉES ÉCONOMIQUES</span><h3>Structure prête pour les futures données DPGF et financement</h3><p>Cet onglet reste vide tant que les données économiques ne sont pas reliées à OPERATIONS.</p></div><div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>DPGF</span><h3>Répartition par macro-lot</h3></div></div><div class="obs-econ-empty-chart"><i></i><b>Aucune donnée</b><span>Montants HT par macro-lot</span></div></article><article class="obs-card"><div class="obs-card-head"><div><span>DPGF</span><h3>Répartition par lot</h3></div></div><div class="obs-econ-empty-chart bars"><i></i><b>Aucune donnée</b><span>Montants HT par lot</span></div></article></div><article class="obs-card"><div class="obs-card-head"><div><span>DÉTAIL DES COÛTS</span><h3>Tableau DPGF</h3></div></div><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Macro-lot</th><th>Lot</th><th>Montant HT</th><th>Part</th></tr></thead><tbody><tr><td colspan="4">Aucune donnée économique disponible.</td></tr></tbody></table></div></article><article class="obs-card"><div class="obs-card-head"><div><span>FINANCEMENT</span><h3>Aides mobilisées</h3></div></div><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Dispositif</th><th>Financeur</th><th>Montant</th><th>Statut</th><th>Commentaire</th></tr></thead><tbody><tr><td colspan="5">Aucune aide renseignée pour le moment.</td></tr></tbody></table></div></article></div>`;}
+  function ensureProjectWindow(){
+    if(projectWindowEl)return projectWindowEl;projectWindowEl=document.createElement('div');projectWindowEl.className='obs-project-window';projectWindowEl.setAttribute('aria-hidden','true');projectWindowEl.innerHTML='<div class="obs-project-window-backdrop" data-project-close="1"></div><section class="obs-project-window-panel" role="dialog" aria-modal="true"><header><div><span>PROJET PRESTATERRE</span><h2 data-project-title></h2><p data-project-meta></p></div><button type="button" data-project-close="1" aria-label="Fermer">×</button></header><div class="obs-project-tech-tabs" data-project-tech-tabs></div><nav class="obs-project-main-tabs" data-project-main-tabs></nav><main class="obs-project-window-body" data-project-body></main></section>';document.body.appendChild(projectWindowEl);
+    projectWindowEl.addEventListener('click',e=>{if(e.target.closest('[data-project-close]')){closeProjectWindow();return;}const tab=e.target.closest('[data-project-tab]');if(tab){state.projectWindowTab=tab.dataset.projectTab;renderProjectWindow();return;}const tech=e.target.closest('[data-project-tech]');if(tech){state.projectWindowTechnicalCode=tech.dataset.projectTech;renderProjectWindow();return;}const tag=e.target.closest('[data-project-tag]');if(tag){state.projectTagFilter=tag.dataset.projectTag;renderProjectWindow();return;}if(e.target.closest('[data-project-tag-clear]')){state.projectTagFilter='';renderProjectWindow();return;}const open=e.target.closest('[data-project-open]');if(open){openProjectWindow(open.dataset.projectOpen);return;}});return projectWindowEl;
+  }
+  function renderProjectWindow(){
+    const project=state.activeProject;if(!project)return;const el=ensureProjectWindow(),techs=projectTechnicalOperations(project);let selected=techs.find(o=>String(o.code)===String(state.projectWindowTechnicalCode))||techs[0]||project;if(!state.projectWindowTechnicalCode&&selected?.code)state.projectWindowTechnicalCode=selected.code;
+    el.querySelector('[data-project-title]').textContent=project.name||project.code;el.querySelector('[data-project-meta]').textContent=[project.code,project.moa,[project.city,departmentName(project.department)].filter(Boolean).join(' · ')].filter(Boolean).join(' · ');
+    el.querySelector('[data-project-tech-tabs]').innerHTML=techs.length?`<span>Opérations / bâtiments</span>${techs.map((o,i)=>`<button type="button" data-project-tech="${attr(o.code)}" class="${String(o.code)===String(selected.code)?'is-active':''}"><b>${i+1}</b>${esc(projectTechnicalLabel(o,i))}</button>`).join('')}`:'<span>Une seule opération technique</span>';
+    const tabs=[['general','1. Générale'],['building','2. Bâtiment & équipements'],['energy','3. Énergie & transition'],['carbon','4. Carbone & DPE'],['economics','5. Données économiques']];el.querySelector('[data-project-main-tabs]').innerHTML=tabs.map(([k,l])=>`<button type="button" data-project-tab="${k}" class="${state.projectWindowTab===k?'is-active':''}">${l}</button>`).join('');
+    const body={general:()=>projectGeneralHtml(project,selected),building:()=>projectBuildingHtml(project,selected),energy:()=>projectEnergyHtml(project,selected),carbon:()=>projectCarbonHtml(project,selected),economics:()=>projectEconomicsHtml()}[state.projectWindowTab]||(()=>projectGeneralHtml(project,selected));el.querySelector('[data-project-body]').innerHTML=body();
+  }
+  function openProjectWindow(code){const project=baseOperations().find(o=>String(o.code)===String(code));if(!project)return;state.activeProject=project;state.projectWindowTab='general';state.projectTagFilter='';const techs=projectTechnicalOperations(project);state.projectWindowTechnicalCode=techs[0]?.code||'';const el=ensureProjectWindow();renderProjectWindow();el.classList.add('is-open');el.setAttribute('aria-hidden','false');document.body.classList.add('obs-project-window-open');}
+  function closeProjectWindow(){if(!projectWindowEl)return;projectWindowEl.classList.remove('is-open');projectWindowEl.setAttribute('aria-hidden','true');document.body.classList.remove('obs-project-window-open');state.activeProject=null;state.projectTagFilter='';}
+
   function openTechnicalOperation(code){
     const op=baseTechnicalOperations().find(o=>String(o.code)===String(code)); if(!op)return;
     state.activeMoaGroup='';state.activeGroupMoa='';state.activeOperation=op;state.drawerTab='summary';state.rawPage=1;state.rawView='list';
@@ -1780,12 +1939,7 @@
     drawerMeta.textContent=[`Projet ${op.projectCode||''}`,`Opération technique ${op.technicalIndex||''}`,op.moa].filter(Boolean).join(' · ');
     renderDrawer();drawer.classList.add('is-open');drawer.setAttribute('aria-hidden','false');
   }
-  function openOperation(code){
-    const op=baseOperations().find(o=>String(o.code)===String(code)); if(!op)return;
-    state.activeMoaGroup='';state.activeGroupMoa='';state.activeOperation=op; state.drawerTab='summary'; state.rawPage=1; state.rawView='list';
-    drawerTitle.textContent=op.name||op.code; drawerMeta.textContent=[op.code,op.moa,[op.city,departmentName(op.department)].filter(Boolean).join(' · ')].filter(Boolean).join(' · ');
-    renderDrawer(); drawer.classList.add('is-open'); drawer.setAttribute('aria-hidden','false');
-  }
+  function openOperation(code){closeDrawer();openProjectWindow(code);}
   function closeDrawer(){drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');state.activeMoaGroup='';state.activeGroupMoa='';}
   function detail(label,value){return `<div class="obs-detail"><span>${esc(label)}</span><b>${esc(value||'—')}</b></div>`;}
   function openMoaGroupDrawer(group){
@@ -1805,7 +1959,7 @@
     const isTechnical=Boolean(op.projectCode); const tabs=[['summary',isTechnical?'Opération technique':'Projet 360°'],['certification','Certification'],['technical','Technique'],['energy','Énergie'],['carbon','Carbone & DPE'],['quality','Qualité'],['compare','Comparables'],['trace','Traçabilité'],['source','Données source']];
     drawerTabs.innerHTML=tabs.map(([k,l])=>`<button type="button" data-drawer-tab="${k}" class="${state.drawerTab===k?'is-active':''}">${l}</button>`).join('');
     const content={
-      summary:()=>`<div class="obs-detail-grid">${detail(isTechnical?'Projet parent':'Code projet',isTechnical?op.projectCode:op.code)}${isTechnical?detail('Opération technique',`Ligne ${op.technicalIndex||'—'}`):''}${detail('Maître d’ouvrage',op.moa)}${detail('Groupe MOA',op.moaGroup||'Non précisé')}${detail('Référentiel',op.referential)}${detail('Nature',op.nature)}${detail('Localisation',[op.address,op.postalCode,op.city,departmentName(op.department)].filter(Boolean).join(' · '))}${detail('Année',op.year)}${!isTechnical?detail('Logements',fmt(op.dwellings)):''}${!isTechnical?detail('Bâtiments',fmt(op.buildings)):''}${detail('Avancement',op.rawStatus||STATUS_LABELS[op.status])}${detail('Affaire : Étape',operationAffairStage(op))}${!isTechnical?detail('Opérations techniques',fmt((op.rawRows||[op.raw]).length)):''}</div>${isTechnical?'':projectTechnicalChildrenHtml(op)}${operationTimelineHtml(op)}`,
+      summary:()=>`<div class="obs-detail-grid">${detail(isTechnical?'Projet parent':'Code projet',isTechnical?op.projectCode:op.code)}${isTechnical?detail('Opération technique',`Ligne ${op.technicalIndex||'—'}`):''}${detail('Maître d’ouvrage',op.moa)}${detail('Groupe MOA',op.moaGroup||'Non précisé')}${detail('Référentiel',op.referential)}${detail('Nature',op.nature)}${detail('Localisation',[op.address,op.postalCode,op.city,departmentName(op.department)].filter(Boolean).join(' · '))}${detail('Année certification',op.year)}${detail('Année construction',op.constructionYear)}${!isTechnical?detail('Logements',fmt(op.dwellings)):''}${!isTechnical?detail('Bâtiments',fmt(op.buildings)):''}${detail('Avancement',op.rawStatus||STATUS_LABELS[op.status])}${detail('Affaire : Étape',operationAffairStage(op))}${!isTechnical?detail('Opérations techniques',fmt((op.rawRows||[op.raw]).length)):''}</div>${isTechnical?'':projectTechnicalChildrenHtml(op)}${operationTimelineHtml(op)}`,
       certification:()=>`<div class="obs-detail-grid">${detail('Statut',op.rawStatus||STATUS_LABELS[op.status])}${detail('Étape normalisée',STATUS_LABELS[op.status]||op.status)}${detail('Soldée',op.sold?'Oui':'Non')}${detail('Mentions',op.mentions)}${detail('Performance',op.performance)}${detail('Profil',op.profile)}</div>`,
       technical:()=>`<div class="obs-detail-grid">${detail('Structure principale',op.structure)}${detail('Structure toiture',op.roofStructure)}${detail('Isolation toiture',op.roofInsulation)}${detail('R toiture',rawValue(op,'roofR'))}${detail('Épaisseur toiture',rawValue(op,'roofThickness'))}${detail('Structure façade',op.wallStructure)}${detail('Isolation façade',op.wallInsulation)}${detail('R façade',rawValue(op,'wallR'))}${detail('Épaisseur façade',rawValue(op,'wallThickness'))}${detail('Structure plancher bas',op.floorStructure)}${detail('Isolation plancher',op.floorInsulation)}${detail('R plancher',rawValue(op,'floorR'))}${detail('Épaisseur plancher',rawValue(op,'floorThickness'))}${detail('Menuiseries',op.windowMaterial)}${detail('Vitrage',op.windowGlazing)}${detail('Occultations',op.windowShading)}${detail('Ventilation',op.ventilation)}${detail('Refroidissement',op.cooling)}</div>`,
       energy:()=>`<div class="obs-detail-grid">${detail('Chauffage avant',op.heatingBefore)}${detail('Chauffage après',op.heatingAfter)}${detail('Mode chauffage après',op.heatingModeAfter)}${detail('ECS avant',op.ecsBefore)}${detail('ECS après',op.ecsAfter)}${detail('Bbio',rawValue(op,'bbio'))}${detail('Bbio max',rawValue(op,'bbioMax'))}${detail('Cep',rawValue(op,'cep'))}${detail('Cep max',rawValue(op,'cepMax'))}${detail('Cep,nr',rawValue(op,'cepnr'))}${detail('Cep,nr max',rawValue(op,'cepnrMax'))}${detail('DH',rawValue(op,'dh'))}${detail('DH max',rawValue(op,'dhMax'))}${detail('Ubat avant',rawValue(op,'ubatBefore'))}${detail('Ubat après',rawValue(op,'ubatAfter'))}${detail('Cep avant travaux',rawValue(op,'cepBefore'))}${detail('Cep après travaux',rawValue(op,'cepAfter'))}</div>`,
@@ -1846,7 +2000,7 @@
   }
   function operationTraceHtml(op){
     const keys=['code','name','moa','moaGroup','department','referential','status','affairStage','dwellings','buildings','bbio','cep','dh','icEnergy','icConstruction','dpeEnergyBefore','dpeEnergyAfter'];
-    return `<div class="obs-trace-list">${keys.map(k=>{const p=core?.provenance?.(op,k)||{};const v=rawValue(op,k)||op?.[k]||'';return `<article><div><b>${esc(p.label||k)}</b><small>${esc(p.type||'source')}</small></div><strong>${esc(v||'—')}</strong><p>${esc(p.header?`Colonne source : ${p.header}`:(p.source||'NEWOSB'))}</p><p>${esc(p.method||'')}</p></article>`;}).join('')}</div>`;
+    return `<div class="obs-trace-list">${keys.map(k=>{const p=core?.provenance?.(op,k)||{};const v=rawValue(op,k)||op?.[k]||'';return `<article><div><b>${esc(p.label||k)}</b><small>${esc(p.type||'source')}</small></div><strong>${esc(v||'—')}</strong><p>${esc(p.header?`Colonne source : ${p.header}`:(p.source||'Observatoire Prestaterre'))}</p><p>${esc(p.method||'')}</p></article>`;}).join('')}</div>`;
   }
 
   function rawTable(op){
@@ -1861,13 +2015,13 @@
 
 
   function csvCurrent(){
-    const ops=filteredOperations(); const header=['Code projet','Nom projet','Maître d’ouvrage','Groupe MOA','Département','Ville','Référentiel','Avancement','Année','Nature','Total logements','Total bâtiments'];
+    const ops=filteredOperations(); const header=['Code projet','Nom projet','Maître d’ouvrage','Groupe MOA','Département','Ville','Référentiel','Avancement','Année certification','Année construction','Nature','Total logements','Total bâtiments'];
     const cell=v=>`"${String(v??'').replace(/"/g,'""')}"`;
-    return [header,...ops.map(o=>[o.code,o.name,o.moa,o.moaGroup||'',o.department,o.city,o.referential,o.rawStatus,o.year,o.nature,o.dwellings,o.buildings])].map(row=>row.map(cell).join(';')).join('\n');
+    return [header,...ops.map(o=>[o.code,o.name,o.moa,o.moaGroup||'',o.department,o.city,o.referential,o.rawStatus,o.year,o.constructionYear||'',o.nature,o.dwellings,o.buildings])].map(row=>row.map(cell).join(';')).join('\n');
   }
   function exportCurrentCsv(){
     const blob=new Blob(['\ufeff'+csvCurrent()],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-    a.href=url;a.download=`NEWOSB_selection_${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+    a.href=url;a.download=`Observatoire_Prestaterre_selection_${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
 
   function walkCoordinates(geometry,callback){
@@ -2172,7 +2326,7 @@
     }else{
       ctx.providerExhausted=true;ctx.providerSwitching=false;
       const notice=ctx.host.querySelector('[data-osm-provider-status]');
-      if(notice){notice.hidden=false;notice.textContent='Fond cartographique distant indisponible · couches NEWOSB conservées';}
+      if(notice){notice.hidden=false;notice.textContent='Fond cartographique distant indisponible · couches Observatoire Prestaterre conservées';}
     }
   }
   function osmClampLat(lat){return Math.max(-85.05112878,Math.min(85.05112878,Number(lat)||0));}
@@ -2223,16 +2377,18 @@
     });
     osmUpdateProviderUi(ctx);
   }
+  function legacyMapMarkerScale(){const z=Math.max(.6,territoryMapZoomPercent()/100);return Math.max(.52,Math.min(1.28,1/z));}
   function groupedMapMarkerSvg(features,project,counts,mode='department',className='obs-map-marker'){
-    const max=Math.max(1,...counts.values());
+    const max=Math.max(1,...counts.values()),legacy=className==='obs-map-marker',scale=legacy?legacyMapMarkerScale():1;
     if(mode==='region'){
       const groups=new Map();
       features.forEach(f=>{const code=featureCode(f),r=regionName(code);if(!groups.has(r))groups.set(r,{features:[],count:0});const g=groups.get(r);g.features.push(f);g.count+=counts.get(code)||0;});
       const maxR=Math.max(1,...[...groups.values()].map(g=>g.count));
-      return [...groups.entries()].map(([r,g])=>{if(!g.count)return'';const c=groupCenter(g.features,project),rad=7+10*Math.sqrt(g.count/maxR);return `<g class="${className} obs-map-group-region" ${crossAttrs('region',r,`Région : ${r}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+4).toFixed(1)}" text-anchor="middle">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''}</title></g>`;}).join('');
+      return [...groups.entries()].map(([r,g])=>{if(!g.count)return'';const c=groupCenter(g.features,project);if(legacy){const digits=String(g.count).length,h=(16+Math.min(7,Math.sqrt(g.count)))*scale,w=(22+digits*6+Math.min(20,Math.sqrt(g.count)*2.2))*scale,y=c[1]+(17*scale);return `<g class="${className} obs-map-group-region obs-map-count-pill" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(y-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(y+2.7*scale).toFixed(1)}" text-anchor="middle" style="font-size:${(7.5*scale).toFixed(2)}px">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''}</title></g>`;}const rad=7+10*Math.sqrt(g.count/maxR);return `<g class="${className} obs-map-group-region" ${crossAttrs('region',r,`Région : ${r}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+4).toFixed(1)}" text-anchor="middle">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''}</title></g>`;}).join('');
     }
-    return features.map(f=>{const code=featureCode(f),count=counts.get(code)||0;if(!count)return'';const c=featureCenter(f,project),rad=5+8*Math.sqrt(count/max);return `<g class="${className}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+3).toFixed(1)}" text-anchor="middle">${fmt(count)}</text><title>${esc(departmentName(code))} · ${fmt(count)} opération${count>1?'s':''}</title></g>`;}).join('');
+    return features.map(f=>{const code=featureCode(f),count=counts.get(code)||0;if(!count)return'';const c=featureCenter(f,project),rad=(5+8*Math.sqrt(count/max))*scale;return `<g class="${className}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+3*scale).toFixed(1)}" text-anchor="middle" ${legacy?`style="font-size:${(7.5*scale).toFixed(2)}px"`:''}>${fmt(count)}</text><title>${esc(departmentName(code))} · ${fmt(count)} opération${count>1?'s':''}</title></g>`;}).join('');
   }
+
 
   function renderOsmOverlay(ctx,v){
     applyOsmCityLabelScale(ctx.host,v.z);
@@ -2291,7 +2447,7 @@
     try{
       host.dataset.basemap=state.mapBasemap==='ign'?'ign':'osm';
       const geo=await engine.getDepartmentGeoJSON();if(token!==state.renderToken||!host.isConnected)return;const features=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f))),mapOps=filteredOperations({ignoreCrossKeys:['department','region']}),counts=new Map(),zonesByDep=new Map();mapOps.forEach(o=>{const dep=String(o.department||'');if(!dep)return;counts.set(dep,(counts.get(dep)||0)+1);const z=o.socialZone||'Non précisé';if(!zonesByDep.has(dep))zonesByDep.set(dep,new Map());const m=zonesByDep.get(dep);m.set(z,(m.get(z)||0)+1);});
-      host.innerHTML=`<div class="obs-osm-native"><div class="obs-osm-tiles" aria-hidden="true"></div><svg class="obs-osm-overlay" role="img" aria-label="Fond cartographique et couches NEWOSB"></svg><div class="obs-osm-controls"><button type="button" data-osm-zoom="in" aria-label="Zoom avant" title="Zoom avant">+</button><button type="button" data-osm-zoom="out" aria-label="Zoom arrière" title="Zoom arrière">−</button><button type="button" class="obs-osm-provider-btn" data-osm-provider aria-label="Changer le fond cartographique" title="Changer le fond cartographique">IGN</button></div><div class="obs-osm-detail" data-osm-detail></div><div class="obs-osm-provider-status" data-osm-provider-status hidden></div>${state.mapLayers.zoning?'<div class="obs-zone-legend obs-zone-legend-osm"><span><i style="--z:#06402B"></i>Zone 1</span><span><i style="--z:#79A98F"></i>Zone 2</span><span><i style="--z:#D5E5C8"></i>Zone 3</span><span><i style="--z:#E9EEEB"></i>Non renseigné</span></div>':''}<div class="obs-osm-attribution" data-osm-attribution><a href="https://www.ign.fr/" target="_blank" rel="noopener">© IGN</a> · Plan IGN</div><div class="obs-map-legend-note obs-osm-note">Molette = zoom · clic droit maintenu = déplacer · le détail augmente avec le zoom</div></div>`;
+      host.innerHTML=`<div class="obs-osm-native"><div class="obs-osm-tiles" aria-hidden="true"></div><svg class="obs-osm-overlay" role="img" aria-label="Fond cartographique et couches Observatoire Prestaterre"></svg><div class="obs-osm-controls"><button type="button" data-osm-zoom="in" aria-label="Zoom avant" title="Zoom avant">+</button><button type="button" data-osm-zoom="out" aria-label="Zoom arrière" title="Zoom arrière">−</button><button type="button" class="obs-osm-provider-btn" data-osm-provider aria-label="Changer le fond cartographique" title="Changer le fond cartographique">IGN</button></div><div class="obs-osm-detail" data-osm-detail></div><div class="obs-osm-provider-status" data-osm-provider-status hidden></div>${state.mapLayers.zoning?'<div class="obs-zone-legend obs-zone-legend-osm"><span><i style="--z:#06402B"></i>Zone 1</span><span><i style="--z:#79A98F"></i>Zone 2</span><span><i style="--z:#D5E5C8"></i>Zone 3</span><span><i style="--z:#E9EEEB"></i>Non renseigné</span></div>':''}<div class="obs-osm-attribution" data-osm-attribution><a href="https://www.ign.fr/" target="_blank" rel="noopener">© IGN</a> · Plan IGN</div><div class="obs-map-legend-note obs-osm-note">Molette = zoom · clic droit maintenu = déplacer · le détail augmente avec le zoom</div></div>`;
       const ctx={host,mapEl:host.querySelector('.obs-osm-native'),tiles:host.querySelector('.obs-osm-tiles'),overlay:host.querySelector('.obs-osm-overlay'),features,mapOps,counts,zonesByDep,max:Math.max(1,...counts.values()),cities:new Map(),epcis:new Map(),points:[],majorCities:[]};host._newosbOsmCtx=ctx;if(state.mapFocusPending&&state.mapFocusRegion){fitOsmRegion(features,state.mapFocusRegion,ctx.mapEl);state.mapFocusPending=false;}setupOsmNativeNavigation(ctx);renderOsmNative(ctx);hydrateOsmDetails(ctx,token).catch(err=>console.warn('NEWOSB détails OSM:',err));if(state.mapFocusRegion)getRegionMajorCities(state.mapFocusRegion).then(cities=>{if(token===state.renderToken&&ctx.host.isConnected){ctx.majorCities=cities;scheduleOsmRender(ctx);}}).catch(()=>{});
     }catch(err){console.warn('NEWOSB fond OpenStreetMap:',err);if(token===state.renderToken&&host.isConnected)hydrateTerritoryMapLegacy(token);}
   }
@@ -2325,7 +2481,7 @@
       const regionGroups=new Map();visibleFeatures.forEach(f=>{const r=regionName(featureCode(f));if(!regionGroups.has(r))regionGroups.set(r,[]);regionGroups.get(r).push(f);});
       const regionOutline=state.mapLayers.regions?`<path class="obs-map-region-outline" d="${regionBoundaryPath(visibleFeatures,project)}"/>`:'';
       const regionHitOverlay=state.mapLayers.regions&&!state.mapFocusRegion?[...regionGroups.entries()].map(([r,fs])=>`<path class="obs-map-region-hit" d="${fs.map(f=>geometryPath(f.geometry,project)).join(' ')}" ${crossAttrs('region',r,`Région : ${r}`)}><title>${esc(r)} · cliquer pour zoomer</title></path>`).join(''):'';
-      const regionLabels=state.mapLayers.regions?[...regionGroups.entries()].map(([r,fs])=>{const c=groupCenter(fs,project),active=activeCross('region',r);return `<g class="obs-map-region-label ${active?'is-active':''}" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-38).toFixed(1)}" y="${(c[1]-10).toFixed(1)}" width="76" height="20" rx="10"></rect><text x="${c[0].toFixed(1)}" y="${(c[1]+3).toFixed(1)}" text-anchor="middle">${esc(shorten(r,16))}</text></g>`;}).join(''):'';
+      const regionLabels=state.mapLayers.regions?[...regionGroups.entries()].map(([r,fs])=>{const c=groupCenter(fs,project),active=activeCross('region',r),sc=legacyMapMarkerScale(),w=76*sc,h=20*sc;return `<g class="obs-map-region-label ${active?'is-active':''}" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(c[1]-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(c[1]+3*sc).toFixed(1)}" text-anchor="middle" style="font-size:${(8*sc).toFixed(2)}px">${esc(shorten(r,16))}</text></g>`;}).join(''):'';
       const regionOverlay=regionOutline+regionHitOverlay+regionLabels;
       const departmentLabels=state.mapLayers.departments?visibleFeatures.map(f=>{const code=featureCode(f),v=counts.get(code)||0,c=featureCenter(f,project);return `<g class="obs-map-dept-label ${activeCross('department',code)?'is-active':''}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle">${esc(code)}</text><title>${esc(departmentName(code))} · ${fmt(v)} projet${v>1?'s':''}</title></g>`;}).join(''):'';
       const markers=state.mapLayers.operations?groupedMapMarkerSvg(visibleFeatures,project,counts,state.mapFocusRegion?'department':state.mapOperationGrouping,'obs-map-marker'):'';
@@ -2340,18 +2496,24 @@
   }
 
 
-  filtersEl?.addEventListener('input',e=>{
-    const input=e.target.closest('[data-global-filter-search]');if(!input)return;
+  function applyGlobalFilterSearch(input){
+    if(!input)return;
     const key=input.dataset.globalFilterSearch||'';if(!state.filterSearch)state.filterSearch={};state.filterSearch[key]=input.value||'';state.openGlobalFilter=key;
     const q=norm(input.value||''),menu=input.closest('.obs-check-menu');
-    menu?.querySelectorAll(`[data-filter-option="${key}"]`).forEach(label=>{label.hidden=Boolean(q&&!norm(label.textContent).includes(q));});
-  });
+    menu?.querySelectorAll(`[data-filter-option="${key}"]`).forEach(label=>{const hide=Boolean(q&&!norm(label.textContent).includes(q));label.classList.toggle('is-search-hidden',hide);label.hidden=hide;});
+  }
+  filtersEl?.addEventListener('input',e=>{const input=e.target.closest('[data-global-filter-search]');if(!input)return;applyGlobalFilterSearch(input);});
+  filtersEl?.addEventListener('keyup',e=>{const input=e.target.closest('[data-global-filter-search]');if(!input)return;applyGlobalFilterSearch(input);});
+  filtersEl?.addEventListener('pointerdown',e=>{const input=e.target.closest('[data-global-filter-search]');if(!input)return;e.stopPropagation();});
+  filtersEl?.addEventListener('click',e=>{const input=e.target.closest('[data-global-filter-search]');if(input){e.stopPropagation();try{input.focus({preventScroll:true});}catch{input.focus();}return;}});
   filtersEl?.addEventListener('change',e=>{const c=e.target.closest('[data-global-filter-check]');if(!c)return;preserveUiScroll(()=>{const key=c.dataset.globalFilterCheck,value=c.value;state.openGlobalFilter=key;let vals=globalFilterValues(key).filter(v=>norm(v)!==norm(value));if(c.checked)vals.push(value);state.filters[key]=vals;if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});});
-  filtersEl?.addEventListener('click',e=>{const all=e.target.closest('[data-global-filter-all]');if(all){e.preventDefault();preserveUiScroll(()=>{const key=all.dataset.globalFilterAll;state.openGlobalFilter=key;state.filters[key]=[...(filterOptions()[key]||[])];if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});return;}const clear=e.target.closest('[data-global-filter-clear]');if(clear){e.preventDefault();preserveUiScroll(()=>{const key=clear.dataset.globalFilterClear;state.openGlobalFilter=key;state.filters[key]=[];if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});}});
+  filtersEl?.addEventListener('click',e=>{
+    const summary=e.target.closest('.obs-check-filter>summary');if(summary){const details=summary.parentElement;setTimeout(()=>{if(details?.open){const input=details.querySelector('[data-global-filter-search]');try{input?.focus({preventScroll:true});}catch{input?.focus();}}},0);}
+    const all=e.target.closest('[data-global-filter-all]');if(all){e.preventDefault();preserveUiScroll(()=>{const key=all.dataset.globalFilterAll;state.openGlobalFilter=key;const visible=[...filtersEl.querySelectorAll(`[data-global-filter-check="${key}"]`)].filter(i=>!i.closest('[data-filter-option]')?.hidden).map(i=>i.value);state.filters[key]=uniq([...globalFilterValues(key),...visible]);if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});return;}const clear=e.target.closest('[data-global-filter-clear]');if(clear){e.preventDefault();preserveUiScroll(()=>{const key=clear.dataset.globalFilterClear;state.openGlobalFilter=key;state.filters[key]=[];if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});}});
   sidebarToggle?.addEventListener('click',()=>setSidebarCollapsed(!layoutEl?.classList.contains('is-sidebar-collapsed')));
   document.getElementById('obsNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)changePage(b.dataset.page);});
   document.getElementById('obsReportsNav')?.addEventListener('click',()=>changePage('reports'));
-  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.autoMoaFromGroup=[];state.crossFilters=[];resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
+  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openGlobalFilter='';state.autoMoaFromGroup=[];state.crossFilters=[];resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
   searchEl?.addEventListener('input',e=>{state.search=e.target.value||'';renderPage();});
   document.getElementById('obsSourceBtn')?.addEventListener('click',()=>engine.showDataSource());
   document.getElementById('obsDemoConnect')?.addEventListener('click',()=>engine.showDataSource());
@@ -2387,6 +2549,7 @@
     const fullscreen=e.target.closest('[data-map-fullscreen]'); if(fullscreen){const card=fullscreen.closest('.obs-map-card')||document.querySelector('.obs-map-card');if(card){if(document.fullscreenElement)document.exitFullscreen?.();else card.requestFullscreen?.();}return;}
     if(e.target.closest('[data-overview-total-toggle]')){preserveUiScroll(()=>{state.overviewShowTotal=!state.overviewShowTotal;renderPage();});return;}
     const solutionView=e.target.closest('[data-solution-view][data-view]'); if(solutionView){preserveUiScroll(()=>{const key=solutionView.dataset.solutionView;state.solutionViews[key]=solutionView.dataset.view==='pie'?'pie':'bar';renderPage();});return;}
+    const energyCepView=e.target.closest('[data-energy-cep-view][data-view]');if(energyCepView){preserveUiScroll(()=>{const key=energyCepView.dataset.energyCepView;if(!state.energyCepViews)state.energyCepViews={};state.energyCepViews[key]=energyCepView.dataset.view==='bar'?'bar':'pie';renderPage();});return;}
         const tableView=e.target.closest('[data-table-view][data-view]'); if(tableView){const map={territory:'territoryTableView',moa:'moaTableView','status-year':'statusYearView',mention:'mentionTableView',performance:'performanceTableView','performance-matrix':'performanceMatrixView',operations:'operationsTableView'},key=map[tableView.dataset.tableView];if(key){state[key]=tableView.dataset.view;renderPage();}return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
     const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
@@ -2404,18 +2567,23 @@
   });
 
   pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;renderPage();return;}
+    const performanceSelect=e.target.closest?.('[data-performance-matrix-select]');if(performanceSelect){if(performanceSelect.dataset.performanceMatrixSelect==='mention')state.performanceMatrixMention=performanceSelect.value;else state.performanceMatrixPerformance=performanceSelect.value;renderPage();return;}
+    const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
     const mapGroup=e.target.closest?.('[data-map-grouping-toggle]'); if(mapGroup){state.mapOperationGrouping=state.mapFocusRegion?'department':(mapGroup.checked?'region':'department');state.territorySummaryPage=1;renderPage();return;}
     const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); renderPage(); return; }
     const metric=e.target.closest?.('[data-solution-metric]'); if(metric){state.solutionMetric=metric.value||'ubat';const top=pageEl.scrollTop;renderPage();requestAnimationFrame(()=>{pageEl.scrollTop=top;});return;}
   });
+  pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
+  pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
+
   pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
   document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';const host=document.getElementById('obsTerritoryMap');if(host?._newosbOsmCtx)scheduleOsmRender(host._newosbOsmCtx);});
   window.addEventListener('newosb:requirementschange',e=>{if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
-  window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
-  window.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawer.classList.contains('is-open'))closeDrawer();});
+  window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
+  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 
   if(searchEl) searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';
   loadPresentationState();
