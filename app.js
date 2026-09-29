@@ -646,9 +646,15 @@ const MAP_GEOJSON_URLS = [
       if (isBlankTab(tabId)) return;
       const type = tabType(tabId);
       if (!type || !defaults[type]) return;
-      if (!state.presentation.instanceData[tabId]) {
+      const existing = state.presentation.instanceData[tabId];
+      if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
         const source = state[type] ? clone(state[type]) : clone(defaults[type]);
         state.presentation.instanceData[tabId] = deepMerge(clone(defaults[type]), source);
+      } else {
+        // Hotfix V6.9.1 : les sauvegardes JSON des anciennes versions peuvent
+        // contenir des modèles d'instance incomplets (ex. envelope sans `r`).
+        // On les remigre systématiquement sur la structure par défaut courante.
+        state.presentation.instanceData[tabId] = deepMerge(clone(defaults[type]), clone(existing));
       }
     });
     Object.keys(state.presentation.instanceData).forEach(tabId => {
@@ -7045,7 +7051,26 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     model.statuses=wanted.map(([key,label])=>({key,label,value:Number(current.get(key)?.value)||0}));
   }
   function dataApplyToModel(type,model,baseOps=dataRuntime.operations){
-    if(!model)return;if(type==='tunnel')dataEnsureTunnelStatuses(model);const ops=dataFilterOps(baseOps||dataRuntime.operations,dataSlideFilter(model));
+    if(!model)return;
+    // Hotfix V6.9.1 : sécurise les sous-objets attendus lorsque l'on charge
+    // une sauvegarde JSON issue d'une version antérieure.
+    if(type==='envelope'){
+      if(!model.r || typeof model.r!=='object' || Array.isArray(model.r)) model.r=clone(defaults.envelope?.r||{roof:0,facade:0,floor:0});
+      else model.r=deepMerge(clone(defaults.envelope?.r||{}),model.r);
+      if(!model.visible || typeof model.visible!=='object' || Array.isArray(model.visible)) model.visible=clone(defaults.envelope?.visible||{});
+      else model.visible=deepMerge(clone(defaults.envelope?.visible||{}),model.visible);
+    }
+    if(type==='equipments'){
+      if(!model.metrics || typeof model.metrics!=='object' || Array.isArray(model.metrics)) model.metrics=clone(defaults.equipments?.metrics||{});
+      else model.metrics=deepMerge(clone(defaults.equipments?.metrics||{}),model.metrics);
+    }
+    if(type==='dpe'){
+      if(!model.before || typeof model.before!=='object' || Array.isArray(model.before)) model.before=clone(defaults.dpe?.before||{});
+      else model.before=deepMerge(clone(defaults.dpe?.before||{}),model.before);
+      if(!model.after || typeof model.after!=='object' || Array.isArray(model.after)) model.after=clone(defaults.dpe?.after||{});
+      else model.after=deepMerge(clone(defaults.dpe?.after||{}),model.after);
+    }
+    if(type==='tunnel')dataEnsureTunnelStatuses(model);const ops=dataFilterOps(baseOps||dataRuntime.operations,dataSlideFilter(model));
     model.dataConnectedCount=ops.length;
     if(type==='tunnel'){const a=dataAggregateTunnel(ops);(model.statuses||[]).forEach(s=>{if(a.counts[s.key]!==undefined)s.value=a.counts[s.key];});model.cancelled=a.cancelled;model.sold=a.sold;}
     else if(type==='map'){const coverage=dataMapCoverage(ops);model.values=dataAggregateMap(ops);model.dataMappedCount=coverage.mapped;model.dataUnmappedCount=coverage.unmapped.length;model.dataConnectedCount=coverage.total;}
