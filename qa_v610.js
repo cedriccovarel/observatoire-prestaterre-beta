@@ -1,0 +1,32 @@
+'use strict';
+// Run from the extracted release folder: node qa_v610.js
+const fs=require('fs');
+const html=fs.readFileSync('index.html','utf8');
+const js=fs.readFileSync('newosb.js','utf8');
+const css=fs.readFileSync('project-fiche.css','utf8');
+const app=fs.readFileSync('app.js','utf8');
+let count=0;
+function check(ok,label){if(!ok)throw new Error(label);++count;console.log('PASS '+label);}
+check(html.includes('V6.10'),'Displayed version V6.10');
+check(html.includes('newosb.js?v=6.10.0'),'New UI cache version');
+check(html.includes('project-fiche.css?v=6.10.0'),'Scoped project stylesheet loaded');
+const nav=html.match(/<nav id="obsNav"[\s\S]*?<\/nav>/)[0];
+const pages=[...nav.matchAll(/data-page="([^"]+)"/g)].map(x=>x[1]);
+check(pages.indexOf('presentation')+1===pages.indexOf('dictionary'),'Presentation immediately precedes dictionary');
+check(pages.indexOf('operations')<pages.indexOf('presentation'),'Operations precedes presentation');
+check(pages.indexOf('quality')<pages.indexOf('presentation'),'Quality precedes presentation');
+check(js.includes('obs-project-window--editorial'),'Editorial project window enabled');
+check(js.includes('function pfSelectedRecord('),'Selected-building source isolation');
+check(js.includes('function pfNumber('),'Strict numeric parser for technical charts');
+check(js.includes('function pfDpe('),'DPE classes read without deriving them from CEP');
+check(js.includes('const PF_TABS=')&&js.includes("['economics',"),'Five project sections retained');
+check(js.includes('role="tablist"')&&js.includes('aria-selected='),'Accessible tab markup');
+check(js.includes('projectShellWasInert')&&js.includes("e.key==='Escape'"),'Modal focus and escape handling');
+check(js.includes('scroll.scrollTop=top;scroll.scrollLeft=left;'),'Sheet scroll preserved');
+check(css.includes('@media print'),'Print styles included');
+check(css.includes('.obs-project-window--editorial'),'Project styles scoped to project sheet');
+check(app.includes('model.r=clone(defaults.envelope?.r'),'V6.9.1 roof JSON-import guard retained');
+check(app.includes("if(type==='dpe')")&&app.includes("if(type==='equipments')"),'V6.9.1 nested-data guards retained');
+const headers=fs.readFileSync('COLONNES_OPERATIONS_V6_7.tsv','utf8').trim().split('\t');
+check(headers.length===106&&headers.at(-1)==='Tags','106 source columns; Tags remains last');
+console.log('Completed '+count+' package integrity checks. Interactive browser checks documented in QA_NEWOSB_V6_10.md.');
