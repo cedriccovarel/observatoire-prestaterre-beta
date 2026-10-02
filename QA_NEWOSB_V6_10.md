@@ -1,139 +1,77 @@
 # Contrôles V6.10
 
-## Tests effectués
+## Périmètre
 
-106 contrôles interactifs ont réussi dans Chromium avec les vrais fichiers HTML/CSS/JS du paquet et des données synthétiques. Les tests portent sur la nouvelle fiche et sur le rendu des pages principales.
+Base exacte : Observatoire_Prestaterre_V6_9_1.zip fourni dans la conversation.
+Les tests d'interface sont exécutés avec Chromium / Playwright sur un DOM local en mémoire et un jeu de données synthétique de contrôle. Le navigateur de test interdit la navigation réseau ; le chargement HTTP et les services Google/GitHub en production n'ont pas été testés. Les ressources locales sont injectées et fetch est simulé uniquement dans le banc de test.
 
-L'environnement interdit la navigation du navigateur vers les URL HTTP et file. Le document a donc été assemblé en mémoire avec ses scripts et styles réels. Le stockage navigateur et la session ont été remplacés uniquement dans le banc de test. Aucune modification de ce type n'est présente dans le paquet livré. Ces tests ne sont pas un test du déploiement GitHub Pages ni des sources Google Sheets de l'utilisateur.
+## Résultats
 
-### Scénarios
+- 18 fichiers JavaScript : syntaxe vérifiée avec node --check.
+- 13 contrôles unitaires V6.10 passés.
+- Tests V6.1 et V05.29 passés.
+- 53 contrôles d'interface passés (ci-dessous), aucune erreur JavaScript de page.
+- Export HTML : cinq rubriques, illustration incorporée, absence de scripts et de boutons inactifs. Le contenu produit a été vérifié ; le téléchargement natif est remplacé par un collecteur de Blob dans le test.
+- Cas supplémentaires : CEP = 0, base de gain absente, DPE non renseigné, résistances multiples, échappement HTML des noms issus de la source.
 
-- Deux lignes techniques pour un projet : logement et bâtiments non doublés, valeurs différentes affichées selon la ligne choisie.
-- Champs techniques absents, année de construction manquante et R composé : aucune reprise silencieuse du bâtiment voisin, aucune moyenne fictive.
-- Cinq onglets, changements de bâtiment, tags, graphiques, données économiques vides.
-- DPE/GES exacts, dépassement du seuil carbone 2031, pas de pourcentage sur les températures Celsius.
-- Absence de débordement horizontal à 1920, 1024, 768 et 390 pixels.
-- Navigation clavier, maintien du focus dans la fenêtre, fermeture par Échap et retour au contexte.
-- Mode anonymisé : masquage des noms MOA et adresses ; les deux opérations techniques restent accessibles.
-- Contrôles, comparables et traçabilité conservés à la demande.
-- Ordre du menu : Présentation immédiatement avant Dictionnaire.
-- Aucune erreur JavaScript pendant les interactions testées.
+## Tests d'interface
 
-### Inspection visuelle
+- Presentation immediately before Dictionnaire
+- Project opens in new UX
+- Project title from source
+- Project total stays 124 dwellings, not duplicated
+- Building A CEP is 68
+- Two operations preserved
+- Construction and certification years distinct
+- No invented environmental score
+- Switching tab preserves project scroll
+- Three envelope cards retained
+- Building A R retained
+- Building B CEP is 110, no averaging
+- Missing roof value not borrowed from A
+- Project totals unchanged after changing building
+- energy tab renders
+- carbon tab renders
+- economics tab renders
+- general tab renders
+- Distinct electricity and PAC vector colors
+- Clicking tag shows linked projects
+- Source view is selected building B
+- Keyboard navigation across tabs
+- Escape closes project
+- Background restored on close
+- No private hero text retained after close
+- No horizontal overflow at 1920px / general
+- No horizontal overflow at 1920px / building
+- No horizontal overflow at 1920px / energy
+- No horizontal overflow at 1920px / carbon
+- No horizontal overflow at 1920px / economics
+- No horizontal overflow at 1366px / general
+- No horizontal overflow at 1366px / building
+- No horizontal overflow at 1366px / energy
+- No horizontal overflow at 1366px / carbon
+- No horizontal overflow at 1366px / economics
+- No horizontal overflow at 1024px / general
+- No horizontal overflow at 1024px / building
+- No horizontal overflow at 1024px / energy
+- No horizontal overflow at 1024px / carbon
+- No horizontal overflow at 1024px / economics
+- No horizontal overflow at 768px / general
+- No horizontal overflow at 768px / building
+- No horizontal overflow at 768px / energy
+- No horizontal overflow at 768px / carbon
+- No horizontal overflow at 768px / economics
+- No horizontal overflow at 390px / general
+- No horizontal overflow at 390px / building
+- No horizontal overflow at 390px / energy
+- No horizontal overflow at 390px / carbon
+- No horizontal overflow at 390px / economics
+- Anonymized project retains both buildings
+- Anonymized sheet hides identity and address
+- No JavaScript page errors
 
-Contrôle des captures de la vue d'ensemble, des blocs détaillés, de Bâtiment & équipements et de la version mobile. Les données de ces captures sont des exemples de test, non des données de l'observatoire de production.
+## Non-régression des fichiers protégés
 
-### Intégrité
+Comparaison binaire avec la V6.9.1 : app.js, auth.js, Code_Operations.gs, Code_Exigences.gs, requirements.js, requirements_catalog.js, privacy.js, privacy.css, newosb-core.js, newosb.css, generator.html et les en-têtes OPERATIONS sont strictement inchangés.
 
-Syntaxe des scripts d'exécution vérifiée avec node --check. Comparaison d'empreintes avec l'archive V6.9.1 : app.js, auth.js, requirements.js, newosb-core.js, Code_Operations.gs, Code_Exigences.gs et COLONNES_OPERATIONS_V6_7.tsv identiques.
-
-Les anciens scripts QA restent dans le paquet pour historique ; certains exigent l'intitulé exact de leur ancienne version. Leurs assertions d'interface ne constituent pas les tests de recette de la V6.10. Le nouveau qa_v610.js vérifie les invariants du paquet actuel.
-
-## Journal des 106 assertions du navigateur
-
-1. Presentation immediately above Dictionnaire
-2. Quality remains before presentation
-3. Construction and certification years remain distinct
-4. Two technical rows remain one project
-5. Dialog has an accessible name
-6. Background controls inert while sheet open
-7. Project housing total is 72, not doubled
-8. Building A CEP shown
-9. CEP reduction calculated from actual initial value
-10. DPE before/after display exact labels
-11. Timeline uses declared certification date
-12. Generic image explicitly labelled
-13. Desktop overview has no overflow
-14. Tags open technical-operation results
-15. Tag results link to specific technical rows
-16. Building change preserves sheet scroll
-17. Building B CEP, not building A CEP
-18. Project total unchanged when switching buildings
-19. Sibling-only tag not inherited
-20. Building-specific tag is shown
-21. Missing building construction year not inherited as a tag
-22. Missing building construction year remains unavailable
-23. Compound thermal values preserved as source text
-24. No arbitrary numeric bar from an R range
-25. Empty ventilation cell does not inherit sibling description
-26. Full ECS source description preserved
-27. Building view has no horizontal overflow
-28. energy no NaN/undefined
-29. energy desktop no overflow
-30. Energy usage and vector charts present
-31. Known heating transition retained
-32. Cost assumptions and non-bill disclaimer accessible
-33. No misleading percentage calculated on Celsius
-34. carbon no NaN/undefined
-35. carbon desktop no overflow
-36. 2031 exceedance shown separately from other thresholds
-37. economics no NaN/undefined
-38. economics desktop no overflow
-39. Economics remains empty, no fictitious costs
-40. Quality, comparables and provenance preserved
-41. Keyboard tab navigation works
-42. Keyboard focus stays inside the sheet
-43. Escape closes sheet
-44. Background interaction restored
-45. Missing CEP is not displayed as zero
-46. Incomplete record renders building
-47. Incomplete record renders energy
-48. Incomplete record renders carbon
-49. Incomplete record renders economics
-50. Economics placeholders retained
-51. Responsive 1920px general: no overflow []
-52. Responsive 1920px general: sheet fits viewport
-53. Responsive 1920px building: no overflow []
-54. Responsive 1920px building: sheet fits viewport
-55. Responsive 1920px energy: no overflow []
-56. Responsive 1920px energy: sheet fits viewport
-57. Responsive 1920px carbon: no overflow []
-58. Responsive 1920px carbon: sheet fits viewport
-59. Responsive 1920px economics: no overflow []
-60. Responsive 1920px economics: sheet fits viewport
-61. Responsive 1024px general: no overflow []
-62. Responsive 1024px general: sheet fits viewport
-63. Responsive 1024px building: no overflow []
-64. Responsive 1024px building: sheet fits viewport
-65. Responsive 1024px energy: no overflow []
-66. Responsive 1024px energy: sheet fits viewport
-67. Responsive 1024px carbon: no overflow []
-68. Responsive 1024px carbon: sheet fits viewport
-69. Responsive 1024px economics: no overflow []
-70. Responsive 1024px economics: sheet fits viewport
-71. Responsive 768px general: no overflow []
-72. Responsive 768px general: sheet fits viewport
-73. Responsive 768px building: no overflow []
-74. Responsive 768px building: sheet fits viewport
-75. Responsive 768px energy: no overflow []
-76. Responsive 768px energy: sheet fits viewport
-77. Responsive 768px carbon: no overflow []
-78. Responsive 768px carbon: sheet fits viewport
-79. Responsive 768px economics: no overflow []
-80. Responsive 768px economics: sheet fits viewport
-81. Responsive 390px general: no overflow []
-82. Responsive 390px general: sheet fits viewport
-83. Responsive 390px building: no overflow []
-84. Responsive 390px building: sheet fits viewport
-85. Responsive 390px energy: no overflow []
-86. Responsive 390px energy: sheet fits viewport
-87. Responsive 390px carbon: no overflow []
-88. Responsive 390px carbon: sheet fits viewport
-89. Responsive 390px economics: no overflow []
-90. Responsive 390px economics: sheet fits viewport
-91. Anonymized sheet does not reveal source MOA/address
-92. Both technical rows available in anonymized mode
-93. Main page renders: overview
-94. Main page renders: stakeholders
-95. Main page renders: certification
-96. Main page renders: performance
-97. Main page renders: solutions
-98. Main page renders: energy
-99. Main page renders: carbon
-100. Main page renders: crossdata
-101. Main page renders: operations
-102. Main page renders: quality
-103. Main page renders: presentation
-104. Main page renders: dictionary
-105. Main page renders: requirements
-106. No JavaScript page errors in tested interactions: []
+Le correctif JSON `roof`, les mécanismes de stockage local et le mot de passe sont donc conservés. Aucun test ne prétend valider le JSON privé de l'utilisateur, non fourni pour cette mise à jour.

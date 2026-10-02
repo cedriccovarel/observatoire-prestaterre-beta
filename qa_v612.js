@@ -1,0 +1,20 @@
+const fs=require('fs'),vm=require('vm');
+function ok(v,msg){if(!v)throw new Error(msg);console.log('OK - '+msg)}
+const js=fs.readFileSync('newosb.js','utf8'),app=fs.readFileSync('app.js','utf8'),coreSrc=fs.readFileSync('newosb-core.js','utf8'),html=fs.readFileSync('index.html','utf8');
+ok(html.includes('V6.12'),'version V6.12 affichée');
+ok(js.includes('data-performance-matrix-check'),'croisement mention/performance en cases à cocher');
+ok(js.includes('performanceMatrixMentions:[]')&&js.includes('performanceMatrixPerformances:[]'),'sélections multicoche mémorisées séparément');
+ok(!js.includes('data-performance-matrix-select="mention"'),'anciens sélecteurs simples supprimés');
+ok(js.includes('applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:\'transition:dpeEnergyBefore:dpeEnergyAfter\'}))'),'sélection label/performance appliquée à la transition DPE énergie');
+ok(js.includes('applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:\'transition:dpeGesBefore:dpeGesAfter\'}))'),'sélection label/performance appliquée à la transition DPE GES');
+ok(app.includes("dpeEnergyBefore:['dpe énergie avant travaux'")&&app.includes("dpeEnergyAfter:['dpe énergie après travaux final'")&&app.includes("dpeGesBefore:['dpe ges avant travaux'")&&app.includes("dpeGesAfter:['dpe ges après travaux final'"),'quatre colonnes DPE/GES nouvelles raccordées en priorité');
+const ctx={window:{},console};vm.createContext(ctx);vm.runInContext(coreSrc,ctx);const c=ctx.window.NEWOSB_CORE;
+const op=(key,val)=>({fields:{[key]:'X'},rawRows:[{X:val}]});
+ok(c.rawNumber(op('roofThickness','12 cm ; 140 mm ; 95'),'roofThickness')===140,'épaisseur : cm converti en mm et maximum retenu');
+ok(c.rawNumber(op('wallThickness','120 ; 14 cm'),'wallThickness')===140,'épaisseur sans unité = mm');
+ok(c.rawNumber(op('floorThickness','80 mm / 10 cm'),'floorThickness')===100,'épaisseur mm/cm : maximum normalisé');
+ok(Math.abs(c.rawNumber(op('roofR','R=3,2 / R=4,75'),'roofR')-4.75)<1e-9,'R multiple : valeur la plus élevée');
+ok(Math.abs(c.rawNumber(op('wallR','R=4,2 ; épaisseur 140 mm'),'wallR')-4.2)<1e-9,'R ignore une épaisseur annotée en mm');
+const multi={fields:{roofThickness:'X'},rawRows:[{X:'10 cm'},{X:'160 mm'}]};
+ok(c.rawNumber(multi,'roofThickness')===160,'maximum retenu entre plusieurs valeurs source');
+console.log('QA V6.12 terminée');

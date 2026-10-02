@@ -1,45 +1,38 @@
 # Observatoire Prestaterre V6.10
 
-## Fiches projets / opérations : direction visuelle de l'option 1
+## Fiches projets / opérations - option 1
 
-Nouvelle fiche éditoriale : bandeau projet, indicateurs clés, cartes d'information et colonne de synthèse. Les cinq rubriques et le sélecteur du bâtiment/opération technique restent disponibles.
+La fiche reprend la composition éditoriale validée : bandeau illustré, indicateurs, cartes thématiques et colonne « En synthèse ». L'illustration générique est explicitement identifiée et ne représente pas une photographie du projet.
 
-- Vue d'ensemble : identité, tags cliquables, jalons réels de certification, aperçus de l'enveloppe et des équipements, CEP et DPE/GES avant-après, menuiseries, description et certification.
-- Bâtiment & équipements : structure, parois, isolants, épaisseurs, R, Ubat, menuiseries et équipements CVC.
-- Énergie & transitions : vecteurs colorés, comparaisons, ventilations du CEP et estimation indicative avec hypothèses explicites.
-- Carbone & DPE : indicateurs et seuils disponibles, DPE et GES déclarés.
-- Données économiques : emplacements DPGF, lots, macro-lots et aides, sans montants fictifs.
+Le cercle indique le nombre de champs techniques renseignés sur une liste explicite de 14 champs. Ce n'est ni un score de performance environnementale, ni un certificat de conformité.
 
-Le bandeau distingue les totaux du projet des indicateurs du bâtiment sélectionné. La jauge « Données disponibles » mesure le remplissage de 18 champs techniques, pas la performance environnementale. L'image est explicitement une illustration générique, pas une photographie du projet.
+Les cinq rubriques restent disponibles :
+1. Vue d'ensemble.
+2. Bâtiment & équipements.
+3. Énergie & transition.
+4. Carbone & DPE.
+5. Données économiques, toujours sans montants fictifs.
 
-Les champs absents restent signalés. Les R comportant plusieurs valeurs restent textuels. Aucun DPE n'est déduit du CEP. Une cellule technique vide d'un bâtiment n'est pas remplie par celle de son voisin.
+Le sélecteur de bâtiment pilote les données techniques. Les compteurs logements et bâtiments en tête restent les totaux du projet. Les valeurs techniques absentes d'une ligne ne sont pas remplacées par celles d'une autre ligne. Les classes DPE sont lues dans la source, pas déduites du CEP.
 
-Navigation clavier, fermeture par Échap, retour au contexte de la page, conservation du défilement, mise en page adaptative et impression de l'onglet affiché. Les contrôles, comparables et données sources sont accessibles dans les sections dépliables en bas de la fiche.
+Les tags restent cliquables. Le bouton Données source donne accès à la ligne sélectionnée. L'export crée une fiche HTML autonome contenant les cinq rubriques et l'illustration incorporée. Il ne publie rien en ligne. Une fiche exportée peut contenir des informations internes : vérifier le mode anonymisé avant diffusion.
 
-## Navigation principale
+Les onglets sont accessibles au clavier. Échap ferme la fiche. La position de défilement est conservée lors des changements de rubrique et au retour à l'observatoire.
 
-Présentation est placé immédiatement au-dessus de Dictionnaire, après Qualité & données.
+## Navigation
 
-## Compatibilité et périmètre
+Présentation est placé juste au-dessus de Dictionnaire, après Qualité & données.
 
-- Aucune nouvelle colonne : les 106 en-têtes V6.7 sont inchangés.
-- Code_Operations.gs et Code_Exigences.gs inchangés : aucun redéploiement Apps Script pour cette version.
-- Exigences, moteur, authentification et mots de passe conservés.
-- app.js est identique à la V6.9.1 : correctifs de stockage et de migration des anciens JSON conservés.
-- Cette version ne constitue pas une nouvelle sécurisation serveur des données.
+## Installation
 
-Fichiers d'exécution modifiés : index.html, newosb.js. Nouveau fichier : project-fiche.css. Les autres fichiers de l'archive précédente sont conservés.
+Paquet complet : copier le CONTENU du dossier Observatoire_Prestaterre_V6_10 dans le dossier local du dépôt, au même niveau que index.html. Conserver les fichiers de configuration propres au dépôt (notamment .git, CNAME et les workflows personnalisés). Effectuer Commit puis Push origin dans GitHub Desktop.
 
-## Installation avec GitHub Desktop
+Patch depuis la V6.9.1 uniquement : remplacer index.html et newosb.js, et ajouter project-ux.css. Aucun autre fichier de production n'a changé. Les URL de ces ressources comportent une version de cache V6.10.
 
-1. Décompresser Observatoire_Prestaterre_V6_10.zip.
-2. Ouvrir le dossier local du dépôt newobs depuis GitHub Desktop.
-3. Copier le CONTENU du dossier Observatoire_Prestaterre_V6_10 dans la racine du dépôt en remplaçant les fichiers. Ne pas supprimer le dossier .git.
-4. Vérifier que index.html et project-fiche.css sont directement à la racine, puis Commit et Push origin.
-5. Une fois le déploiement terminé, recharger le site avec Cmd + Shift + R.
+Aucune nouvelle colonne dans OPERATIONS. Aucun redéploiement Apps Script. Le mot de passe reste inchangé. Le correctif JSON V6.9.1 et le fonctionnement du stockage local sont conservés. Exigences est inchangé.
 
-Le ZIP fournit les fichiers à déployer ; il ne modifie pas lui-même le dépôt ni le site en ligne.
+Après le déploiement GitHub Pages, recharger une fois avec Cmd + Shift + R sur Mac.
 
 ## Vérifications
 
-Voir QA_NEWOSB_V6_10.md. Pour les contrôles statiques portables : node qa_v610.js depuis ce dossier.
+Voir QA_NEWOSB_V6_10.md. Exécuter `node qa_v610.js` depuis la racine du paquet pour les contrôles unitaires.

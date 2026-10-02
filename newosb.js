@@ -94,8 +94,8 @@
     performanceTableView:'list',
     performanceMatrixView:'matrix',
     performanceMatrixPage:1,
-    performanceMatrixMention:'',
-    performanceMatrixPerformance:'',
+    performanceMatrixMentions:[],
+    performanceMatrixPerformances:[],
     energyCepViews:{usage:'pie',vector:'pie'},
     activeProject:null,
     projectWindowTab:'general',
@@ -673,7 +673,7 @@
     const technicalPage=['solutions','energy','carbon','crossdata'].includes(state.page); const ops=technicalPage?filteredTechnicalOperations():filteredOperations(), all=technicalPage?sourceTechnicalOperations():sourceOperations(), excluded=excludedOperations();
     const key=metric||inferredDictionaryMetric(title), d=key?core?.dictByKey?.[key]:null, cov=key&&core?.coverage?core.coverage(ops,key):null;
     const selectedCodes=new Set(ops.map(o=>String(o.code))); const missingOps=key?ops.filter(o=>String(rawValue(o,key)??'').trim()===''):[];
-    return `<div class="obs-audit-content"><div class="obs-audit-kpis"><div><span>${technicalPage?'Opérations techniques':'Projets actifs'}</span><b>${fmt(ops.length)}</b></div><div><span>Hors statistiques</span><b>${fmt(excluded.length)}</b></div>${cov?`<div><span>Valeurs disponibles</span><b>${fmt(cov.available)} / ${fmt(cov.population)}</b></div><div><span>Couverture</span><b>${fmt(cov.rate,1)} %</b></div>`:''}</div><div class="obs-audit-section"><h4>Périmètre</h4><p>${esc(activeFilterScopeText())}</p><p>${fmt(all.length)} ${technicalPage?'opérations techniques':'projets'} chargés · ${fmt(excluded.length)} perdues/abandonnées/annulées exclues des statistiques actives.</p><p>Source : ${esc(runtime().connected?(runtime().mode||'connectée'):'démonstration')} · ${runtime().lastLoadedAt?`dernière actualisation ${esc(new Date(runtime().lastLoadedAt).toLocaleString('fr-FR'))}`:'date d’actualisation non disponible'}</p></div>${d?`<div class="obs-audit-section"><h4>${esc(d.label)}</h4><dl><dt>Définition</dt><dd>${esc(d.definition)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Nature</dt><dd>${esc(d.type)}</dd><dt>Unité</dt><dd>${esc(d.unit||'—')}</dd><dt>Méthode</dt><dd>${esc(d.method)}</dd></dl></div>`:`<div class="obs-audit-section"><h4>Calcul / agrégation</h4><p>Ce visuel est calculé à partir de la population filtrée de l’Observatoire Prestaterre. Les projets identifiés comme perdus, abandonnés ou annulés via <b>Affaire: Étape</b> sont exclus avant agrégation.</p></div>`}${missingOps.length?`<div class="obs-audit-section"><h4>Données manquantes</h4><p>${fmt(missingOps.length)} opération${missingOps.length>1?'s':''} de la sélection sans valeur pour cet indicateur.</p></div>`:''}</div>`;
+    return `<div class="obs-audit-content"><div class="obs-audit-kpis"><div><span>${technicalPage?'Opérations techniques':'Projets actifs'}</span><b>${fmt(ops.length)}</b></div><div><span>Hors statistiques</span><b>${fmt(excluded.length)}</b></div>${cov?`<div><span>Valeurs disponibles</span><b>${fmt(cov.available)} / ${fmt(cov.population)}</b></div><div><span>Couverture</span><b>${fmt(cov.rate,1)} %</b></div>`:''}</div><div class="obs-audit-section"><h4>Périmètre</h4><p>${esc(activeFilterScopeText())}</p><p>${fmt(all.length)} ${technicalPage?'opérations techniques':'projets'} chargés · ${fmt(excluded.length)} perdues/abandonnées/annulées exclues des statistiques actives.</p><p>Source : ${esc(runtime().connected?(runtime().mode||'connectée'):'démonstration')} · ${runtime().lastLoadedAt?`dernière actualisation ${esc(new Date(runtime().lastLoadedAt).toLocaleString('fr-FR'))}`:'date d’actualisation non disponible'}</p></div>${d?`<div class="obs-audit-section"><h4>${esc(d.label)}</h4><dl><dt>Définition</dt><dd>${esc(d.definition)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Nature</dt><dd>${esc(d.type)}</dd><dt>Unité</dt><dd>${esc(d.unit||'—')}</dd><dt>Méthode</dt><dd>${esc(d.method)}</dd></dl></div>`:`<div class="obs-audit-section"><h4>Calcul / agrégation</h4><p>Ce visuel est calculé à partir de la population filtrée de l’Observatoire Prestaterre. Les projets identifiés comme perdus, abandonnés ou annulés via <b>Statut</b> sont exclus avant agrégation.</p></div>`}${missingOps.length?`<div class="obs-audit-section"><h4>Données manquantes</h4><p>${fmt(missingOps.length)} opération${missingOps.length>1?'s':''} de la sélection sans valeur pour cet indicateur.</p></div>`:''}</div>`;
   }
   function openAudit(title,metric=''){
     let modal=document.getElementById('obsAuditModal');if(!modal){modal=document.createElement('div');modal.id='obsAuditModal';modal.className='obs-audit-modal';modal.innerHTML='<div class="obs-audit-backdrop" data-audit-close="1"></div><section class="obs-audit-panel"><header><div><span>TRAÇABILITÉ</span><h3 id="obsAuditTitle"></h3></div><button type="button" data-audit-close="1">×</button></header><div id="obsAuditBody"></div></section>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target.closest('[data-audit-close]'))modal.classList.remove('is-open');});}
@@ -697,6 +697,10 @@
   function baseOperations(){ return sourceOperations().filter(o=>!isLostAbandonedOperation(o)); }
   function baseTechnicalOperations(){ const excludedCodes=new Set(excludedOperations().map(o=>String(o.code))); return sourceTechnicalOperations().filter(o=>!excludedCodes.has(String(o.projectCode||String(o.code).split('::')[0]))&&!isLostAbandonedOperation(o)); }
   function regionName(code){ return engine.regionForDepartment(code) || 'Non localisé'; }
+  function operationRegion(op){
+    const direct=String(op?.region||'').trim();
+    return direct||regionName(op?.department);
+  }
   function departmentName(code){ return engine.departmentName(code) || code || 'Non localisé'; }
 
   function matchesTag(value, wanted){
@@ -744,7 +748,7 @@
     if(Array.isArray(op?.rawRows)&&op.rawRows.length>1&&isTechnicalCrossKey(f.key)){
       const children=technicalChildrenForProject(op); if(children.length)return children.some(child=>matchesCross(child,f));
     }
-    if(f.key==='region') return norm(regionName(op.department))===norm(value);
+    if(f.key==='region') return norm(operationRegion(op))===norm(value);
     if(f.key==='department') return String(op.department)===String(value);
     if(f.key==='city') return norm(op.city||'Non précisé')===norm(value);
     if(f.key==='intercommunality') return norm(op.intercommunality||'Non précisé')===norm(value);
@@ -991,7 +995,7 @@
       if(!globalFilterMatch('moaGroup',o.moaGroup||'Non précisé')) return false;
       if(!globalFilterMatch('status',o.status)) return false;
       if(!globalFilterMatch('moa',o.moa)) return false;
-      if(!globalFilterMatch('region',regionName(o.department))) return false;
+      if(!globalFilterMatch('region',operationRegion(o))) return false;
       if(!globalFilterMatch('department',String(o.department))) return false;
       if(!globalFilterMatch('profile',o.profile||'Non précisé')) return false;
       if(!globalFilterMatch('socialZone',o.socialZone||'Non précisé')) return false;
@@ -1198,7 +1202,7 @@
     const byYear=countBy(excluded,o=>String(o.year||'Année non renseignée')).sort((a,b)=>{const an=Number(a.name),bn=Number(b.name);if(Number.isFinite(an)&&Number.isFinite(bn))return an-bn;return String(a.name).localeCompare(String(b.name),'fr');}).slice(0,8);
     const stageText=byStage.map(x=>`${x.name} : ${fmt(x.value)}`).join(' · ');
     const yearText=byYear.map(x=>`${x.name} : ${fmt(x.value)}`).join(' · ');
-    return `<div class="obs-excluded-projects"><div><i>!</i><strong>${fmt(excluded.length)} projet${excluded.length>1?'s':''} perdu${excluded.length>1?'s':''} / abandonné${excluded.length>1?'s':''} exclu${excluded.length>1?'s':''} des statistiques</strong><span>Détection via <b>Affaire: Étape</b>${nonStarted?` · dont ${fmt(nonStarted)} classé${nonStarted>1?'s':''} « Non démarré » côté évaluation`:''}.</span></div><small>${esc(stageText)}${yearText?` · ${esc(yearText)}`:''}</small></div>`;
+    return `<div class="obs-excluded-projects"><div><i>!</i><strong>${fmt(excluded.length)} projet${excluded.length>1?'s':''} perdu${excluded.length>1?'s':''} / abandonné${excluded.length>1?'s':''} exclu${excluded.length>1?'s':''} des statistiques</strong><span>Détection via <b>Statut</b>${nonStarted?` · dont ${fmt(nonStarted)} classé${nonStarted>1?'s':''} « Non démarré » côté évaluation`:''}.</span></div><small>${esc(stageText)}${yearText?` · ${esc(yearText)}`:''}</small></div>`;
   }
 
   function renderOverview(){
@@ -1221,7 +1225,7 @@
   function renderTerritories(){
     const ops=filteredOperations();
     const regionUniverse=filteredOperations({ignoreCrossKey:'region'}), depUniverse=filteredOperations({ignoreCrossKey:'department'});
-    const regions=countBy(regionUniverse,o=>regionName(o.department));
+    const regions=countBy(regionUniverse,o=>operationRegion(o));
     const deps=countBy(depUniverse,o=>departmentName(o.department));
     const groupingRegion=!state.mapFocusRegion&&state.mapOperationGrouping==='region';
     const summaryItems=groupingRegion?regions:deps;
@@ -1231,7 +1235,7 @@
     return `${pageHead('territories')}${analyticsToolbar()}${kpiGrid([
       {label:'Opérations',value:fmt(ops.length),note:'population croisée'},
       {label:'Logements',value:fmt(sum(ops,o=>o.dwellings)),note:'total sélectionné'},
-      {label:'Régions',value:fmt(uniq(ops.map(o=>regionName(o.department))).length),note:'territoires représentés'},
+      {label:'Régions',value:fmt(uniq(ops.map(o=>operationRegion(o))).length),note:'territoires représentés'},
       {label:'Départements',value:fmt(uniq(ops.map(o=>o.department)).length),note:'départements représentés'}
     ])}
     <div class="obs-grid-map obs-grid-map-focus">
@@ -1249,7 +1253,7 @@
     const byName=new Map();
     ops.forEach(o=>{
       const name=departmentName(o.department);
-      if(!byName.has(name)) byName.set(name,{code:o.department,region:regionName(o.department),ops:0,dwellings:0,buildings:0,moas:new Set()});
+      if(!byName.has(name)) byName.set(name,{code:o.department,region:operationRegion(o),ops:0,dwellings:0,buildings:0,moas:new Set()});
       const x=byName.get(name);x.ops++;x.dwellings+=Number(o.dwellings)||0;x.buildings+=Number(o.buildings)||0;x.moas.add(o.moa);
     });
     const rows=[...byName.entries()].sort((a,b)=>b[1].ops-a[1].ops),model=paged(rows,state.territoryPage,15);state.territoryPage=model.page;
@@ -1366,23 +1370,46 @@
     return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Libellé</th><th>Opérations</th><th>Logements</th><th>Bâtiments</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>`<tr class="obs-cross-row ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)}><td><strong>${escLines(x.name)}</strong></td><td>${fmt(x.value)}</td><td>${fmt(x.dwellings)}</td><td>${fmt(x.buildings)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`).join('')}</tbody></table>${paginationHtml(kind,model)}</div>`;
   }
 
+  function matrixSelectionValues(kind){
+    const key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances';
+    return Array.isArray(state[key])?state[key]:[];
+  }
+  function matrixSelectionHas(kind,value){ return matrixSelectionValues(kind).some(v=>norm(v)===norm(value)); }
+  function matrixSelectionMatch(op){
+    const ms=matrixSelectionValues('mention'), ps=matrixSelectionValues('performance');
+    const opM=cachedOperationTags(op,'mention'), opP=cachedOperationTags(op,'performance');
+    const mentionOk=!ms.length||ms.some(sel=>opM.some(v=>norm(v)===norm(sel)));
+    const performanceOk=!ps.length||ps.some(sel=>opP.some(v=>norm(v)===norm(sel)));
+    return mentionOk&&performanceOk;
+  }
+  function applyMatrixSelection(ops){ return (ops||[]).filter(matrixSelectionMatch); }
+  function matrixCheckboxPanel(kind,items){
+    const selected=matrixSelectionValues(kind), label=kind==='mention'?'Mentions / labels':'Performances';
+    return `<section class="obs-matrix-check-panel"><header><div><span>${esc(label)}</span><b>${selected.length?`${fmt(selected.length)} sélectionnée${selected.length>1?'s':''}`:'Toutes'}</b></div><button type="button" data-matrix-clear="${kind}" ${selected.length?'':'disabled'}>Tout afficher</button></header><label class="obs-matrix-check-search"><span>⌕</span><input type="search" data-matrix-search="${kind}" placeholder="Rechercher…" autocomplete="off"></label><div class="obs-matrix-check-list" data-matrix-check-list="${kind}">${items.map(x=>`<label data-matrix-option="${attr(norm(x.name))}"><input type="checkbox" data-performance-matrix-check="${kind}" value="${attr(x.name)}" ${matrixSelectionHas(kind,x.name)?'checked':''}><span>${escLines(x.name)}</span><small>${fmt(x.value)}</small></label>`).join('')}</div></section>`;
+  }
+  function matrixSelectionSummary(ops){
+    const ms=matrixSelectionValues('mention'),ps=matrixSelectionValues('performance');
+    if(!ms.length&&!ps.length)return 'Toutes les mentions et performances';
+    return `${ms.length?`${ms.length} mention${ms.length>1?'s':''}`:'toutes mentions'} · ${ps.length?`${ps.length} performance${ps.length>1?'s':''}`:'toutes performances'}`;
+  }
   function tagMatrix(ops,idx=performanceIndex(ops)){
     const allM=idx.mentions,allP=idx.performances;
     if(!allM.length||!allP.length) return '<div class="obs-empty">Pas assez de données pour croiser mentions et performances.</div>';
-    if(!state.performanceMatrixMention||!allM.some(x=>norm(x.name)===norm(state.performanceMatrixMention)))state.performanceMatrixMention=allM[0].name;
-    if(!state.performanceMatrixPerformance||!allP.some(x=>norm(x.name)===norm(state.performanceMatrixPerformance)))state.performanceMatrixPerformance=allP[0].name;
+    state.performanceMatrixMentions=matrixSelectionValues('mention').filter(v=>allM.some(x=>norm(x.name)===norm(v)));
+    state.performanceMatrixPerformances=matrixSelectionValues('performance').filter(v=>allP.some(x=>norm(x.name)===norm(v)));
     const pairCount=(m,p)=>idx.pairs.get(`${norm(m)}\u0000${norm(p)}`)||0;
-    const selectedOps=ops.filter(o=>cachedOperationTags(o,'mention').some(x=>norm(x)===norm(state.performanceMatrixMention))&&cachedOperationTags(o,'performance').some(x=>norm(x)===norm(state.performanceMatrixPerformance)));
-    const selector=`<div class="obs-matrix-selector"><label><span>Mention ciblée</span><select data-performance-matrix-select="mention">${allM.map(x=>`<option value="${attr(x.name)}" ${norm(x.name)===norm(state.performanceMatrixMention)?'selected':''}>${escLines(x.name)}</option>`).join('')}</select></label><b>×</b><label><span>Performance ciblée</span><select data-performance-matrix-select="performance">${allP.map(x=>`<option value="${attr(x.name)}" ${norm(x.name)===norm(state.performanceMatrixPerformance)?'selected':''}>${escLines(x.name)}</option>`).join('')}</select></label><div class="obs-matrix-selection-kpis"><strong>${fmt(selectedOps.length)}<small>opérations</small></strong><strong>${fmt(sum(selectedOps,o=>o.dwellings))}<small>logements</small></strong><strong>${fmt(sum(selectedOps,o=>o.buildings))}<small>bâtiments</small></strong><strong>${fmt(pct(selectedOps.length,ops.length),1)} %<small>de la sélection</small></strong></div></div>`;
+    const selectedOps=applyMatrixSelection(ops);
+    const selector=`<div class="obs-matrix-selector obs-matrix-selector-multi"><div class="obs-matrix-checks">${matrixCheckboxPanel('mention',allM)}<b class="obs-matrix-times">×</b>${matrixCheckboxPanel('performance',allP)}</div><div class="obs-matrix-selection-kpis"><strong>${fmt(selectedOps.length)}<small>opérations</small></strong><strong>${fmt(sum(selectedOps,o=>o.dwellings))}<small>logements</small></strong><strong>${fmt(sum(selectedOps,o=>o.buildings))}<small>bâtiments</small></strong><strong>${fmt(pct(selectedOps.length,ops.length),1)} %<small>de la sélection</small></strong></div><p class="obs-matrix-scope-note">Cette sélection multicoche alimente aussi les transitions DPE énergie et GES de l’onglet Carbone & DPE. Sans case cochée, toutes les valeurs sont prises en compte.</p></div>`;
     const combos=[];idx.pairs.forEach((value,k)=>{const [mk,pk]=k.split('\u0000'),m=allM.find(x=>norm(x.name)===mk)?.name||mk,p=allP.find(x=>norm(x.name)===pk)?.name||pk;combos.push({mention:m,performance:p,value});});combos.sort((a,b)=>b.value-a.value||a.mention.localeCompare(b.mention,'fr'));
     if(state.performanceMatrixView==='list'){
-      const model=paged(combos,state.performanceMatrixPage,15);state.performanceMatrixPage=model.page;
+      const scopedCombos=combos.filter(x=>(!state.performanceMatrixMentions.length||matrixSelectionHas('mention',x.mention))&&(!state.performanceMatrixPerformances.length||matrixSelectionHas('performance',x.performance)));
+      const model=paged(scopedCombos,state.performanceMatrixPage,15);state.performanceMatrixPage=model.page;
       return `${selector}<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Mention</th><th>Performance</th><th>Opérations</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>{const value=`${x.mention}\u0001${x.performance}`;return `<tr class="obs-cross-row ${activeCross('mentionPerformance',value)?'is-active':''}" ${crossAttrs('mentionPerformance',value,`${x.mention} + ${x.performance}`)}><td><strong>${escLines(x.mention)}</strong></td><td>${escLines(x.performance)}</td><td>${fmt(x.value)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`}).join('')}</tbody></table>${paginationHtml('performance-matrix',model)}</div>`;
     }
-    const topM=allM.slice(0,6),topP=allP.slice(0,6),selectedM=allM.find(x=>norm(x.name)===norm(state.performanceMatrixMention)),selectedP=allP.find(x=>norm(x.name)===norm(state.performanceMatrixPerformance));
-    if(selectedM&&!topM.some(x=>norm(x.name)===norm(selectedM.name)))topM.push(selectedM);if(selectedP&&!topP.some(x=>norm(x.name)===norm(selectedP.name)))topP.push(selectedP);
-    const max=Math.max(1,...topM.flatMap(m=>topP.map(p=>pairCount(m.name,p.name))));
-    return `${selector}<div class="obs-heatmap obs-performance-heatmap"><table><thead><tr><th>Mention ↓</th>${topP.map(p=>`<th class="${norm(p.name)===norm(state.performanceMatrixPerformance)?'is-selected-axis':''}" title="${attr(p.name)}">${esc(shorten(p.name,14))}</th>`).join('')}</tr></thead><tbody>${topM.map(m=>`<tr class="${norm(m.name)===norm(state.performanceMatrixMention)?'is-selected-axis':''}"><th title="${attr(m.name)}">${esc(shorten(m.name,18))}</th>${topP.map(p=>{const v=pairCount(m.name,p.name),value=`${m.name}\u0001${p.name}`,active=activeCross('mentionPerformance',value),selected=norm(m.name)===norm(state.performanceMatrixMention)&&norm(p.name)===norm(state.performanceMatrixPerformance);return `<td class="${v?'':'is-zero'} ${active?'is-active':''} ${selected?'is-target-cell':''}" style="--heat:${v/max}" ${v?crossAttrs('mentionPerformance',value,`${m.name} + ${p.name}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const selectedM=allM.filter(x=>matrixSelectionHas('mention',x.name)), selectedP=allP.filter(x=>matrixSelectionHas('performance',x.name));
+    const topM=state.performanceMatrixMentions.length?selectedM:allM.slice(0,6), topP=state.performanceMatrixPerformances.length?selectedP:allP.slice(0,6);
+    const visibleM=topM.slice(0,12), visibleP=topP.slice(0,12), max=Math.max(1,...visibleM.flatMap(m=>visibleP.map(p=>pairCount(m.name,p.name))));
+    return `${selector}<div class="obs-heatmap obs-performance-heatmap"><table><thead><tr><th>Mention ↓</th>${visibleP.map(p=>`<th class="${matrixSelectionHas('performance',p.name)?'is-selected-axis':''}" title="${attr(p.name)}">${esc(shorten(p.name,14))}</th>`).join('')}</tr></thead><tbody>${visibleM.map(m=>`<tr class="${matrixSelectionHas('mention',m.name)?'is-selected-axis':''}"><th title="${attr(m.name)}">${esc(shorten(m.name,18))}</th>${visibleP.map(p=>{const v=pairCount(m.name,p.name),value=`${m.name}\u0001${p.name}`,active=activeCross('mentionPerformance',value),selected=matrixSelectionHas('mention',m.name)&&matrixSelectionHas('performance',p.name);return `<td class="${v?'':'is-zero'} ${active?'is-active':''} ${selected?'is-target-cell':''}" style="--heat:${v/max}" ${v?crossAttrs('mentionPerformance',value,`${m.name} + ${p.name}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>${(topM.length>visibleM.length||topP.length>visibleP.length)?'<div class="obs-table-note">Affichage matriciel limité à 12 mentions × 12 performances ; la sélection complète reste appliquée aux calculs et aux transitions DPE/GES.</div>':''}`;
   }
 
   function solutionCardView(cardKey){ return state.solutionViews?.[cardKey]==='pie'?'pie':'bar'; }
@@ -1605,7 +1632,7 @@
   }
 
   function renderCarbon(){
-    const ops=filteredTechnicalOperations(), ice=averageRaw(ops,'icEnergy'), icc=averageRaw(ops,'icConstruction'), db=averageDpe(ops,'dpeEnergyBefore'), da=averageDpe(ops,'dpeEnergyAfter'), gb=averageDpe(ops,'dpeGesBefore'), ga=averageDpe(ops,'dpeGesAfter');
+    const ops=filteredTechnicalOperations(), transitionOps=applyMatrixSelection(ops), ice=averageRaw(ops,'icEnergy'), icc=averageRaw(ops,'icConstruction'), db=averageDpe(transitionOps,'dpeEnergyBefore'), da=averageDpe(transitionOps,'dpeEnergyAfter'), gb=averageDpe(transitionOps,'dpeGesBefore'), ga=averageDpe(transitionOps,'dpeGesAfter');
     const iceStats=metricPairStats(ops,'icEnergy','icEnergyMax'), iccStats=metricPairStats(ops,'icConstruction','icConstructionMax');
     return `${pageHead('carbon',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
       {label:'IC Énergie projet moyen',value:ice.avg===null?'—':fmt(ice.avg,1),note:`${fmt(ice.count)} opérations renseignées`},
@@ -1613,15 +1640,15 @@
       {label:'IC Construction projet moyen',value:icc.avg===null?'—':fmt(icc.avg,1),note:`${fmt(icc.count)} opérations renseignées`},
       {label:'IC Construction sous seuil',value:iccStats.count?`${fmt(iccStats.rate,1)} %`:'—',note:`${fmt(iccStats.under)} / ${fmt(iccStats.count)} comparables`,crossKey:'threshold:icConstruction',crossValue:'under',crossLabel:'IC Construction sous seuil'}
     ])}
-    ${dpeVisualSummary(db,da,gb,ga)}
+    ${dpeVisualSummary(db,da,gb,ga)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
     <div class="obs-section-title"><div><span>01</span><h2>Position des émissions carbone par rapport aux maximums</h2></div><p>Le curseur représente la valeur projet moyenne ; la borne droite représente le maximum moyen renseigné.</p></div>
     <div class="obs-grid-2">
       <article class="obs-card obs-carbon-gauge"><div class="obs-card-head"><div><span>IC ÉNERGIE</span><h2>Projet vs IC Énergie max</h2></div><small>${iceStats.count?`${fmt(iceStats.rate,1)} % sous le seuil`:'maximum non renseigné'}</small></div>${performanceGauge(iceStats,'IC Énergie',{unit:'kgCO₂e/m²',referenceLabel:'IC Énergie max moyen'})}</article>
       <article class="obs-card obs-carbon-gauge"><div class="obs-card-head"><div><span>IC CONSTRUCTION</span><h2>Projet vs IC Construction max</h2></div><small>${iccStats.count?`${fmt(iccStats.rate,1)} % sous le seuil`:'maximum non renseigné'}</small></div>${performanceGauge(iccStats,'IC Construction',{unit:'kgCO₂e/m²',referenceLabel:'IC Construction max moyen'})}</article>
     </div>
     <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Lecture des classes énergie et GES avant et après travaux.</p></div>
-    <div class="obs-grid-2"><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE ÉNERGIE</span><h2>Classes avant → après travaux</h2></div><small>${db.label} → ${da.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeEnergyBefore:dpeEnergyAfter'}),'dpeEnergyBefore','dpeEnergyAfter','DPE énergie','dpeEnergy')}</article><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE GES</span><h2>Classes avant → après travaux</h2></div><small>${gb.label} → ${ga.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeGesBefore:dpeGesAfter'}),'dpeGesBefore','dpeGesAfter','DPE GES','dpeGes')}</article></div>
-    <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>GAIN DPE</span><h2>Évolution énergie</h2></div></div>${dpeGainBars(filteredOperations({ignoreCrossKey:'dpeGain:energy'}),'energy')}</article><article class="obs-card"><div class="obs-card-head"><div><span>GAIN GES</span><h2>Évolution GES</h2></div></div>${dpeGainBars(filteredOperations({ignoreCrossKey:'dpeGain:ges'}),'ges')}</article></div>`;
+    <div class="obs-grid-2"><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE ÉNERGIE</span><h2>Classes avant → après travaux</h2></div><small>${db.label} → ${da.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeEnergyBefore:dpeEnergyAfter'})),'dpeEnergyBefore','dpeEnergyAfter','DPE énergie','dpeEnergy')}</article><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE GES</span><h2>Classes avant → après travaux</h2></div><small>${gb.label} → ${ga.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeGesBefore:dpeGesAfter'})),'dpeGesBefore','dpeGesAfter','DPE GES','dpeGes')}</article></div>
+    <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>GAIN DPE</span><h2>Évolution énergie</h2></div></div>${dpeGainBars(applyMatrixSelection(filteredOperations({ignoreCrossKey:'dpeGain:energy'})),'energy')}</article><article class="obs-card"><div class="obs-card-head"><div><span>GAIN GES</span><h2>Évolution GES</h2></div></div>${dpeGainBars(applyMatrixSelection(filteredOperations({ignoreCrossKey:'dpeGain:ges'})),'ges')}</article></div>`;
   }
 
   function numericHistogram(ops,key,label,bins=6){
@@ -1751,10 +1778,10 @@
 
   function filterOptions(){
     const ops=baseOperations(), selectedRegions=globalFilterValues('region');
-    const depOps=selectedRegions.length?ops.filter(o=>selectedRegions.some(r=>norm(regionName(o.department))===norm(r))):ops;
+    const depOps=selectedRegions.length?ops.filter(o=>selectedRegions.some(r=>norm(operationRegion(o))===norm(r))):ops;
     return {
       year:uniq(ops.map(o=>o.year)).sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
-      status:uniq(ops.map(o=>o.status)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>regionName(o.department))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
+      status:uniq(ops.map(o=>o.status)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>operationRegion(o))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
       profile:uniq(ops.map(o=>o.profile||'Non précisé')), socialZone:uniq(ops.map(o=>o.socialZone||'Non précisé'))
     };
   }
@@ -1843,287 +1870,316 @@
     return {key,value,label};
   }
 
-  // V6.10 - Editorial project sheet. No source data is altered by this view.
   let projectWindowEl=null;
-  let projectReturnFocus=null;
-  let projectReturnScroll=null;
-  let projectShellWasInert=false;
-  const PF_COVERAGE_KEYS=['structure','roofStructure','roofInsulation','roofR','wallStructure','wallInsulation','wallR','floorStructure','floorInsulation','floorR','windowMaterial','windowGlazing','windowShading','heatingAfter','ecsAfter','ventilation','cooling','cep'];
-  const PF_DPE_COLORS=['#168251','#51a851','#9bb93c','#e1c53d','#e79a38','#d56439','#b9373a'];
-  const PF_TABS=[['general','Vue d\u2019ensemble','home'],['building','B\u00e2timent & \u00e9quipements','building'],['energy','\u00c9nergie & transitions','energy'],['carbon','Carbone & DPE','leaf'],['economics','Donn\u00e9es \u00e9conomiques','coins']];
-
-  function pfIcon(kind){
-    const paths={
-      home:'<path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/>',
-      building:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h1m4 0h1M9 11h1m4 0h1M9 15h1m4 0h1M10 21v-3h4v3"/>',
-      energy:'<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
-      leaf:'<path d="M20 3C10 2 3 7 4 14c1 6 8 7 12 3 4-4 4-10 4-14ZM4 21 16 8"/>',
-      calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-14 5h3m4 0h3"/>',
-      pin:'<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
-      shield:'<path d="m12 2 8 4v6c0 5-8 10-8 10S4 17 4 12V6Z"/><path d="m8 12 3 3 5-6"/>',
-      layers:'<path d="m2 8 10-6 10 6-10 6ZM2 12l10 6 10-6M2 16l10 6 10-6"/>',
-      window:'<rect x="4" y="2" width="16" height="20" rx="1"/><path d="M12 2v20M4 10h16m-4 4v3m-8-3v3"/>',
-      heat:'<rect x="3" y="6" width="4" height="14" rx="2"/><rect x="10" y="6" width="4" height="14" rx="2"/><rect x="17" y="6" width="4" height="14" rx="2"/><path d="M5 3v2m7-2v2m7-2v2M1 11h2m18 4h2"/>',
-      water:'<path d="M12 2C9 7 4 11 4 15a8 8 0 0 0 16 0c0-4-5-8-8-13Z"/><path d="M8 16a4 4 0 0 0 4 4"/>',
-      fan:'<circle cx="12" cy="12" r="2"/><path d="M11 10C4 5 10 0 14 4c2 2 0 5-1 6M14 12c7-4 10 3 5 6-3 1-5-2-6-4M11 14c-1 8-8 6-8 1 0-3 4-3 7-3"/>',
-      snow:'<path d="M12 2v20M3.4 7l17.2 10M3.4 17 20.6 7M9 4l3 3 3-3M9 20l3-3 3 3M3 10l4-1V5M21 14l-4 1v4M3 14l4 1v4M21 10l-4-1V5"/>',
-      chart:'<path d="M3 3v18h18M7 17v-5m5 5V7m5 10v-8"/>',
-      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/>',
-      arrow:'<path d="M4 12h16m-6-6 6 6-6 6"/>',
-      back:'<path d="M20 12H4m6-6-6 6 6 6"/>',
-      print:'<path d="M7 8V3h10v5M7 17H4V9h16v8h-3M7 14h10v7H7zM17 11h.1"/>',
-      close:'<path d="m6 6 12 12M6 18 18 6"/>',
-      check:'<path d="m5 12 4 4L19 6"/>',
-      coins:'<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 4 16 4 16 0V5M4 11v6c0 4 16 4 16 0v-6"/>',
-      file:'<path d="M14 2H5v20h14V7Zm0 0v5h5M8 12h8m-8 4h8"/>',
-      roof:'<path d="m2 12 10-9 10 9M5 12v9h14v-9M8 9h8"/>',
-      floor:'<path d="m2 9 10-5 10 5-10 5ZM2 9v6l10 5 10-5V9M12 14v6"/>',
-      people:'<circle cx="9" cy="7" r="3"/><path d="M3 21v-4a6 6 0 0 1 12 0v4M17 4a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5v2"/>',
-      tag:'<path d="M3 3h8l10 10-8 8L3 11Z"/><circle cx="7" cy="7" r="1"/>',
-      clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>'
-    };
-    return `<svg class="pf-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]||paths.info}</svg>`;
-  }
-  function pfText(v){return String(v??'').replace(/\\?<br\s*\/?\s*>|&lt;br\s*\/?&gt;/gi,' \u00b7 ').replace(/\s+/g,' ').trim();}
-  function pfValue(v){return esc(pfText(v)||'Non renseign\u00e9');}
-  function pfNumber(op,key){
-    const raw=rawValue(op,key);if(typeof raw==='number')return Number.isFinite(raw)?raw:null;
-    const text=String(raw??'').trim().replace(/[\s\u00a0\u202f]/g,'');
-    // Ranges and compound values must stay textual, never become a fabricated mean.
-    if(!/^[+-]?\d+(?:[.,]\d+)?$/.test(text))return null;
-    const n=Number(text.replace(',','.'));return Number.isFinite(n)?n:null;
-  }
-  function pfSelectedRecord(op){
-    const copy={...op};
-    // Display only the selected row: an empty technical cell must not inherit
-    // a sibling building's description through the grouped project model.
-    const keys=[...PF_COVERAGE_KEYS,'roofThickness','wallThickness','floorThickness','heatingBefore','heatingModeAfter','ecsBefore','ecs','tags','mentions','performance','profile','constructionYear'];
-    for(const key of keys){const header=op?.fields?.[key];if(header)copy[key]=op.raw?.[header]??'';}
-    for(const key of ['heatingBefore','heatingAfter','ecsBefore','ecsAfter'])if(copy[key])copy[key]=normalizeEnergyVectorFamily(copy[key]);
-    return copy;
-  }
-  function pfCep(op){return pfNumber(op,'cep')??pfNumber(op,'cepAfter');}
-  function pfDpe(op,key){
-    const text=pfText(rawValue(op,key)).toUpperCase();
-    if(/^[A-G]$/.test(text))return text;
-    const score=text.match(/^([1-7])(?:[.,]0)?(?:\s*\/\s*7)?$/);if(score)return 'ABCDEFG'[Number(score[1])-1];
-    const letter=text.match(/^(?:CLASSE|\u00c9TIQUETTE|ETIQUETTE)\s*[:\-]?\s*([A-G])$/);return letter?letter[1]:'';
-  }
-  function pfReduction(before,after){return before!==null&&after!==null&&before>0?(before-after)/before*100:null;}
-  function pfPercent(n){return `${n>0?'+':''}${fmt(n,1)} %`;}
-  function pfCoverage(op){const available=PF_COVERAGE_KEYS.filter(k=>pfText(rawValue(op,k))!=='').length;return {available,total:PF_COVERAGE_KEYS.length,percent:Math.round(100*available/PF_COVERAGE_KEYS.length)};}
   function projectTechnicalOperations(project){
-    const code=String(project?.code||'');
-    return (sourceTechnicalOperations()||[]).filter(o=>String(o.projectCode||'')===code||(privacy()?.enabled?.()&&o.projectCode&&String(privacy().operationCode(o.projectCode))===code));
+    return (sourceTechnicalOperations()||[]).filter(o=>{
+      const parent=String(o.projectCode||'');
+      return parent===String(project?.code||'')||(privacy()?.enabled?.()&&privacy().operationCode(parent)===String(project?.code||''));
+    });
   }
   function projectTechnicalLabel(op,index){
-    const candidate=Object.entries(op?.raw||{}).find(([k,v])=>/^(batiment|b\u00e2timent|operation technique|op\u00e9ration technique)$/i.test(String(k).trim())&&pfText(v));
-    return candidate?pfText(candidate[1]):`B\u00e2timent / op\u00e9ration ${index+1}`;
+    const raw=op?.raw||{},candidate=Object.entries(raw).find(([k,v])=>/^(batiment|bâtiment|operation technique|opération technique)$/i.test(String(k).trim())&&String(v??'').trim());
+    return candidate?String(candidate[1]).trim():`Bâtiment / opération ${index+1}`;
   }
   function splitProjectTags(value){return String(value||'').split(',').map(x=>x.trim()).filter(Boolean);}
   function projectTags(project,tech){
-    const out=[],seen=new Set(),add=v=>String(v||'').split(/\n|\\?<br\s*\/?\s*>/i).forEach(part=>{const text=part.trim(),key=norm(text);if(text&&!seen.has(key)){seen.add(key);out.push(text);}});
-    const record=tech||project;splitProjectTags(record?.tags).forEach(add);
-    const header=record?.fields?.tags;if(header)(record.rawRows||[record.raw||{}]).forEach(r=>splitProjectTags(r?.[header]).forEach(add));
-    [project?.nature,project?.profile,project?.referential,project?.moaType].forEach(add);
-    cachedOperationTags(record,'mention').forEach(add);cachedOperationTags(record,'performance').forEach(add);
-    if(tech)[tech.structure,tech.wallInsulation,tech.roofInsulation,tech.heatingAfter,tech.ventilation].forEach(add);
-    const constructionYear=tech?tech.constructionYear:project?.constructionYear;if(constructionYear)add(`Construction ${constructionYear}`);
-    return out;
+    const out=[],seen=new Set(),add=v=>{String(v||'').split(/\n|<br\s*\/?\s*>/i).forEach(part=>{const x=part.trim();if(!x)return;const k=norm(x);if(!seen.has(k)){seen.add(k);out.push(x);}});};
+    const addCustom=o=>{splitProjectTags(o?.tags).forEach(add);const h=o?.fields?.tags;if(h)(o.rawRows||[o.raw||{}]).forEach(r=>splitProjectTags(r?.[h]).forEach(add));};
+    addCustom(project);addCustom(tech);add(project?.nature);add(project?.profile);add(project?.referential);add(project?.moaType);
+    cachedOperationTags(project,'mention').forEach(add);cachedOperationTags(project,'performance').forEach(add);
+    if(tech){add(tech.structure);add(tech.wallInsulation);add(tech.roofInsulation);add(tech.heatingAfter);add(tech.ventilation);}
+    const cy=tech?.constructionYear||project?.constructionYear;if(cy)add(`Construction ${cy}`);
+    return out.slice(0,18);
   }
-  function projectHasTag(project,tag){return projectTechnicalOperations(project).some(op=>projectTags(project,op).some(t=>norm(t)===norm(tag)))||projectTags(project,null).some(t=>norm(t)===norm(tag));}
+  function projectHasTag(project,tag){const techs=projectTechnicalOperations(project);return [project,...techs].some(o=>projectTags(project,o).some(t=>norm(t)===norm(tag)));}
   function projectAutoDescription(project,tech){
-    const name=pfText(project.name||project.code),nature=norm(project.nature),loc=[project.city,departmentName(project.department)].filter(Boolean).join(' \u00b7 '),cy=tech?tech.constructionYear:project.constructionYear;
-    const type=/renov/.test(nature)?'un projet de r\u00e9novation':/neuf/.test(nature)?'un projet de construction neuve':'un projet suivi par Prestaterre';
-    let text=`${name} est ${type}`;if(loc)text+=` situ\u00e9 \u00e0 ${loc}`;text+='.';
-    if(project.dwellings||project.buildings)text+=` Le p\u00e9rim\u00e8tre d\u00e9clar\u00e9 comprend ${[project.dwellings?`${fmt(project.dwellings)} logements`:'',project.buildings?`${fmt(project.buildings)} b\u00e2timents`:''].filter(Boolean).join(' et ')}.`;
-    if(cy)text+=` L\u2019ann\u00e9e de construction renseign\u00e9e pour le b\u00e2timent s\u00e9lectionn\u00e9 est ${cy}.`;
-    if(project.referential)text+=` La certification est suivie selon ${pfText(project.referential)}.`;
-    return text;
+    const text=v=>String(v??'').replace(/<br\s*\/?\s*>/gi,' ').trim();
+    const nature=norm(project.nature),parts=[];
+    let sentence=/renov/.test(nature)?'Projet de r\u00e9novation':(/neuf/.test(nature)?'Projet de construction neuve':'Projet suivi par Prestaterre');
+    if(project.dwellings)sentence+=` de ${fmt(project.dwellings)} logements`;
+    if(project.buildings)sentence+=` r\u00e9partis sur ${fmt(project.buildings)} b\u00e2timent${Number(project.buildings)>1?'s':''}`;
+    const loc=[project.city,departmentName(project.department)].filter(Boolean).join(' \u00b7 ');
+    if(loc)sentence+=`, situ\u00e9 \u00e0 ${loc}`;parts.push(sentence+'.');
+    const cy=tech?.constructionYear;if(cy)parts.push(`Construction du b\u00e2timent s\u00e9lectionn\u00e9 : ${text(cy)}.`);
+    const ref=tech?.referential||project.referential;if(ref)parts.push(`R\u00e9f\u00e9rentiel : ${text(ref)}.`);
+    return parts.join(' ');
   }
-  function pfStatus(project){const status=chronologyStatus(project);return {label:pfText(project.rawStatus)||CHRONOLOGY_STATUS_LABELS[status]||'Statut non renseign\u00e9',color:CHRONOLOGY_STATUS_COLORS[status]||'#6e8078'};}
-  function pfCard(title,icon,content,extra='',className=''){return `<section class="pf-card ${className}"><div class="pf-card-head"><h3>${pfIcon(icon)}${esc(title)}</h3>${extra}</div>${content}</section>`;}
-  function pfTabLink(tab,label){return `<button class="pf-text-action" type="button" data-project-tab="${tab}">${esc(label)}${pfIcon('arrow')}</button>`;}
-  function pfDefinition(label,value){return `<div><dt>${esc(label)}</dt><dd>${pfValue(value)}</dd></div>`;}
-  function pfKpi(label,value,subtitle,icon,tone=''){return `<div class="pf-kpi ${tone}"><i>${pfIcon(icon)}</i><div><span>${esc(label)}</span><strong>${esc(value??'\u2014')}</strong><small>${esc(subtitle)}</small></div></div>`;}
-  function pfHero(project,op){
-    const status=pfStatus(project),cov=pfCoverage(op),techs=projectTechnicalOperations(project);
-    return `<section class="pf-hero"><figure class="pf-hero-visual"><img src="assets/building_collectif_clean.png" alt="Illustration g\u00e9n\u00e9rique de b\u00e2timent, et non photographie de ce projet"><figcaption>Illustration g\u00e9n\u00e9rique</figcaption></figure><div class="pf-hero-copy"><span class="pf-eyebrow">${runtime().connected?'FICHE PROJET':'D\u00c9MONSTRATION'} \u00b7 ${esc(project.code)}</span><h2 id="pfProjectTitle">${pfValue(project.name||project.code)}</h2><p class="pf-location">${pfIcon('pin')}${pfValue([project.city,departmentName(project.department)].filter(Boolean).join(' \u00b7 '))}</p><div class="pf-badges">${project.nature?`<span>${pfIcon('building')}${pfValue(project.nature)}</span>`:''}<span class="pf-status" style="--status-color:${status.color}"><i></i>${esc(status.label)}</span>${project.referential?`<span>${pfIcon('shield')}${pfValue(project.referential)}</span>`:''}</div><p class="pf-hero-description">${pfValue(project.moa)}${project.moaGroup?`<span> \u00b7 ${pfValue(project.moaGroup)}</span>`:''}</p><small>1 projet \u00b7 ${techs.length} ${techs.length>1?'op\u00e9rations techniques':'op\u00e9ration technique'} \u00b7 donn\u00e9es du b\u00e2timent s\u00e9lectionn\u00e9</small></div><div class="pf-coverage"><div class="pf-coverage-ring" style="--coverage:${cov.percent}%" role="img" aria-label="${cov.available} champs descriptifs renseign\u00e9s sur ${cov.total}"><div><strong>${cov.available}<small>/${cov.total}</small></strong>${pfIcon('file')}</div></div><b>Donn\u00e9es disponibles</b><span>Champs techniques renseign\u00e9s</span><small>Ce n\u2019est pas un score de performance.</small></div></section>`;
+  function energyChargeEstimate(op){
+    const prices={electricity:.25,gas:.12,district:.14,wood:.10}, factors={electricity:2.3,gas:1,district:1,wood:1};
+    const rows=[['electricity','cepElectricity'],['gas','cepGas'],['district','cepDistrict'],['wood','cepWood']].map(([kind,key])=>({kind,key,ep:rawNumber(op,key)})).filter(x=>x.ep!==null&&x.ep>0);
+    let cost=0,basis='';
+    if(rows.length){rows.forEach(x=>{cost+=(x.ep/factors[x.kind])*prices[x.kind];});basis='décomposition CEP par vecteur renseignée';}
+    else{
+      const cep=rawNumber(op,'cep')??rawNumber(op,'cepAfter');if(cep===null)return {cost:null,basis:'CEP non renseigné'};
+      const vector=norm(`${op.heatingAfter||''} ${op.ecsAfter||''}`);let kind=/rcu|reseau de chaleur/.test(vector)?'district':(/bois|biomasse/.test(vector)?'wood':(/gaz/.test(vector)?'gas':'electricity'));
+      cost=(cep/factors[kind])*prices[kind];basis=`CEP global affecté au vecteur dominant ${kind==='district'?'réseau de chaleur':kind==='wood'?'bois / biomasse':kind==='gas'?'gaz':'électricité / PAC'}`;
+    }
+    return {cost,basis,assumptions:'Hypothèses V6.8 : électricité 0,25 €/kWhEF avec conversion EP→EF 2,30 ; gaz 0,12 €/kWh ; réseau de chaleur 0,14 €/kWh ; bois/biomasse 0,10 €/kWh. Estimation énergétique conventionnelle uniquement : hors abonnement, maintenance, usages non couverts par le CEP, météo réelle et comportement des occupants.'};
   }
-  function pfKpis(project,op){
-    const techs=projectTechnicalOperations(project),cep=pfCep(op),gain=pfReduction(pfNumber(op,'cepBefore'),cep),before=pfDpe(op,'dpeEnergyBefore'),after=pfDpe(op,'dpeEnergyAfter');
-    return `<div class="pf-kpis">${pfKpi('Logements',project.dwellings?fmt(project.dwellings):'\u2014','Total d\u00e9clar\u00e9 du projet','people')}${pfKpi('B\u00e2timents',project.buildings?fmt(project.buildings):'\u2014',`${techs.length} op\u00e9ration${techs.length>1?'s':''} analys\u00e9e${techs.length>1?'s':''}`,'building')}${pfKpi('Certification',project.year||'\u2014','Ann\u00e9e de suivi de certification','calendar')}${pfKpi('CEP projet',cep===null?'\u2014':fmt(cep,1),'kWhEP/m\u00b2.an \u00b7 b\u00e2timent','energy')}${pfKpi('Gain de CEP',gain===null?'\u2014':pfPercent(gain),'Par rapport \u00e0 l\u2019\u00e9tat initial','chart',gain!==null&&gain<0?'is-warning':'')}${pfKpi('DPE \u00e9nergie',`${before||'\u2014'} \u2192 ${after||'\u2014'}`,'Classes d\u00e9clar\u00e9es \u00b7 avant / apr\u00e8s','leaf')}</div>`;
+  function projectMetric(label,value,unit=''){return `<div class="obs-project-metric"><span>${esc(label)}</span><b>${String(value??'').trim()===''?'—':esc(value)}</b><small>${esc(unit)}</small></div>`;}
+  function projectThermalCard(title,icon,structure,insulation,rValue,thickness){
+    const rawR=String(rValue??'').trim(),rv=projectUxNumericValue(rawR),th=String(thickness??'').trim(),bar=Number.isFinite(rv)?Math.max(3,Math.min(100,rv/10*100)):0;
+    return `<article class="obs-project-envelope-card"><header><i>${icon}</i><div><span>${esc(title)}</span><b>${esc(structure||'Structure non renseignée')}</b></div></header><div class="obs-project-envelope-material"><small>Isolation</small><strong>${esc(insulation||'Non renseignée')}</strong></div><div class="obs-project-thermal-line"><div><span>R thermique</span><b>${rawR?esc(rawR):'—'}<small>${rawR&&!/m²|m2|k\/w/i.test(rawR)?' m²·K/W':''}</small></b></div><div><span>Épaisseur</span><b>${th?esc(th):'—'}<small>${th&&!/mm|cm|m\b/i.test(th)?' mm':''}</small></b></div></div><div class="obs-project-rbar"><i style="width:${bar.toFixed(1)}%"></i></div></article>`;
   }
-  function pfIdentity(project,op){return pfCard('Identit\u00e9 du projet','file',`<dl class="pf-definitions">${pfDefinition('Ma\u00eetre d\u2019ouvrage',project.moa)}${pfDefinition('Groupe MOA',project.moaGroup)}${pfDefinition('Construction du b\u00e2timent',op?op.constructionYear:project.constructionYear)}${pfDefinition('Ann\u00e9e de certification',project.year)}${pfDefinition('R\u00e9f\u00e9rentiel',project.referential)}${pfDefinition('Adresse',privacy()?.enabled?.()?'Masqu\u00e9e en mode anonymis\u00e9':project.address)}</dl>`);}
-  function pfChronology(project,op){
-    const status=pfStatus(project),record=op||project,entries=[['\u00c9valuation','evaluationCreatedDate'],['Attestation provisoire','certificationApDate'],['D\u00e9cision d\u00e9finitive','certificationCdDate']];
-    return pfCard('Avancement de la certification','clock',`<div class="pf-timeline">${entries.map(([label,key])=>{const v=rawValue(record,key)||rawValue(project,key);return `<div class="${pfText(v)?'is-known':''}"><i>${pfText(v)?pfIcon('check'):pfIcon('calendar')}</i><b>${esc(label)}</b><small>${pfText(v)?pfValue(v):'Date non renseign\u00e9e'}</small></div>`;}).join('')}</div><div class="pf-status-note" style="--status-color:${status.color}">${pfIcon('shield')}<div><small>STATUT D\u00c9CLAR\u00c9</small><b>${esc(status.label)}</b></div></div><p class="pf-note">Les jalons reprennent uniquement les dates enregistr\u00e9es. Aucun pourcentage d\u2019avancement des travaux n\u2019est d\u00e9duit.</p>`);
+  function projectVectorCep(op,vector){
+    const v=normalizeEnergyVectorFamily(vector);const key=v==='Gaz'?'cepGas':v==='Électricité'||v==='PAC'?'cepElectricity':v==='RCU'?'cepDistrict':v==='Bois / biomasse'?'cepWood':'';return key?rawNumber(op,key):null;
   }
-  function pfResistanceChart(op){
-    const rows=[['Toiture','roofR'],['Fa\u00e7ades','wallR'],['Plancher bas','floorR']].map(([name,key])=>({name,raw:rawValue(op,key),value:pfNumber(op,key)})),max=Math.max(1,...rows.map(r=>r.value??0));
-    return `<div class="pf-resistance-chart">${rows.map(r=>`<div class="pf-r-row"><span>${esc(r.name)}</span><div class="pf-r-track">${r.value!==null&&r.value>=0?`<i style="width:${100*r.value/max}%"></i>`:''}</div><b>${pfText(r.raw)?pfValue(r.raw):'\u2014'}</b></div>`).join('')}</div><p class="pf-note">R des isolants en m\u00b2\u00b7K/W. \u00c9chelle relative aux parois du b\u00e2timent ; pas de seuil r\u00e9glementaire. Les valeurs multiples restent textuelles.</p>`;
-  }
-  function pfEnvelopePreview(op){return pfCard('Syst\u00e8me constructif & enveloppe','layers',`<p class="pf-structure-title">${pfValue(op.structure||op.wallStructure)}</p>${pfResistanceChart(op)}`,pfTabLink('building','D\u00e9tails'));}
-  function projectVectorCep(op,vector){const v=normalizeEnergyVectorFamily(vector),key=v==='Gaz'?'cepGas':v==='\u00c9lectricit\u00e9'||v==='PAC'?'cepElectricity':v==='RCU'?'cepDistrict':v==='Bois / biomasse'?'cepWood':'';return key?pfNumber(op,key):null;}
-  function pfSystemData(op){return [
-    {name:'Chauffage',icon:'heat',vector:op.heatingAfter||'',description:op.heatingModeAfter||op.heatingAfter,cep:projectVectorCep(op,op.heatingAfter),cepLabel:'CEP du vecteur \u00b7 total b\u00e2timent'},
-    {name:'Eau chaude sanitaire',icon:'water',vector:op.ecsAfter||'',description:op.ecs||op.ecsAfter,cep:projectVectorCep(op,op.ecsAfter),cepLabel:'CEP du vecteur \u00b7 total b\u00e2timent'},
-    {name:'Ventilation',icon:'fan',vector:'',description:op.ventilation,cep:pfNumber(op,'cepAuxVent'),cepLabel:'CEP auxiliaires de ventilation'},
-    {name:'Rafra\u00eechissement',icon:'snow',vector:'',description:op.cooling,cep:pfNumber(op,'cepCooling'),cepLabel:'CEP refroidissement'}
-  ];}
-  function pfSystemPreview(op){return pfCard('\u00c9quipements CVC','fan',`<div class="pf-systems-preview">${pfSystemData(op).map(s=>`<div style="--vector-color:${s.vector?vectorColor(s.vector):'#47776b'}"><i>${pfIcon(s.icon)}</i><span><b>${esc(s.name)}</b><small>${pfValue(s.vector||s.description)}</small></span></div>`).join('')}</div>`,pfTabLink('building','D\u00e9tails'));}
-  function pfPairChart(title,before,after,unit,beforeLabel='Avant travaux',afterLabel='Apr\u00e8s travaux'){
-    const max=Math.max(before??0,after??0,1),gain=unit==='\u00b0C'?null:pfReduction(before,after);
-    return `<div class="pf-pair"><div class="pf-pair-heading"><div><h4>${esc(title)}</h4><small>${esc(unit)}</small></div>${gain===null?'':`<span class="pf-gain ${gain<0?'is-negative':''}">${gain<0?'+':'\u2212'}${fmt(Math.abs(gain),1)} %</span>`}</div><div class="pf-pair-bars">${[[beforeLabel,before,'before'],[afterLabel,after,'after']].map(([label,v,kind])=>`<div><b>${v===null?'\u2014':fmt(v,1)}</b><div class="pf-bar-area">${v===null?'<span class="pf-bar-missing">Non renseign\u00e9</span>':`<i class="${kind}" style="height:${Math.max(0,100*v/max)}%"></i>`}</div><small>${esc(label)}</small></div>`).join('')}</div></div>`;
-  }
-  function pfDpeArrow(letter){return letter?`<b class="pf-dpe-arrow" style="--dpe-color:${PF_DPE_COLORS['ABCDEFG'.indexOf(letter)]}">${letter}</b>`:'<b class="pf-dpe-unknown">\u2014</b>';}
-  function pfDpePanel(op,ges=false,compact=false){
-    const prefix=ges?'dpeGes':'dpeEnergy',before=pfDpe(op,prefix+'Before'),after=pfDpe(op,prefix+'After'),gain=before&&after?'ABCDEFG'.indexOf(before)-'ABCDEFG'.indexOf(after):null;
-    return `<div class="pf-dpe-panel ${compact?'is-compact':''}"><h4>${ges?'\u00c9tiquette GES':'\u00c9tiquette DPE \u00e9nergie'}</h4><div class="pf-dpe-pair"><div><small>Avant</small>${pfDpeArrow(before)}</div><i>${pfIcon('arrow')}</i><div><small>Apr\u00e8s</small>${pfDpeArrow(after)}</div></div><p class="pf-dpe-gain ${gain!==null&&gain<0?'is-negative':''}">${gain===null?'Comparaison non disponible':gain>0?`${gain} classe${gain>1?'s':''} gagn\u00e9e${gain>1?'s':''}`:gain<0?`${-gain} classe${gain<-1?'s':''} perdue${gain<-1?'s':''}`:'Classe inchang\u00e9e'}</p><div class="pf-dpe-scale" aria-label="\u00c9chelle de A \u00e0 G">${Array.from('ABCDEFG').map((l,i)=>`<span style="--dpe-color:${PF_DPE_COLORS[i]}" class="${l===after?'is-selected':''}">${l}</span>`).join('')}</div><p class="pf-note">Classes de la source ; aucun DPE n\u2019est calcul\u00e9 \u00e0 partir du CEP.</p></div>`;
-  }
-  function pfWindows(op){return `<div class="pf-windows">${[['Mat\u00e9riau','windowMaterial'],['Vitrage','windowGlazing'],['Occultations','windowShading']].map(([label,key])=>`<div>${pfIcon('window')}<span>${esc(label)}</span><strong>${pfValue(op[key]||rawValue(op,key))}</strong></div>`).join('')}</div>`;}
-  function pfSynthesis(project,op){
-    const cep=pfCep(op),before=pfNumber(op,'cepBefore'),gain=pfReduction(before,cep),b=pfDpe(op,'dpeEnergyBefore'),a=pfDpe(op,'dpeEnergyAfter'),ub=pfNumber(op,'ubatBefore'),ua=pfNumber(op,'ubatAfter'),cov=pfCoverage(op),items=[];
-    if(gain!==null)items.push(['energy',`${gain<0?'Hausse':'Baisse'} du CEP de ${fmt(Math.abs(gain),1)} %`,`${fmt(before,1)} \u2192 ${fmt(cep,1)} kWhEP/m\u00b2.an`]);
-    else if(cep!==null)items.push(['energy',`CEP projet : ${fmt(cep,1)} kWhEP/m\u00b2.an`,'Consommation conventionnelle de l\u2019\u00e9tude']);
-    if(b&&a)items.push(['leaf',`DPE \u00e9nergie : ${b} \u2192 ${a}`,'\u00c9tiquettes d\u00e9clar\u00e9es']);
-    if(ub!==null&&ua!==null)items.push(['layers',`Ubat : ${fmt(ub,3)} \u2192 ${fmt(ua,3)}`,'W/m\u00b2\u00b7K \u00b7 coefficient global d\u2019enveloppe']);
-    if(op.heatingAfter)items.push(['heat',`Chauffage : ${pfText(op.heatingAfter)}`,op.heatingBefore?`Avant travaux : ${pfText(op.heatingBefore)}`:'Vecteur avant travaux non renseign\u00e9']);
-    if(!items.length)items.push(['info','Donn\u00e9es techniques \u00e0 compl\u00e9ter','Aucune conclusion de performance ne peut \u00eatre formul\u00e9e.']);
-    return `<aside class="pf-side"><section class="pf-synthesis"><h3>${pfIcon('leaf')}En synth\u00e8se</h3><div>${items.map(([icon,title,text])=>`<article>${pfIcon(icon)}<div><b>${esc(title)}</b><small>${esc(text)}</small></div></article>`).join('')}</div></section>${pfCard('P\u00e9rim\u00e8tre de lecture','building',`<p class="pf-note">Les logements et b\u00e2timents du bandeau concernent le projet. Les indicateurs techniques concernent uniquement la ligne s\u00e9lectionn\u00e9e.</p><div class="pf-scope-line"><span>Projet</span><b>${esc(project.code)}</b></div><div class="pf-scope-line"><span>Op\u00e9rations analys\u00e9es</span><b>${projectTechnicalOperations(project).length}</b></div><div class="pf-scope-line"><span>Champs techniques</span><b>${cov.available} / ${cov.total}</b></div>`)}${pfCard('Territoire','pin',`<p class="pf-territory-name">${pfValue(project.city)}</p><dl class="pf-definitions pf-definitions-small">${pfDefinition('D\u00e9partement',departmentName(project.department))}${pfDefinition('R\u00e9gion',regionName(project.department))}${pfDefinition('Intercommunalit\u00e9',project.intercommunality)}</dl>`)}<div class="pf-source-note">${pfIcon('info')}<span>Lecture automatique des donn\u00e9es disponibles. Les absences ne sont pas remplac\u00e9es par des z\u00e9ros.</span></div></aside>`;
-  }
-  function pfTagResults(tag){
-    if(!tag)return '';
-    const projects=baseOperations(),parents=new Map(projects.map(p=>[String(p.code),p]));
-    const matches=baseTechnicalOperations().map(pfSelectedRecord).map(op=>({op,project:parents.get(String(op.projectCode))||parents.get(String(privacy()?.operationCode?.(op.projectCode)))})).filter(x=>x.project&&projectTags(x.project,x.op).some(t=>norm(t)===norm(tag)));
-    const page=Math.max(1,Math.min(state.projectTagPage||1,Math.ceil(matches.length/18)||1)),visible=matches.slice((page-1)*18,page*18);
-    return `<section class="pf-card pf-tag-results"><div class="pf-card-head"><h3>${pfIcon('tag')}${esc(tag)}</h3><button type="button" class="pf-text-action" data-project-tag-clear="1">Fermer ${pfIcon('close')}</button></div><p>${matches.length} op\u00e9ration${matches.length>1?'s':''} technique${matches.length>1?'s':''} partage${matches.length>1?'nt':''} ce tag.</p><div class="pf-tag-results-grid">${visible.map(x=>`<button type="button" data-project-open="${attr(x.project.code)}" data-project-open-tech="${attr(x.op.code)}"><small>${esc(x.project.code)}</small><b>${pfValue(x.project.name)}</b><span>${pfValue(projectTechnicalLabel(x.op,Math.max(0,(x.op.technicalIndex||1)-1)))}</span></button>`).join('')||'<span class="pf-note">Aucune autre op\u00e9ration disponible.</span>'}</div>${matches.length>18?`<div class="pf-pager"><button type="button" data-project-tag-page="${page-1}" ${page<=1?'disabled':''}>Pr\u00e9c\u00e9dent</button><span>${page} / ${Math.ceil(matches.length/18)}</span><button type="button" data-project-tag-page="${page+1}" ${page*18>=matches.length?'disabled':''}>Suivant</button></div>`:''}</section>`;
-  }
-  function pfTags(project,op){const tags=projectTags(project,op);return `<section class="pf-card pf-tags"><div class="pf-card-head"><h3>${pfIcon('tag')}Tags de l\u2019op\u00e9ration</h3><small>Cliquer pour retrouver les op\u00e9rations associ\u00e9es</small></div><div class="pf-tag-cloud">${tags.map(t=>`<button type="button" data-project-tag="${attr(t)}" class="${norm(state.projectTagFilter)===norm(t)?'is-active':''}">${esc(t)}</button>`).join('')||'<span class="pf-note">Aucun tag renseign\u00e9.</span>'}</div></section>`;}
-  function pfCertificationFrame(project,op){return pfCard('Cadre de certification','shield',`<dl class="pf-cert-list">${pfDefinition('R\u00e9f\u00e9rentiel',op.referential||project.referential)}${pfDefinition('Mentions & labels',op.mentions||project.mentions)}${pfDefinition('Performance',op.performance||project.performance)}${pfDefinition('Profil',op.profile||project.profile)}</dl>`);}
-  function projectGeneralHtml(project,op){
-    return `${pfTags(project,op)}${pfTagResults(state.projectTagFilter)}<div class="pf-dashboard"><div class="pf-main-grid">${pfIdentity(project,op)}${pfChronology(project,op)}${pfEnvelopePreview(op)}${pfSystemPreview(op)}${pfCard('Performances \u00e9nerg\u00e9tiques du b\u00e2timent','chart',`<div class="pf-performance-overview">${pfPairChart('Consommation d\u2019\u00e9nergie primaire',pfNumber(op,'cepBefore'),pfCep(op),'kWhEP/m\u00b2.an')}${pfDpePanel(op,false,true)}${pfDpePanel(op,true,true)}</div>`,pfTabLink('energy','Explorer'),'pf-span-2')}${pfCard('Menuiseries ext\u00e9rieures','window',pfWindows(op),'','pf-span-2')}${pfCard('Description du projet','file',`<p class="pf-description">${esc(projectAutoDescription(project,op))}</p><p class="pf-note">Description g\u00e9n\u00e9r\u00e9e \u00e0 partir des champs renseign\u00e9s ; aucune caract\u00e9ristique n\u2019est d\u00e9duite de l\u2019illustration.</p>`,'','pf-span-2')}${pfCertificationFrame(project,op)}</div>${pfSynthesis(project,op)}</div>`;
-  }
-  function projectMetric(label,value,unit=''){return `<div class="pf-metric"><span>${esc(label)}</span><b>${pfText(value)?pfValue(value):'\u2014'}</b><small>${esc(unit)}</small></div>`;}
-  function projectThermalCard(title,icon,structure,insulation,rValue,thickness){return `<article class="pf-thermal-card"><div class="pf-thermal-heading">${pfIcon(icon)}<div><span>${esc(title)}</span><h4>${pfValue(structure)}</h4></div></div><div class="pf-thermal-insulation"><span>Isolant d\u00e9clar\u00e9</span><b>${pfValue(insulation)}</b></div><div class="pf-thermal-numbers">${projectMetric('R isolant',rValue,'m\u00b2\u00b7K/W')}${projectMetric('\u00c9paisseur',thickness,pfText(thickness)&&!/mm|cm|\bm\b/i.test(String(thickness))?'unit\u00e9 selon la source':'')}</div></article>`;}
-  function projectSystemCard(title,icon,vector,description,cepValue,cepLabel){return `<article class="pf-system-card" style="--vector-color:${vector?vectorColor(vector):'#42766e'}"><div class="pf-system-title"><i>${pfIcon(icon)}</i><h4>${esc(title)}</h4></div>${vector?`<span class="pf-vector">${esc(vector)}</span>`:''}<p>${pfValue(description)}</p><div class="pf-system-cep"><span>${esc(cepLabel)}</span><b>${cepValue===null?'\u2014':fmt(cepValue,1)}${cepValue===null?'':'<small>kWhEP/m\u00b2.an</small>'}</b></div></article>`;}
-  function pfCepRows(op,kind){
-    const definitions=kind==='vector'?[['\u00c9lectricit\u00e9','cepElectricity'],['Gaz','cepGas'],['RCU','cepDistrict'],['Bois / biomasse','cepWood']]:[['Refroidissement','cepCooling'],['\u00c9clairage','cepLighting'],['Aux. ventilation','cepAuxVent'],['Aux. distribution','cepAuxDist'],['D\u00e9placement','cepMobility']];
-    return definitions.map(([name,key])=>({name,value:pfNumber(op,key)})).filter(x=>x.value!==null&&x.value>=0);
-  }
-  function pfCepPie(op,kind){
-    const rows=pfCepRows(op,kind),positive=rows.filter(r=>r.value>0),sum=rows.reduce((s,r)=>s+r.value,0),total=pfCep(op),title=kind==='vector'?'CEP par vecteur':'CEP par usage',colors=['#245d46','#769d7a','#739cad','#ba9957','#977c9e'];
-    if(!positive.length)return pfCard(title,'chart',`<div class="pf-empty">${pfIcon('chart')}<b>${rows.length?'Aucun poste positif':'D\u00e9composition non renseign\u00e9e'}</b><p>${rows.length?'Les postes renseign\u00e9s sont nuls.':'La valeur globale du CEP ne permet pas de reconstruire sa r\u00e9partition.'}</p></div>`);
-    let acc=0;const stops=positive.map((r,i)=>{r.color=kind==='vector'?vectorColor(r.name):colors[i%colors.length];const begin=100*acc/sum;acc+=r.value;return `${r.color} ${begin.toFixed(3)}% ${(100*acc/sum).toFixed(3)}%`;});
-    const matchesTotal=total!==null&&Math.abs(sum-total)<=Math.max(.1,total*.01);
-    const note=kind==='usage'?'Chauffage et ECS ne sont pas ventil\u00e9s dans les colonnes actuelles : aucune r\u00e9partition n\u2019est invent\u00e9e.':matchesTotal?'La somme des vecteurs est coh\u00e9rente avec le CEP global \u00e0 l\u2019arrondi pr\u00e8s.':total===null?'CEP global absent : la couverture ne peut pas \u00eatre contr\u00f4l\u00e9e.':`Somme des vecteurs : ${fmt(sum,1)} ; CEP global : ${fmt(total,1)}. P\u00e9rim\u00e8tre ou donn\u00e9es \u00e0 v\u00e9rifier.`;
-    return pfCard(title,'chart',`<div class="pf-donut-layout"><div class="pf-donut" style="background:conic-gradient(${stops.join(',')})" role="img" aria-label="R\u00e9partition des postes renseign\u00e9s, somme ${fmt(sum,1)} kWhEP par m\u00b2 et par an"><div><b>${fmt(sum,1)}</b><small>kWhEP/m\u00b2.an</small></div></div><div class="pf-donut-legend">${positive.map(r=>`<div><i style="background:${r.color}"></i><span>${esc(r.name)}</span><b>${fmt(r.value,2)}<small>${fmt(100*r.value/sum,1)} %</small></b></div>`).join('')}</div></div><p class="pf-note">Parts calcul\u00e9es sur les seuls postes renseign\u00e9s. ${esc(note)}</p>`);
+  function projectSystemCard(title,icon,vector,description,cepValue,cepLabel){
+    const v=vector||'Non renseigné',cep=cepValue===null||cepValue===undefined?null:Number(cepValue);
+    return `<article class="obs-project-system-card" style="${vectorColorStyle(v)}"><header><i>${icon}</i><div><span>${esc(title)}</span><b>${esc(v)}</b></div></header><p>${esc(description||'Description non renseignée')}</p><div class="obs-project-system-foot"><span>${esc(cepLabel||'CEP associé')}</span><strong>${Number.isFinite(cep)?`${fmt(cep,1)} <small>kWhEP/m².an</small>`:'—'}</strong></div></article>`;
   }
   function projectBuildingHtml(project,op){
-    return `<div class="pf-tab-intro"><span class="pf-eyebrow">B\u00c2TIMENT S\u00c9LECTIONN\u00c9</span><h3>Analyse du syst\u00e8me constructif & enveloppe</h3><p>Typologie structurelle, menuiseries et descriptif thermique des parois.</p></div><div class="pf-building-layout"><div class="pf-thermal-grid">${projectThermalCard('Toiture / plancher haut','roof',op.roofStructure,op.roofInsulation,rawValue(op,'roofR'),rawValue(op,'roofThickness'))}${projectThermalCard('Fa\u00e7ades / parois verticales','layers',op.wallStructure,op.wallInsulation,rawValue(op,'wallR'),rawValue(op,'wallThickness'))}${projectThermalCard('Plancher bas','floor',op.floorStructure,op.floorInsulation,rawValue(op,'floorR'),rawValue(op,'floorThickness'))}</div><div class="pf-two-col">${pfCard('R\u00e9sistances thermiques des isolants','layers',pfResistanceChart(op))}${pfCard('Coefficient global d\u2019enveloppe','chart',pfPairChart('Ubat',pfNumber(op,'ubatBefore'),pfNumber(op,'ubatAfter'),'W/m\u00b2\u00b7K'))}</div>${pfCard('Menuiseries ext\u00e9rieures','window',pfWindows(op))}<div class="pf-tab-intro"><span class="pf-eyebrow">CVC & CONSOMMATIONS</span><h3>\u00c9quipements CVC & consommations CEP associ\u00e9es</h3><p>Production de chauffage, eau chaude sanitaire, ventilation et rafra\u00eechissement.</p></div><div class="pf-system-grid">${pfSystemData(op).map(s=>projectSystemCard(s.name,s.icon,s.vector,s.description,s.cep,s.cepLabel)).join('')}</div><p class="pf-callout">${pfIcon('info')}Le CEP d\u2019un vecteur est un total b\u00e2timent. Lorsqu\u2019il appara\u00eet dans les cartes Chauffage et ECS, il ne doit pas \u00eatre additionn\u00e9 deux fois ni attribu\u00e9 \u00e0 ces usages.</p><div class="pf-two-col">${pfCepPie(op,'vector')}${pfCepPie(op,'usage')}</div></div>`;
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';
+    const heatVector=op.heatingAfter||op.heatingBefore||'',ecsVector=op.ecsAfter||op.ecsBefore||'',heatCep=projectVectorCep(op,heatVector),ecsCep=projectVectorCep(op,ecsVector),ventCep=rawNumber(op,'cepAuxVent'),coolCep=rawNumber(op,'cepCooling');
+    const vectorRows=[['Électricité','cepElectricity'],['Gaz','cepGas'],['Réseau de chaleur','cepDistrict'],['Bois / biomasse','cepWood']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    const usageRows=[['Refroidissement','cepCooling'],['Éclairage','cepLighting'],['Aux. ventilation','cepAuxVent'],['Aux. distribution','cepAuxDist'],['Déplacement','cepMobility']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    return `<div class="obs-project-building"><section class="obs-project-building-hero"><div><span>BÂTIMENT & ÉQUIPEMENTS</span><h3>Analyse du système constructif & enveloppe</h3><p>Typologie structurelle, menuiseries et lecture thermique des parois pour l'opération / bâtiment sélectionné.</p></div><div class="obs-project-building-kpis">${projectMetric('Structure',normalizeStructureFamily(op.structure||op.wallStructure)||op.structure||'—')}${projectMetric('Ubat projet',rawValue(op,'ubatAfter'),'W/m²·K')}${projectMetric('R façade',rawValue(op,'wallR'),'m²·K/W')}${projectMetric('R toiture',rawValue(op,'roofR'),'m²·K/W')}</div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>01 · ENVELOPPE</span><h3>Parois et performances thermiques</h3></div><small>Valeurs du bâtiment sélectionné</small></div><div class="obs-project-envelope-grid">${projectThermalCard('Toiture / plancher haut','⌂',op.roofStructure,op.roofInsulation,rawValue(op,'roofR'),rawValue(op,'roofThickness'))}${projectThermalCard('Façades / parois verticales','▦',op.wallStructure,op.wallInsulation,rawValue(op,'wallR'),rawValue(op,'wallThickness'))}${projectThermalCard('Plancher bas','▱',op.floorStructure,op.floorInsulation,rawValue(op,'floorR'),rawValue(op,'floorThickness'))}</div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>02 · MENUISERIES</span><h3>Composition des baies</h3></div></div><div class="obs-project-window-grid"><article><i>▤</i><span>Matériau</span><b>${esc(op.windowMaterial||'—')}</b></article><article><i>◫</i><span>Vitrage</span><b>${esc(op.windowGlazing||'—')}</b></article><article><i>▥</i><span>Occultations</span><b>${esc(op.windowShading||'—')}</b></article></div></section><section class="obs-project-section-block"><div class="obs-project-section-head"><div><span>03 · CVC & ECS</span><h3>Équipements techniques & consommations CEP associées</h3></div><small>Le CEP par vecteur est un total bâtiment : il n'est pas attribué à un usage lorsqu'il n'est pas distingué dans la source.</small></div><div class="obs-project-system-grid">${projectSystemCard('Chauffage','♨',heatVector,op.heatingModeAfter||op.heatingAfter,heatCep,'CEP du vecteur bâtiment')}${projectSystemCard('Eau chaude sanitaire','♨',ecsVector,op.ecs||op.ecsAfter,ecsCep,'CEP du vecteur bâtiment')}${projectSystemCard('Ventilation','↻','Électricité',op.ventilation,ventCep,'CEP auxiliaires ventilation')}${projectSystemCard('Rafraîchissement','❄',op.cooling&&norm(op.cooling)!=='aucun'?'Électricité':'Aucun',op.cooling||'Aucun',coolCep,'CEP refroidissement')}</div><div class="obs-grid-2 obs-project-building-charts"><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR VECTEUR</span><h3>Répartition énergétique déclarée</h3></div></div>${vectorRows.length?pieDistribution(vectorRows,{maxItems:8,colorFn:vectorColor}):'<div class="obs-empty">Pas de CEP par vecteur renseigné.</div>'}</article><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR USAGE</span><h3>Usages disponibles dans OPERATIONS</h3></div></div>${usageRows.length?pieDistribution(usageRows,{maxItems:8}):'<div class="obs-empty">Pas de décomposition CEP par usage disponible.</div>'}</article></div></section></div>`;
   }
-  function pfRoutes(op){return `<div class="pf-two-col">${[['Chauffage','heat',op.heatingBefore,op.heatingAfter],['Eau chaude sanitaire','water',op.ecsBefore,op.ecsAfter]].map(([title,icon,before,after])=>pfCard(title,icon,`<div class="pf-route"><div><small>Avant travaux</small><b style="--vector-color:${vectorColor(before||'Aucun')}">${pfValue(before)}</b></div>${pfIcon('arrow')}<div><small>Apr\u00e8s travaux</small><b style="--vector-color:${vectorColor(after||'Aucun')}">${pfValue(after)}</b></div></div>`)).join('')}</div>`;}
-  function energyChargeEstimate(op){
-    const assumptions='Hypoth\u00e8ses de simulation, non tarifs de march\u00e9 : \u00e9lectricit\u00e9 0,25 \u20ac/kWhEF et facteur EP/EF de 2,30 ; gaz 0,12 \u20ac/kWhEF ; r\u00e9seau de chaleur 0,14 \u20ac/kWhEF ; bois 0,10 \u20ac/kWhEF (facteur 1 pour ces trois vecteurs). Param\u00e8tres historiques conserv\u00e9s, \u00e0 adapter au cadre de l\u2019\u00e9tude et aux contrats. Le m\u00b2 est celui de la surface de r\u00e9f\u00e9rence du CEP, pas n\u00e9cessairement la surface habitable. Hors abonnement, entretien, autres usages, m\u00e9t\u00e9o et comportement des occupants.';
-    const rows=[['cepElectricity',.25,2.3],['cepGas',.12,1],['cepDistrict',.14,1],['cepWood',.10,1]].map(([key,price,factor])=>({value:pfNumber(op,key),price,factor})).filter(r=>r.value!==null&&r.value>=0);
-    if(!rows.length)return {cost:null,basis:'D\u00e9composition CEP par vecteur requise : pas d\u2019affectation arbitraire du CEP global.',assumptions};
-    const sum=rows.reduce((s,r)=>s+r.value,0),total=pfCep(op),partial=total===null||Math.abs(sum-total)>Math.max(.1,total*.01),cost=rows.reduce((s,r)=>s+r.value/r.factor*r.price,0);
-    return {cost,basis:partial?'Estimation limit\u00e9e aux vecteurs renseign\u00e9s ; somme diff\u00e9rente du CEP global ou CEP global absent.':'Estimation sur la d\u00e9composition CEP par vecteur d\u00e9clar\u00e9e.',assumptions};
-  }
+
   function projectEnergyHtml(project,op){
-    const c=energyChargeEstimate(op);
-    return `<div class="pf-tab-intro"><span class="pf-eyebrow">\u00c9NERGIE & TRANSITIONS</span><h3>Du syst\u00e8me initial aux performances du projet</h3><p>Chaque comparaison utilise les valeurs de l\u2019op\u00e9ration technique s\u00e9lectionn\u00e9e.</p></div>${pfRoutes(op)}<div class="pf-two-col">${pfCard('\u00c9volution du CEP','energy',pfPairChart('Consommation conventionnelle',pfNumber(op,'cepBefore'),pfCep(op),'kWhEP/m\u00b2.an'))}${pfCard('Bbio projet / maximum','home',pfPairChart('Besoin bioclimatique',pfNumber(op,'bbioMax'),pfNumber(op,'bbio'),'points','Bbio max','Bbio projet'))}${pfCard('Confort d\u2019\u00e9t\u00e9 \u00b7 DH','snow',pfPairChart('Degr\u00e9s-heures',pfNumber(op,'dhMax'),pfNumber(op,'dh'),'\u00b0C\u00b7h','DH max','DH projet'))}${pfCard('Confort d\u2019\u00e9t\u00e9 \u00b7 TIC','snow',pfPairChart('Temp\u00e9rature int\u00e9rieure conventionnelle',pfNumber(op,'ticRef'),pfNumber(op,'tic'),'\u00b0C','TIC ref','TIC projet'))}</div><div class="pf-metrics-strip">${projectMetric('CEP max',rawValue(op,'cepMax'),'kWhEP/m\u00b2.an')}${projectMetric('CEP non renouvelable',rawValue(op,'cepnr'),'kWhEP/m\u00b2.an')}${projectMetric('CEP,nr max',rawValue(op,'cepnrMax'),'kWhEP/m\u00b2.an')}${projectMetric('Ubat initial',rawValue(op,'ubatBefore'),'W/m\u00b2\u00b7K')}${projectMetric('Ubat projet',rawValue(op,'ubatAfter'),'W/m\u00b2\u00b7K')}</div><div class="pf-two-col">${pfCepPie(op,'usage')}${pfCepPie(op,'vector')}</div><section class="pf-charge"><div><span class="pf-eyebrow">SIMULATION DE CO\u00dbT \u00c9NERG\u00c9TIQUE</span><strong>${c.cost===null?'Non calculable':`${fmt(c.cost,1)} <small>\u20ac/m\u00b2.an</small>`}</strong><p>${esc(c.basis)}</p></div><details><summary>Postulats et limites du calcul</summary><p>Co\u00fbt = \u03a3 (CEP du vecteur \u00f7 facteur EP/EF \u00d7 prix du kWhEF).</p><p>${esc(c.assumptions)}</p><b>Ce r\u00e9sultat n\u2019est ni une facture ni une pr\u00e9vision de charges locatives.</b></details></section>`;
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';
+    const charges=energyChargeEstimate(op),usage=[['Refroidissement','cepCooling'],['Éclairage','cepLighting'],['Aux. ventilation','cepAuxVent'],['Aux. distribution','cepAuxDist'],['Déplacement','cepMobility']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0),vectors=[['Électricité','cepElectricity'],['Gaz','cepGas'],['Réseau de chaleur','cepDistrict'],['Bois / biomasse','cepWood']].map(([name,key])=>({name,value:rawNumber(op,key)})).filter(x=>x.value!==null&&x.value>0);
+    return `<div class="obs-project-energy"><div class="obs-project-route-grid"><article><span>CHAUFFAGE</span><b class="obs-project-vector-pill" style="${vectorColorStyle(op.heatingBefore||'')}">${esc(op.heatingBefore||'—')}</b><i>→</i><b class="obs-project-vector-pill" style="${vectorColorStyle(op.heatingAfter||'')}">${esc(op.heatingAfter||'—')}</b><small>${esc(op.heatingModeAfter||'')}</small></article><article><span>ECS</span><b class="obs-project-vector-pill" style="${vectorColorStyle(op.ecsBefore||'')}">${esc(op.ecsBefore||'—')}</b><i>→</i><b class="obs-project-vector-pill" style="${vectorColorStyle(op.ecsAfter||op.ecs||'')}">${esc(op.ecsAfter||op.ecs||'—')}</b><small>${esc(op.ecs||'')}</small></article></div><div class="obs-project-metric-grid">${projectMetric('CEP projet',rawValue(op,'cep'),'kWhEP/m².an')}${projectMetric('CEP max',rawValue(op,'cepMax'),'kWhEP/m².an')}${projectMetric('Bbio projet',rawValue(op,'bbio'),'points')}${projectMetric('Bbio max',rawValue(op,'bbioMax'),'points')}${projectMetric('DH projet',rawValue(op,'dh'),'°C·h')}${projectMetric('DH max',rawValue(op,'dhMax'),'°C·h')}${projectMetric('TIC projet',rawValue(op,'tic'),'°C')}${projectMetric('TIC ref',rawValue(op,'ticRef'),'°C')}${projectMetric('Ubat initial',rawValue(op,'ubatBefore'),'W/m²·K')}${projectMetric('Ubat projet',rawValue(op,'ubatAfter'),'W/m²·K')}</div><section class="obs-project-charge"><div><span>ESTIMATION DES CHARGES ÉNERGÉTIQUES</span><strong>${charges.cost===null?'—':`${fmt(charges.cost,1)} €/m².an`}</strong><p>${esc(charges.basis)}</p></div><small>${esc(charges.assumptions||'Le CEP est une consommation conventionnelle et ne constitue pas une facture prévisionnelle.')}</small></section><div class="obs-grid-2 obs-project-cep-split"><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR USAGE</span><h3>Répartition déclarée</h3></div></div>${usage.length?pieDistribution(usage,{maxItems:8}):'<div class="obs-empty">Pas de décomposition par usage.</div>'}</article><article class="obs-card"><div class="obs-card-head"><div><span>CEP PAR VECTEUR</span><h3>Répartition déclarée</h3></div></div>${vectors.length?pieDistribution(vectors,{maxItems:8,colorFn:vectorColor}):'<div class="obs-empty">Pas de décomposition par vecteur.</div>'}</article></div></div>`;
   }
-  function projectDpeBadge(letter){return pfDpeArrow(letter);}
+  function projectDpeBadge(letter){const l=String(letter||'').toUpperCase().match(/[A-G]/)?.[0]||'';return l?`<b class="obs-dpe-chevron dpe-${l.toLowerCase()}">${l}</b>`:'<b class="obs-dpe-chevron">—</b>';}
   function projectValueGauge(label,value,max,unit=''){
-    const v=typeof value==='number'&&Number.isFinite(value)&&value>=0?value:null,m=typeof max==='number'&&Number.isFinite(max)&&max>0?max:null,scale=Math.max(v??0,m??0,1)*1.12,ok=v!==null&&m!==null;
-    return `<article class="pf-gauge"><header><h4>${esc(label)}</h4><strong>${v===null?'\u2014':fmt(v,1)}<small>${esc(unit)}</small></strong></header>${ok?`<div class="pf-gauge-track"><i class="${v>m?'is-over':''}" style="width:${100*v/scale}%"></i><b style="left:${100*m/scale}%" title="Seuil ${fmt(m,1)}"></b></div><div class="pf-gauge-axis"><span>0</span><b>Seuil : ${fmt(m,1)}</b></div><p class="pf-gauge-result ${v>m?'is-over':''}">${v<=m?'Sous le seuil renseign\u00e9':'Au-dessus du seuil renseign\u00e9'} \u00b7 ${fmt(Math.abs(v-m),1)} ${esc(unit)} d\u2019\u00e9cart</p>`:`<div class="pf-empty-small">${v===null?'Valeur non renseign\u00e9e':'Seuil non renseign\u00e9'} \u00b7 comparaison indisponible</div>`}</article>`;
+    const v=(value===null||value===undefined||value==='')?NaN:Number(value),m=(max===null||max===undefined||max==='')?NaN:Number(max),ok=Number.isFinite(v)&&Number.isFinite(m)&&m>0,ratio=ok?Math.max(0,Math.min(1.25,v/m)):0;
+    return `<article class="obs-project-value-gauge"><header><span>${esc(label)}</span><b>${Number.isFinite(v)?fmt(v,1):'—'} <small>${esc(unit)}</small></b></header>${ok?`<div class="obs-project-value-track"><i style="width:${Math.min(100,ratio*100).toFixed(1)}%"></i><b style="left:${Math.min(100,100).toFixed(1)}%"></b></div><footer><span>0</span><strong>Seuil ${fmt(m,1)}</strong></footer>`:'<div class="obs-project-gauge-empty">Seuil ou valeur non renseigné</div>'}</article>`;
   }
-  function projectCarbonHtml(project,op){return `<div class="pf-tab-intro"><span class="pf-eyebrow">CARBONE & DPE</span><h3>Des indicateurs distincts, une lecture claire</h3><p>Les IC de l\u2019\u00e9tude carbone et les classes DPE/GES ne sont pas interchangeables.</p></div><div class="pf-two-col">${projectValueGauge('IC \u00c9nergie',pfNumber(op,'icEnergy'),pfNumber(op,'icEnergyMax'),'kgCO\u2082e/m\u00b2')}${projectValueGauge('IC Construction',pfNumber(op,'icConstruction'),pfNumber(op,'icConstructionMax'),'kgCO\u2082e/m\u00b2')}</div><div class="pf-two-col">${projectValueGauge('Construction \u00b7 jalon 2028',pfNumber(op,'icConstruction'),pfNumber(op,'icConstruction2028'),'kgCO\u2082e/m\u00b2')}${projectValueGauge('Construction \u00b7 jalon 2031',pfNumber(op,'icConstruction'),pfNumber(op,'icConstruction2031'),'kgCO\u2082e/m\u00b2')}</div><p class="pf-callout">${pfIcon('info')}Comparaisons num\u00e9riques avec les seuils disponibles dans la source. Elles ne remplacent pas une d\u00e9cision de certification.</p><div class="pf-two-col">${pfCard('DPE \u00e9nergie avant / apr\u00e8s','energy',pfDpePanel(op))}${pfCard('GES avant / apr\u00e8s','leaf',pfDpePanel(op,true))}</div>`;}
-  function projectEconomicsHtml(){return `<div class="pf-tab-intro"><span class="pf-eyebrow">DONN\u00c9ES \u00c9CONOMIQUES</span><h3>Co\u00fbts de chantier & financement</h3><p>Un espace pr\u00eat pour les DPGF et les aides mobilis\u00e9es, sans montants fictifs.</p></div><div class="pf-two-col">${pfCard('R\u00e9partition par macro-lot','coins','<div class="pf-empty"><div class="pf-empty-ring"></div><b>En attente des montants DPGF</b><p>Le graphique appara\u00eetra une fois les donn\u00e9es raccord\u00e9es.</p></div>')}${pfCard('R\u00e9partition par lot','chart','<div class="pf-empty"><div class="pf-empty-bars"><i></i><i></i><i></i><i></i></div><b>Aucun co\u00fbt de travaux renseign\u00e9</b><p>Les montants de contrats de certification ne sont pas des co\u00fbts de chantier.</p></div>')}</div>${pfCard('D\u00e9tail DPGF','file','<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>Macro-lot</th><th>Lot</th><th>Montant HT</th><th>Part du chantier</th></tr></thead><tbody><tr><td colspan="4" class="pf-table-empty">Aucune donn\u00e9e disponible.</td></tr></tbody></table></div>')}${pfCard('Aides mobilis\u00e9es & financement','coins','<div class="pf-table-wrap"><table class="pf-table"><thead><tr><th>Dispositif</th><th>Financeur</th><th>Montant</th><th>Statut</th></tr></thead><tbody><tr><td colspan="4" class="pf-table-empty">Aucune aide renseign\u00e9e pour le moment.</td></tr></tbody></table></div>')}`;}
-  function pfSources(op){
-    const rows=Object.entries(op?.raw||{}).filter(([k,v])=>pfText(k)&&pfText(v));
-    return `<details class="pf-sources"><summary>${pfIcon('file')}Donn\u00e9es sources du b\u00e2timent <small>${rows.length} champs renseign\u00e9s</small></summary><p class="pf-note">Valeurs de la ligne import\u00e9e, affich\u00e9es sans modification.</p><dl class="pf-definitions">${rows.map(([k,v])=>pfDefinition(k,v)).join('')||'<div>Aucune ligne source disponible.</div>'}</dl></details>`;
+  function projectCarbonHtml(project,op){
+    if(!op)return '<div class="obs-empty">Aucune opération technique rattachée.</div>';const deB=projectUxLetter(op,'dpeEnergyBefore'),deA=projectUxLetter(op,'dpeEnergyAfter'),dgB=projectUxLetter(op,'dpeGesBefore'),dgA=projectUxLetter(op,'dpeGesAfter');
+    return `<div class="obs-project-carbon"><div class="obs-project-carbon-gauges">${projectValueGauge('IC Énergie',rawNumber(op,'icEnergy'),rawNumber(op,'icEnergyMax'),'kgCO₂e/m²')}${projectValueGauge('IC Construction',rawNumber(op,'icConstruction'),rawNumber(op,'icConstructionMax'),'kgCO₂e/m²')}</div><div class="obs-project-threshold-grid">${projectMetric('Seuil construction 2028',rawValue(op,'icConstruction2028'),'kgCO₂e/m²')}${projectMetric('Seuil construction 2031',rawValue(op,'icConstruction2031'),'kgCO₂e/m²')}</div><div class="obs-project-dpe-grid"><article><span>DPE ÉNERGIE</span><div><small>Avant</small>${projectDpeBadge(deB)}<i>→</i>${projectDpeBadge(deA)}<small>Après</small></div></article><article><span>DPE GES</span><div><small>Avant</small>${projectDpeBadge(dgB)}<i>→</i>${projectDpeBadge(dgA)}<small>Après</small></div></article></div></div>`;
   }
-  function pfDiagnosticsShell(){return `<details class="pf-sources pf-diagnostics" data-project-diagnostics><summary>${pfIcon('shield')}Contr\u00f4les, comparables & tra\u00e7abilit\u00e9</summary><div data-project-diagnostics-body></div></details>`;}
-  function pfFocusControl(control){
-    if(!control)return;let target;
-    if(control.kind==='tab')target=Array.from(projectWindowEl.querySelectorAll('[data-project-tab]')).find(e=>e.dataset.projectTab===control.value&&e.closest('[role="tablist"]'));
-    else if(control.kind==='tech')target=projectWindowEl.querySelector('[data-project-tech-select]');
-    else if(control.kind==='tag')target=Array.from(projectWindowEl.querySelectorAll('[data-project-tag]')).find(e=>e.dataset.projectTag===control.value);
-    target?.focus({preventScroll:true});
+  function projectEconomicsHtml(){return `<div class="obs-project-economics"><div class="obs-project-econ-intro"><span>DONNÉES ÉCONOMIQUES</span><h3>Structure prête pour les futures données DPGF et financement</h3><p>Cet onglet reste vide tant que les données économiques ne sont pas reliées à OPERATIONS.</p></div><div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>DPGF</span><h3>Répartition par macro-lot</h3></div></div><div class="obs-econ-empty-chart"><i></i><b>Aucune donnée</b><span>Montants HT par macro-lot</span></div></article><article class="obs-card"><div class="obs-card-head"><div><span>DPGF</span><h3>Répartition par lot</h3></div></div><div class="obs-econ-empty-chart bars"><i></i><b>Aucune donnée</b><span>Montants HT par lot</span></div></article></div><article class="obs-card"><div class="obs-card-head"><div><span>DÉTAIL DES COÛTS</span><h3>Tableau DPGF</h3></div></div><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Macro-lot</th><th>Lot</th><th>Montant HT</th><th>Part</th></tr></thead><tbody><tr><td colspan="4">Aucune donnée économique disponible.</td></tr></tbody></table></div></article><article class="obs-card"><div class="obs-card-head"><div><span>FINANCEMENT</span><h3>Aides mobilisées</h3></div></div><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Dispositif</th><th>Financeur</th><th>Montant</th><th>Statut</th><th>Commentaire</th></tr></thead><tbody><tr><td colspan="5">Aucune aide renseignée pour le moment.</td></tr></tbody></table></div></article></div>`;}
+  // V6.12 - editorial project sheet. All figures come from the selected source row.
+  const PROJECT_UX_TABS = [['general','Vue d\u2019ensemble','home'],['building','B\u00e2timent & \u00e9quipements','layers'],['energy','\u00c9nergie & transition','energy'],['carbon','Carbone & DPE','leaf'],['economics','Donn\u00e9es \u00e9conomiques','wallet']];
+  const PROJECT_UX_COVERAGE = [['structure','Structure'],['roofInsulation','Isolation toiture'],['wallInsulation','Isolation fa\u00e7ade'],['floorInsulation','Isolation plancher'],['roofR','R toiture'],['wallR','R fa\u00e7ade'],['floorR','R plancher'],['windowMaterial','Mat\u00e9riau des menuiseries'],['windowGlazing','Vitrage'],['heatingAfter','Chauffage apr\u00e8s'],['ecsAfter','ECS apr\u00e8s'],['ventilation','Ventilation'],['cooling','Rafra\u00eechissement'],['cep','CEP projet']];
+  let projectUxReturnFocus=null,projectUxBackgroundScroll=null,projectUxPreviousInert=false;
+  let projectUxShowSource=false,projectUxExportBusy=false;
+
+  function projectUxIcon(name){
+    const paths={
+      home:'<path d="M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+      building:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h1m4 0h1M9 11h1m4 0h1M9 15h1m4 0h1m-5 6v-3h4v3"/>',
+      layers:'<path d="m12 3 10 5-10 5L2 8zm-10 9 10 5 10-5M2 16l10 5 10-5"/>',
+      energy:'<path d="m13 2-9 12h7l-1 8 10-12h-7z"/>',
+      leaf:'<path d="M20 3C9 1 2 6 4 14c2 8 17 8 16-11Z M3 22l12-13"/>',
+      chart:'<path d="M4 3v18h18M8 17v-5m5 5V8m5 9V5"/>',
+      pin:'<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+      people:'<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 4v3"/>',
+      check:'<path d="m6 12 4 4 8-8"/><circle cx="12" cy="12" r="10"/>',
+      clock:'<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
+      heat:'<path d="M5 20V6m5 14V6m4 14V6m5 14V6M3 9h18M3 17h18M9 3V1m6 2V1"/>',
+      water:'<path d="M12 2S4 11 4 15a8 8 0 0 0 16 0c0-4-8-13-8-13Z"/>',
+      fan:'<circle cx="12" cy="12" r="2"/><path d="M11 10C0 7 8-3 12 3c1 2 1 4 0 7m2 1c3-11 13-3 7 1-2 1-4 1-7 0m-1 2c11 3 3 13-1 7-1-2-1-4 0-7m-2-1c-3 11-13 3-7-1 2-1 4-1 7 0"/>',
+      snow:'<path d="M12 2v20M3.34 7l17.32 10M3.34 17 20.66 7M9 4l3 3 3-3M9 20l3-3 3 3M4 10l4-1-1-4m13 9-4 1 1 4M4 14l4 1-1 4m13-9-4-1 1-4"/>',
+      window:'<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M12 3v18M4 12h16M10 8v1m4-1v1"/>',
+      source:'<path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9zm0 0v7h7M7 13h10M7 17h7"/>',
+      download:'<path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/>',
+      arrow:'<path d="M4 12h16m-6-6 6 6-6 6"/>',
+      back:'<path d="M20 12H4m6-6-6 6 6 6"/>',
+      wallet:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 8V4l15-2v3m3 6h-6v6h6"/><circle cx="17" cy="14" r=".5"/>',
+      info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-11v1"/>',
+      tag:'<path d="M3 3h8l10 10-8 8L3 11z"/><circle cx="7" cy="7" r="1"/>',
+      close:'<path d="m6 6 12 12M6 18 18 6"/>'
+    };
+    return `<svg class="p10-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.info}</svg>`;
+  }
+  function projectUxText(v){return String(v??'').replace(/\\?<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;/gi,' \u00b7 ').replace(/\s+/g,' ').trim();}
+  function projectUxValue(op,key){
+    const h=op?.fields?.[key];
+    // Do not borrow a technical value from another building when this row is blank.
+    if(h&&op?.raw&&Object.prototype.hasOwnProperty.call(op.raw,h))return op.raw[h]??'';
+    return rawValue(op,key);
+  }
+  function projectUxNumericValue(value){
+    if(value===null||value===undefined||String(value).trim()==='')return null;
+    if(typeof value==='number')return Number.isFinite(value)?value:null;
+    const s=String(value).trim().replace(/[\u00a0\u202f]/g,' ').replace(/(?<=\d) (?=\d{3}(?:\D|$))/g,'');
+    const m=s.match(/^([+-]?\d+(?:[.,]\d+)?)\s*(?:kWh(?:EP|EF)?(?:\/[\w\u00b2\u00b7.\/-]+)?|m\u00b2[\u00b7.]?K\/W|W\/m\u00b2[\u00b7.]?K|kgCO\u2082e?\/m\u00b2|points?|\u00b0C(?:[\u00b7.]?h)?)?$/i);
+    if(!m)return null;const n=Number(m[1].replace(',','.'));return Number.isFinite(n)?n:null;
+  }
+  function projectUxNumber(op,key){return projectUxNumericValue(projectUxValue(op,key));}
+  function projectUxLetter(op,key){
+    const s=projectUxText(projectUxValue(op,key)).toUpperCase();
+    const m=s.match(/^(?:CLASSE\s+)?([A-G])(?:\s*\([^)]*\))?$/);return m?m[1]:'';
+  }
+  function projectUxScopedOperation(op){
+    if(!op)return null;const out={...op};
+    const keys=['structure','roofStructure','roofInsulation','wallStructure','wallInsulation','floorStructure','floorInsulation','windowMaterial','windowGlazing','windowShading','heatingBefore','heatingAfter','heatingModeAfter','ecsBefore','ecsAfter','ecs','ventilation','cooling','constructionYear','cep','cepAfter','cepBefore','cepMax','bbio','bbioMax','dh','dhMax','tic','ticRef','ubatBefore','ubatAfter','roofR','wallR','floorR'];
+    keys.forEach(k=>{if(op.fields?.[k]&&op.raw&&Object.prototype.hasOwnProperty.call(op.raw,op.fields[k])&&String(op.raw[op.fields[k]]??'').trim()==='')out[k]='';});
+    return out;
+  }
+  function projectUxCoverage(op){
+    const items=PROJECT_UX_COVERAGE.map(([key,label])=>({key,label,present:projectUxText(projectUxValue(op,key))!==''}));
+    const count=items.filter(x=>x.present).length;return {items,count,total:items.length,percent:Math.round(100*count/items.length)};
+  }
+  function projectUxCep(op){return projectUxNumber(op,'cepAfter')??projectUxNumber(op,'cep');}
+  function projectUxGain(op){const before=projectUxNumber(op,'cepBefore'),after=projectUxCep(op);return before!==null&&before>0&&after!==null&&after>=0?100*(before-after)/before:null;}
+  function projectUxStatus(op){const code=chronologyStatus(op||{});return {code,label:CHRONOLOGY_STATUS_LABELS[code]||projectUxText(op?.rawStatus)||'Non renseign\u00e9',color:CHRONOLOGY_STATUS_COLORS[code]||'#70817b'};}
+  function projectUxRawHeader(op,header){const r=op?.raw||{},hit=Object.keys(r).find(k=>norm(k)===norm(header));return hit?projectUxText(r[hit]):'';}
+  function projectUxHeading(title,icon,tab=''){
+    return `<div class="p10-card-head"><h3>${projectUxIcon(icon)}${esc(title)}</h3>${tab?`<button type="button" class="p10-text-link" data-project-tab="${attr(tab)}">D\u00e9tail ${projectUxIcon('arrow')}</button>`:''}</div>`;
+  }
+  function projectUxDatum(label,value){return `<div class="p10-datum"><dt>${esc(label)}</dt><dd>${esc(projectUxText(value)||'Non renseign\u00e9')}</dd></div>`;}
+  function projectUxKpi(label,value,subtitle,icon,tone=''){
+    return `<article class="p10-kpi ${tone}"><i>${projectUxIcon(icon)}</i><div><span>${esc(label)}</span><strong>${esc(value??'\u2014')}</strong><small>${esc(subtitle)}</small></div></article>`;
+  }
+  function projectUxHeroHtml(project,op){
+    const cov=projectUxCoverage(op),status=projectUxStatus(op||project),name=projectUxText(project.name||project.code);
+    const loc=[project.city,departmentName(project.department)].filter(Boolean).join(' \u00b7 ');
+    const description=projectAutoDescription(project,op),demo=!runtime().connected||runtime().mode==='demo';
+    return `<section class="p10-hero"><figure class="p10-illustration"><img src="assets/building_final.png" alt="Illustration g\u00e9n\u00e9rique d\u2019un b\u00e2timent, non contractuelle"/><figcaption>Illustration \u00b7 pas une photo du projet</figcaption></figure><div class="p10-hero-story"><div class="p10-eyebrow">FICHE PROJET / OP\u00c9RATION${demo?' \u00b7 D\u00c9MONSTRATION':''}</div><h2 id="obsProjectUxTitle">${esc(name)}</h2><p class="p10-location">${projectUxIcon('pin')}${esc(loc||'Localisation non renseign\u00e9e')}</p><div class="p10-badges"><span>${projectUxIcon('home')}${esc(projectUxText(project.nature)||'Nature non renseign\u00e9e')}</span><span class="p10-status" style="--p10-status:${status.color}"><i></i>${esc(status.label)}</span></div><p class="p10-description">${esc(description)}</p></div><div class="p10-hero-aside"><div class="p10-coverage"><svg viewBox="0 0 110 110" role="img" aria-label="${cov.count} champs techniques renseign\u00e9s sur ${cov.total}"><circle cx="55" cy="55" r="46" class="p10-ring-base"/><circle cx="55" cy="55" r="46" class="p10-ring-value" pathLength="100" stroke-dasharray="${cov.percent} 100"/><text x="55" y="52" class="p10-ring-number">${cov.count}<tspan class="p10-ring-denom">/${cov.total}</tspan></text><text x="55" y="70" class="p10-ring-small">champs</text></svg><div><b>Donn\u00e9es renseign\u00e9es</b><small>B\u00e2timent s\u00e9lectionn\u00e9</small><details><summary>Comment est-ce calcul\u00e9 ?</summary><div>${cov.items.map(x=>`<p>${x.present?'\u2713':'\u2014'} ${esc(x.label)}</p>`).join('')}<p>Pr\u00e9sence de ${cov.total} champs descriptifs. Ce n\u2019est ni un score environnemental ni une \u00e9valuation de conformit\u00e9.</p></div></details></div></div><div class="p10-hero-actions"><button type="button" data-project-export="1" class="p10-button p10-primary">${projectUxIcon('download')}Exporter la fiche</button><button type="button" data-project-source="1" class="p10-button" aria-expanded="${projectUxShowSource}">${projectUxIcon('source')}Donn\u00e9es source</button></div></div></section>`;
+  }
+  function projectUxKpisHtml(project,op,techs){
+    const cep=projectUxCep(op),gain=projectUxGain(op),before=projectUxLetter(op,'dpeEnergyBefore'),after=projectUxLetter(op,'dpeEnergyAfter'),ic=projectUxNumber(op,'icConstruction');
+    const amount=(v)=>v===null||v===undefined||String(v).trim()===''?'\u2014':fmt(v);
+    return `<section class="p10-kpis" aria-label="Chiffres cl\u00e9s du projet et du b\u00e2timent">${projectUxKpi('Logements',amount(project.dwellings),'Total du projet','home')}${projectUxKpi('B\u00e2timents',amount(project.buildings),`${techs.length} ligne${techs.length>1?'s':''} technique${techs.length>1?'s':''} analys\u00e9e${techs.length>1?'s':''}`,'building')}${projectUxKpi('CEP projet',cep===null?'\u2014':fmt(cep,1),'kWhEP/m\u00b2.an \u00b7 b\u00e2timent','energy')}${projectUxKpi('Gain CEP',gain===null?'\u2014':`${gain>0?'+':''}${fmt(gain,1)} %`,gain===null?'Avant / apr\u00e8s non disponibles':gain<0?'Hausse de consommation':'R\u00e9duction avant / apr\u00e8s','chart',gain!==null&&gain<0?'p10-warning':'')}${projectUxKpi('DPE \u00e9nergie',`${before||'\u2014'} \u2192 ${after||'\u2014'}`,'Classes du b\u00e2timent','chart')}${projectUxKpi('IC construction',ic===null?'\u2014':fmt(ic,1),'kgCO\u2082e/m\u00b2 \u00b7 b\u00e2timent','leaf')}</section>`;
+  }
+  function projectUxTimelineHtml(project,op){
+    const status=projectUxStatus(op||project),order=['notStarted','incomplete','planned','analysis','visit','compliant'];
+    const dates=[['D\u00e9cision AP','certificationApDate'],['D\u00e9cision CD','certificationCdDate']];
+    return `<article class="p10-card p10-timeline-card">${projectUxHeading('Parcours de certification','check')}<div class="p10-timeline" aria-label="Statut d\u00e9clar\u00e9 : ${attr(status.label)}">${order.map((k,i)=>`<div class="${status.code===k?'is-current':''}" ${status.code===k?'aria-current="step"':''}><i>${status.code===k&&k==='compliant'?projectUxIcon('check'):i+1}</i><span>${esc(STATUS_LABELS[k])}</span></div>`).join('')}</div><p class="p10-stage"><i style="background:${status.color}"></i><b>${esc(status.label)}</b><small>Statut d\u00e9clar\u00e9, pas un pourcentage de travaux.</small></p><div class="p10-dates">${dates.map(([l,k])=>`<div>${projectUxIcon('clock')}<span>${l}<b>${esc(projectUxText(projectUxValue(op,k))||'Non renseign\u00e9e')}</b></span></div>`).join('')}</div></article>`;
+  }
+  function projectUxRChart(op){
+    const data=[['Toiture','roofR'],['Fa\u00e7ade','wallR'],['Plancher bas','floorR']].map(([label,key])=>({label,value:projectUxNumber(op,key),raw:projectUxText(projectUxValue(op,key))}));
+    const max=Math.max(1,...data.map(x=>x.value??0));
+    return `<div class="p10-rchart" aria-label="R\u00e9sistances thermiques des isolants"><p>R des isolants <small>m\u00b2\u00b7K/W</small></p>${data.map(x=>`<div class="p10-rrow"><span>${x.label}</span><div class="p10-track"><i style="width:${x.value!==null&&x.value>=0?100*x.value/max:0}%"></i></div><b>${esc(x.raw||'\u2014')}</b></div>`).join('')}<small>Comparaison descriptive. Une valeur multiple reste textuelle.</small></div>`;
+  }
+  function projectUxEnvelopeHtml(op){
+    return `<article class="p10-card">${projectUxHeading('Syst\u00e8me constructif & enveloppe','layers','building')}<div class="p10-structure"><i>${projectUxIcon('layers')}</i><div><span>Structure principale</span><b>${esc(projectUxText(op?.structure||op?.wallStructure)||'Non renseign\u00e9e')}</b></div></div>${projectUxRChart(op)}<dl class="p10-material-list">${projectUxDatum('Toiture',op?.roofInsulation)}${projectUxDatum('Fa\u00e7ade',op?.wallInsulation)}${projectUxDatum('Plancher bas',op?.floorInsulation)}</dl></article>`;
+  }
+  function projectUxCvcHtml(op){
+    const data=[['Chauffage','heat',op?.heatingAfter,projectUxValue(op,'heatingModeAfter')||op?.heatingModeAfter],['Eau chaude sanitaire','water',op?.ecsAfter,projectUxValue(op,'ecs')||op?.ecs],['Ventilation','fan','',projectUxValue(op,'ventilation')||op?.ventilation],['Rafra\u00eechissement','snow','',projectUxValue(op,'cooling')||op?.cooling]];
+    return `<article class="p10-card">${projectUxHeading('\u00c9quipements CVC','fan','building')}<div class="p10-cvc">${data.map(([l,i,v,d])=>`<section><i class="p10-system-icon" ${v?`style="${vectorColorStyle(v)}"`:''}>${projectUxIcon(i)}</i><h4>${esc(l)}</h4>${v?`<b class="p10-vector" style="${vectorColorStyle(v)}">${esc(v)}</b>`:''}<p>${esc(projectUxText(d)||'Non renseign\u00e9')}</p></section>`).join('')}</div><p class="p10-note">Descriptions du b\u00e2timent s\u00e9lectionn\u00e9 apr\u00e8s travaux.</p></article>`;
+  }
+  function projectUxCompareChart(op){
+    const before=projectUxNumber(op,'cepBefore'),after=projectUxCep(op),max=Math.max(1,before??0,after??0),gain=projectUxGain(op);
+    return `<section class="p10-energy-compare"><h4>Consommation d\u2019\u00e9nergie primaire</h4><p>kWhEP/m\u00b2.an \u00b7 valeurs d\u00e9clar\u00e9es</p><div class="p10-columns">${[[before,'Avant travaux'],[after,'Projet / apr\u00e8s']].map(([v,l],i)=>`<div class="p10-column"><strong>${v===null?'\u2014':fmt(v,1)}</strong><div class="p10-column-area"><i class="${i?'is-after':'is-before'}" style="height:${v===null?0:Math.max(0,100*v/max)}%"></i>${v===null?'<span>Non renseign\u00e9</span>':''}</div><span>${l}</span></div>`).join('')}</div>${gain!==null?`<div class="p10-gain ${gain<0?'p10-warning':''}">${gain>=0?'Baisse':'Hausse'} de <b>${fmt(Math.abs(gain),1)} %</b></div><p class="p10-note">Comparaison \u00e0 m\u00e9thode et surface de r\u00e9f\u00e9rence identiques \u00e0 v\u00e9rifier dans les sources.</p>`:'<div class="p10-note">Le gain n\u2019est calcul\u00e9 que si les deux valeurs sont disponibles.</div>'}</section>`;
+  }
+  function projectUxDpeHtml(op){
+    return `<section class="p10-dpe-compare"><h4>\u00c9tiquettes avant / apr\u00e8s</h4>${[['\u00c9nergie','dpeEnergyBefore','dpeEnergyAfter'],['GES','dpeGesBefore','dpeGesAfter']].map(([l,b,a])=>{const bv=projectUxLetter(op,b),av=projectUxLetter(op,a);return `<div class="p10-dpe-pair"><span>${l}</span><div><small>Avant</small>${projectDpeBadge(bv)}</div>${projectUxIcon('arrow')}<div><small>Apr\u00e8s</small>${projectDpeBadge(av)}</div></div>`;}).join('')}<p class="p10-note">Classes lues dans les colonnes DPE, jamais d\u00e9duites du CEP.</p></section>`;
+  }
+  function projectUxWindowsHtml(op){return `<article class="p10-card p10-window-card">${projectUxHeading('Menuiseries ext\u00e9rieures','window','building')}<div class="p10-windows">${[['Mat\u00e9riau',op?.windowMaterial],['Vitrage',op?.windowGlazing],['Occultations',op?.windowShading]].map(([l,v])=>`<section>${projectUxIcon('window')}<span>${esc(l)}</span><b>${esc(projectUxText(v)||'Non renseign\u00e9')}</b></section>`).join('')}</div><small class="p10-note">Aucune r\u00e9partition en % sans quantit\u00e9s par type de baie.</small></article>`;}
+  function projectUxSynthesisHtml(project,op){
+    const cov=projectUxCoverage(op),gain=projectUxGain(op),status=projectUxStatus(op||project),cep=projectUxCep(op),ic=projectUxNumber(op,'icConstruction');
+    const lines=[['check',status.label],['energy',cep===null?'CEP projet non renseign\u00e9.':`CEP projet : ${fmt(cep,1)} kWhEP/m\u00b2.an.`],['chart',gain===null?'Gain avant / apr\u00e8s non calculable.':`${gain>=0?'R\u00e9duction':'Hausse'} du CEP de ${fmt(Math.abs(gain),1)} %.`],['leaf',ic===null?'IC construction non renseign\u00e9.':`IC construction : ${fmt(ic,1)} kgCO\u2082e/m\u00b2.`],['source',`${cov.count} des ${cov.total} champs techniques de synth\u00e8se sont renseign\u00e9s.`]];
+    return `<article class="p10-card p10-synthesis">${projectUxHeading('En synth\u00e8se','leaf')}<ul>${lines.map(([i,t])=>`<li>${projectUxIcon(i)}<span>${esc(t)}</span></li>`).join('')}</ul><p>Lecture automatique du b\u00e2timent s\u00e9lectionn\u00e9.</p></article><article class="p10-card p10-place-card">${projectUxHeading('Localisation','pin')}<div class="p10-place-icon">${projectUxIcon('pin')}</div><b>${esc(projectUxText(project.city)||'Commune non renseign\u00e9e')}</b><p>${esc([projectUxText(project.address),project.postalCode].filter(Boolean).join(' \u00b7 '))}</p><span>${esc(departmentName(project.department))}</span><small>${esc(operationRegion(project))}</small>${project.department?'<button type="button" class="p10-button" data-project-locate="1">Voir ce territoire '+projectUxIcon('arrow')+'</button>':''}</article>`;
+  }
+  function projectUxTagsHtml(project,op){
+    const tags=projectTags(project,op).map(projectUxText),selected=state.projectTagFilter;let result='';
+    if(selected){
+      const children=sourceTechnicalOperations(),projects=baseOperations();const groups=new Map();children.forEach(t=>{let p=String(t.projectCode||'');if(privacy()?.enabled?.())p=privacy().operationCode(p);if(!groups.has(p))groups.set(p,[]);groups.get(p).push(t);});
+      const matches=projects.filter(p=>[p,...(groups.get(String(p.code))||[])].some(t=>projectTags(p,t).some(tag=>norm(projectUxText(tag))===norm(selected))));
+      result=`<div class="p10-tag-results"><header><b>${fmt(matches.length)} projet${matches.length>1?'s':''} avec le tag \u00ab ${esc(selected)} \u00bb</b><button type="button" class="p10-text-link" data-project-tag-clear="1">Effacer</button></header><div>${matches.map(p=>`<button type="button" data-project-open="${attr(p.code)}"><b>${esc(projectUxText(p.name||p.code))}</b><span>${esc(projectUxText(p.moa))}</span>${projectUxIcon('arrow')}</button>`).join('')||'<p>Aucun autre projet dans la population active.</p>'}</div></div>`;
+    }
+    return `<article class="p10-card p10-tags-card">${projectUxHeading('Tags & projets similaires','tag')}<div class="p10-tags">${tags.map(t=>`<button type="button" data-project-tag="${attr(t)}" aria-pressed="${norm(selected)===norm(t)}">${esc(t)}</button>`).join('')||'<span class="p10-note">Aucun tag renseign\u00e9.</span>'}</div>${result}</article>`;
+  }
+  function projectGeneralHtml(project,op){
+    const cert=op||project;
+    return `<div class="p10-dashboard"><div class="p10-dashboard-main"><div class="p10-pair"><article class="p10-card">${projectUxHeading('Identit\u00e9 du projet','source')}<dl class="p10-data-list">${projectUxDatum('Code projet',project.code)}${projectUxDatum('Ma\u00eetre d\u2019ouvrage',project.moa)}${projectUxDatum('Groupe MOA',privacy()?.enabled?.()&&project.moaGroup?privacy().moa(project.moaGroup):project.moaGroup)}${projectUxDatum('Ann\u00e9e de construction',op?.constructionYear)}${projectUxDatum('Ann\u00e9e de certification',cert.year)}${projectUxDatum('R\u00e9f\u00e9rentiel',cert.referential)}</dl></article>${projectUxTimelineHtml(project,op)}</div><div class="p10-pair">${projectUxEnvelopeHtml(op)}${projectUxCvcHtml(op)}</div><article class="p10-card p10-performance-card">${projectUxHeading('Performances \u00e9nerg\u00e9tiques','chart','energy')}<div class="p10-performance-grid">${projectUxCompareChart(op)}${projectUxDpeHtml(op)}</div></article>${projectUxWindowsHtml(op)}${projectUxTagsHtml(project,op)}</div><aside class="p10-dashboard-aside">${projectUxSynthesisHtml(project,op)}<article class="p10-card p10-cert-card">${projectUxHeading('Certification','check')}<dl class="p10-data-list">${projectUxDatum('Mention / label',projectUxValue(cert,'mentions')||cert.mentions)}${projectUxDatum('Performance',projectUxValue(cert,'performance')||cert.performance)}${projectUxDatum('Profil',projectUxValue(cert,'profile')||cert.profile)}${projectUxDatum('Version du r\u00e9f\u00e9rentiel',projectUxText(cert?.version)||projectUxRawHeader(cert,'Version')||projectUxRawHeader(cert,'Version du r\u00e9f\u00e9rentiel applicable: Version'))}</dl></article></aside></div>`;
+  }
+  function projectUxSourceHtml(op){
+    const entries=Object.entries(op?.raw||{});
+    return `<section class="p10-card p10-source-card" aria-label="Donn\u00e9es source du b\u00e2timent"><div class="p10-card-head"><h3>${projectUxIcon('source')}Donn\u00e9es source \u00b7 ligne s\u00e9lectionn\u00e9e</h3><button class="p10-text-link" data-project-source="1" type="button">Masquer</button></div><div class="p10-source-scroll"><table><thead><tr><th>Colonne OPERATIONS</th><th>Valeur d\u00e9clar\u00e9e</th></tr></thead><tbody>${entries.map(([k,v])=>`<tr><th scope="row">${esc(k)}</th><td>${esc(projectUxText(v))||'\u2014'}</td></tr>`).join('')||'<tr><td colspan="2">Aucune ligne source disponible.</td></tr>'}</tbody></table></div></section>`;
+  }
+  function projectUxSelected(){
+    const project=state.activeProject,techs=projectTechnicalOperations(project),selected=techs.find(o=>String(o.code)===String(state.projectWindowTechnicalCode))||techs[0]||project;
+    return {project,techs,selected:projectUxScopedOperation(selected)};
+  }
+  function projectUxPosition(){
+    if(!projectWindowEl)return;const main=document.querySelector('.obs-main'),top=document.querySelector('.obs-topbar');
+    const left=window.innerWidth>=1260&&main?Math.max(12,main.getBoundingClientRect().left+10):12;
+    const y=window.innerWidth>=1260&&top?Math.max(12,top.getBoundingClientRect().bottom+10):12;
+    projectWindowEl.style.setProperty('--p10-left',left+'px');projectWindowEl.style.setProperty('--p10-top',y+'px');
+  }
+  function projectUxRestoreFocus(kind,value){
+    if(!kind||!projectWindowEl)return;
+    const attrName={'tab':'data-project-tab','tag':'data-project-tag','source':'data-project-source','select':'data-project-building-select'}[kind];
+    const nodes=projectWindowEl.querySelectorAll('['+attrName+']'),match=Array.from(nodes).find(el=>kind==='select'||kind==='source'||el.getAttribute(attrName)===value);
+    match?.focus({preventScroll:true});
+  }
+  function projectUxRefresh(kind,value){
+    const sc=projectWindowEl?.querySelector('[data-project-scroll]'),snapshot=sc?{top:sc.scrollTop,left:sc.scrollLeft}:null;
+    renderProjectWindow();projectUxRestoreFocus(kind,value);
+    if(snapshot){const restore=()=>{sc.scrollTop=snapshot.top;sc.scrollLeft=snapshot.left;};restore();requestAnimationFrame(restore);}
   }
   function ensureProjectWindow(){
     if(projectWindowEl)return projectWindowEl;
-    projectWindowEl=document.createElement('div');projectWindowEl.className='obs-project-window obs-project-window--editorial';projectWindowEl.setAttribute('aria-hidden','true');
-    projectWindowEl.innerHTML=`<div class="obs-project-window-backdrop" data-project-close="1"></div><section class="obs-project-window-panel pf-panel" role="dialog" aria-modal="true" aria-labelledby="pfProjectTitle" tabindex="-1"><div class="pf-toprail"><div class="pf-toprail-brand">${pfIcon('leaf')}<div><b>Observatoire Prestaterre</b><span>Fiche projet / op\u00e9ration</span></div><small>V6.10</small></div><div class="pf-toprail-actions"><button type="button" class="pf-print-button" data-project-print="1" aria-label="Imprimer la fiche">${pfIcon('print')}<span>Imprimer</span></button><button type="button" class="pf-close-button" data-project-close="1" aria-label="Fermer la fiche et revenir \u00e0 l\u2019observatoire">${pfIcon('back')}<span>Retour \u00e0 l\u2019observatoire</span></button></div></div><div class="pf-scroll" data-project-scroll><div data-project-hero></div><div data-project-kpis></div><div class="pf-navigation"><div class="pf-tech-selector" data-project-tech-tabs></div><nav class="pf-tabs" data-project-main-tabs role="tablist" aria-label="Rubriques de la fiche"></nav></div><main class="pf-body" data-project-body role="tabpanel" tabindex="0"></main><div class="pf-source-container" data-project-sources></div></div></section>`;
+    projectWindowEl=document.createElement('div');projectWindowEl.className='obs-project-window obs-project-ux10';projectWindowEl.setAttribute('aria-hidden','true');
+    projectWindowEl.innerHTML=`<div class="obs-project-window-backdrop" data-project-close="1"></div><section class="obs-project-window-panel" role="dialog" aria-modal="true" aria-labelledby="obsProjectUxTitle"><div class="p10-toolbar"><button type="button" class="p10-back" data-project-close="1">${projectUxIcon('back')}Retour \u00e0 l\u2019Observatoire</button><span>PROJETS & OP\u00c9RATIONS <b data-project-code></b></span><button type="button" class="p10-close" data-project-close="1" aria-label="Fermer la fiche projet">${projectUxIcon('close')}</button></div><div class="p10-scroll" data-project-scroll><div class="p10-intro" data-project-intro></div><div class="p10-selector" data-project-selector></div><nav class="p10-tabs" data-project-main-tabs role="tablist" aria-label="Rubriques de la fiche"></nav><div class="p10-source-slot" data-project-source-slot></div><main class="p10-body" data-project-body role="tabpanel" id="obsProjectUxPanel"></main><footer class="p10-footer">Observatoire Prestaterre \u00b7 V6.12 <span>Les valeurs absentes ne sont pas remplac\u00e9es par z\u00e9ro.</span></footer></div></section>`;
     document.body.appendChild(projectWindowEl);
-    projectWindowEl.addEventListener('toggle',e=>{
-      if(!e.target.matches?.('[data-project-diagnostics]')||!e.target.open||!state.activeProject)return;
-      const out=e.target.querySelector('[data-project-diagnostics-body]');if(out.dataset.loaded)return;
-      const op=pfSelectedRecord(projectTechnicalOperations(state.activeProject).find(o=>String(o.code)===String(state.projectWindowTechnicalCode))||state.activeProject);
-      out.innerHTML=pfCard('Contr\u00f4les de qualit\u00e9','shield',operationQualityHtml(op))+pfCard('Comparables','chart',operationComparablesHtml(op))+pfCard('Tra\u00e7abilit\u00e9','file',operationTraceHtml(op));out.dataset.loaded='1';
-    },true);
     projectWindowEl.addEventListener('click',e=>{
       if(e.target.closest('[data-project-close]')){closeProjectWindow();return;}
-      if(e.target.closest('[data-project-print]')){window.print();return;}
-      const tab=e.target.closest('[data-project-tab]');if(tab){state.projectWindowTab=tab.dataset.projectTab;renderProjectWindow({kind:'tab',value:state.projectWindowTab});return;}
-      const tag=e.target.closest('[data-project-tag]');if(tag){state.projectTagFilter=tag.dataset.projectTag;state.projectTagPage=1;renderProjectWindow({kind:'tag',value:state.projectTagFilter});return;}
-      if(e.target.closest('[data-project-tag-clear]')){const previous=state.projectTagFilter;state.projectTagFilter='';renderProjectWindow({kind:'tag',value:previous});return;}
-      const pager=e.target.closest('[data-project-tag-page]');if(pager){state.projectTagPage=Number(pager.dataset.projectTagPage)||1;renderProjectWindow();return;}
-      const link=e.target.closest('[data-project-open]');if(link){openProjectWindow(link.dataset.projectOpen,link.dataset.projectOpenTech);return;}
+      const tab=e.target.closest('[data-project-tab]');if(tab){state.projectWindowTab=tab.dataset.projectTab;projectUxRefresh('tab',state.projectWindowTab);return;}
+      const tag=e.target.closest('[data-project-tag]');if(tag){state.projectTagFilter=tag.dataset.projectTag;projectUxRefresh('tag',state.projectTagFilter);return;}
+      if(e.target.closest('[data-project-tag-clear]')){state.projectTagFilter='';projectUxRefresh();return;}
+      const open=e.target.closest('[data-project-open]');if(open){openProjectWindow(open.dataset.projectOpen);return;}
+      if(e.target.closest('[data-project-source]')){projectUxShowSource=!projectUxShowSource;projectUxRefresh('source');return;}
+      if(e.target.closest('[data-project-export]')){projectUxExport();return;}
+      if(e.target.closest('[data-project-locate]')){const dep=state.activeProject?.department;closeProjectWindow();if(dep)quickFilter('department',dep);changePage('territories');}
     });
-    projectWindowEl.addEventListener('change',e=>{if(e.target.matches('[data-project-tech-select]')){state.projectWindowTechnicalCode=e.target.value;state.projectTagFilter='';renderProjectWindow({kind:'tech'});}});
+    projectWindowEl.addEventListener('change',e=>{if(e.target.matches('[data-project-building-select]')){state.projectWindowTechnicalCode=e.target.value;projectUxRefresh('select');}});
     projectWindowEl.addEventListener('keydown',e=>{
       if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeProjectWindow();return;}
-      if(e.target.closest('[role="tablist"]')&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){
-        e.preventDefault();const current=PF_TABS.findIndex(([key])=>key===state.projectWindowTab),index=e.key==='Home'?0:e.key==='End'?PF_TABS.length-1:(current+(e.key==='ArrowRight'?1:-1)+PF_TABS.length)%PF_TABS.length;state.projectWindowTab=PF_TABS[index][0];renderProjectWindow({kind:'tab',value:state.projectWindowTab});
+      if(e.target.matches('[role="tab"]')&&['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){
+        e.preventDefault();const keys=PROJECT_UX_TABS.map(t=>t[0]),index=keys.indexOf(state.projectWindowTab);state.projectWindowTab=e.key==='Home'?keys[0]:e.key==='End'?keys[keys.length-1]:keys[(index+(e.key==='ArrowRight'?1:-1)+keys.length)%keys.length];projectUxRefresh('tab',state.projectWindowTab);return;
       }
       if(e.key==='Tab'){
-        const focusable=Array.from(projectWindowEl.querySelectorAll('button:not([disabled]),select:not([disabled]),summary,[tabindex="0"]')).filter(el=>el.getClientRects().length&&el.tabIndex>=0),first=focusable[0],last=focusable.at(-1);
-        if(e.shiftKey&&(document.activeElement===first||document.activeElement===projectWindowEl.querySelector('[role="dialog"]'))){e.preventDefault();last?.focus({preventScroll:true});}
-        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus({preventScroll:true});}
+        const nodes=Array.from(projectWindowEl.querySelectorAll('button:not([disabled]),select,input,summary,a[href],[tabindex="0"]')).filter(n=>n.getClientRects().length&&!n.closest('[hidden]'));
+        const first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
       }
-      // Keep site-wide shortcuts from intercepting typing/navigation in the sheet.
-      e.stopPropagation();
     });
+    window.addEventListener('resize',projectUxPosition);
     return projectWindowEl;
   }
-  function renderProjectWindow(focusControl=null){
-    const project=state.activeProject;if(!project)return;const el=ensureProjectWindow(),scroll=el.querySelector('[data-project-scroll]'),top=scroll.scrollTop,left=scroll.scrollLeft,techs=projectTechnicalOperations(project);
-    const selected=pfSelectedRecord(techs.find(o=>String(o.code)===String(state.projectWindowTechnicalCode))||techs[0]||project);state.projectWindowTechnicalCode=selected.code;
-    el.querySelector('[data-project-hero]').innerHTML=pfHero(project,selected);el.querySelector('[data-project-kpis]').innerHTML=pfKpis(project,selected);
-    el.querySelector('[data-project-tech-tabs]').innerHTML=`<div><span class="pf-eyebrow">P\u00c9RIM\u00c8TRE TECHNIQUE</span><label for="pfTechnicalSelect">B\u00e2timent / op\u00e9ration</label></div><select id="pfTechnicalSelect" data-project-tech-select aria-label="Choisir le b\u00e2timent ou l\u2019op\u00e9ration">${techs.length?techs.map((op,i)=>`<option value="${attr(op.code)}" ${String(op.code)===String(selected.code)?'selected':''}>${esc(projectTechnicalLabel(op,i))} \u00b7 ligne ${i+1}/${techs.length}</option>`).join(''):'<option>Donn\u00e9es du projet</option>'}</select><p>Les graphiques concernent uniquement cette s\u00e9lection.</p>`;
-    el.querySelector('[data-project-main-tabs]').innerHTML=PF_TABS.map(([key,label,icon])=>`<button type="button" id="pf-tab-${key}" role="tab" aria-selected="${state.projectWindowTab===key}" aria-controls="pf-panel-content" tabindex="${state.projectWindowTab===key?'0':'-1'}" data-project-tab="${key}" class="${state.projectWindowTab===key?'is-active':''}">${pfIcon(icon)}<span>${esc(label)}</span></button>`).join('');
-    const body=el.querySelector('[data-project-body]');body.id='pf-panel-content';body.setAttribute('aria-labelledby',`pf-tab-${state.projectWindowTab}`);
-    const renderer={general:projectGeneralHtml,building:projectBuildingHtml,energy:projectEnergyHtml,carbon:projectCarbonHtml,economics:projectEconomicsHtml}[state.projectWindowTab]||projectGeneralHtml;
-    body.innerHTML=renderer(project,selected);el.querySelector('[data-project-sources]').innerHTML=pfSources(selected)+pfDiagnosticsShell();
-    scroll.scrollTop=top;scroll.scrollLeft=left;pfFocusControl(focusControl);
-    requestAnimationFrame(()=>{scroll.scrollTop=top;scroll.scrollLeft=left;});
+  function renderProjectWindow(){
+    if(!state.activeProject)return;const el=ensureProjectWindow(),{project,techs,selected}=projectUxSelected();
+    if(selected?.code)state.projectWindowTechnicalCode=selected.code;
+    el.querySelector('[data-project-code]').textContent=project.code||'';
+    el.querySelector('[data-project-intro]').innerHTML=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs);
+    const index=techs.findIndex(t=>String(t.code)===String(selected?.code));
+    el.querySelector('[data-project-selector]').innerHTML=`<div><span class="p10-eyebrow">P\u00c9RIM\u00c8TRE TECHNIQUE</span><label for="obsProjectBuildingSelect">${projectUxIcon('building')}B\u00e2timent / op\u00e9ration</label></div><select id="obsProjectBuildingSelect" data-project-building-select ${techs.length<=1?'disabled':''}>${(techs.length?techs:[selected]).map((o,i)=>`<option value="${attr(o?.code)}" ${String(o?.code)===String(selected?.code)?'selected':''}>${esc(projectTechnicalLabel(o,i))}</option>`).join('')}</select><p><b>${techs.length>1?`${index+1} / ${techs.length}`:'1 ligne technique'}</b>Les graphiques et les descriptifs suivent cette s\u00e9lection. Les logements et b\u00e2timents du bandeau sont les totaux du projet.</p>`;
+    el.querySelector('[data-project-main-tabs]').innerHTML=PROJECT_UX_TABS.map(([k,l,i])=>`<button type="button" id="obsProjectTab-${k}" data-project-tab="${k}" class="${state.projectWindowTab===k?'is-active':''}" role="tab" aria-selected="${state.projectWindowTab===k}" aria-controls="obsProjectUxPanel" tabindex="${state.projectWindowTab===k?0:-1}">${projectUxIcon(i)}${esc(l)}</button>`).join('');
+    el.querySelector('[data-project-source-slot]').innerHTML=projectUxShowSource?projectUxSourceHtml(selected):'';
+    const body={general:()=>projectGeneralHtml(project,selected),building:()=>projectBuildingHtml(project,selected),energy:()=>projectEnergyHtml(project,selected),carbon:()=>projectCarbonHtml(project,selected),economics:()=>projectEconomicsHtml()}[state.projectWindowTab];
+    const panel=el.querySelector('[data-project-body]');panel.setAttribute('aria-labelledby','obsProjectTab-'+state.projectWindowTab);panel.innerHTML=body?body():projectGeneralHtml(project,selected);projectUxPosition();
   }
   function openProjectWindow(code,technicalCode=''){
     const project=sourceOperations().find(o=>String(o.code)===String(code));if(!project)return;
-    const el=ensureProjectWindow(),alreadyOpen=el.classList.contains('is-open');
-    if(!alreadyOpen){projectReturnFocus=document.activeElement;projectReturnScroll=captureUiScroll();projectShellWasInert=Boolean(document.getElementById('appShell')?.inert);}
-    state.activeProject=project;state.projectWindowTab='general';state.projectTagFilter='';state.projectTagPage=1;
-    const techs=projectTechnicalOperations(project);state.projectWindowTechnicalCode=techs.find(o=>String(o.code)===String(technicalCode))?.code||techs[0]?.code||'';
-    if(!alreadyOpen)el.querySelector('[data-project-scroll]').scrollTop=0;
-    renderProjectWindow();el.classList.add('is-open');el.setAttribute('aria-hidden','false');document.body.classList.add('obs-project-window-open');
-    const shell=document.getElementById('appShell');if(shell)shell.inert=true;
-    el.querySelector('[role="dialog"]').focus({preventScroll:true});
+    const alreadyOpen=projectWindowEl?.classList.contains('is-open');
+    if(!alreadyOpen){projectUxReturnFocus=document.activeElement;projectUxBackgroundScroll=captureUiScroll();const shell=document.getElementById('appShell');projectUxPreviousInert=Boolean(shell?.inert);if(shell)shell.inert=true;}
+    closeDrawer();state.activeProject=project;state.projectWindowTab='general';state.projectTagFilter='';projectUxShowSource=false;
+    const techs=projectTechnicalOperations(project);state.projectWindowTechnicalCode=technicalCode||techs[0]?.code||'';
+    const el=ensureProjectWindow();renderProjectWindow();el.classList.add('is-open');el.setAttribute('aria-hidden','false');document.body.classList.add('obs-project-window-open');el.querySelector('[data-project-scroll]').scrollTop=0;
+    requestAnimationFrame(()=>el.querySelector('.p10-close')?.focus({preventScroll:true}));
   }
   function closeProjectWindow(){
-    if(!projectWindowEl||!projectWindowEl.classList.contains('is-open'))return;
+    if(!projectWindowEl?.classList.contains('is-open'))return;
     projectWindowEl.classList.remove('is-open');projectWindowEl.setAttribute('aria-hidden','true');document.body.classList.remove('obs-project-window-open');
-    const shell=document.getElementById('appShell');if(shell)shell.inert=projectShellWasInert;
-    state.activeProject=null;state.projectTagFilter='';
-    if(projectReturnFocus?.isConnected)projectReturnFocus.focus({preventScroll:true});
-    restoreUiScroll(projectReturnScroll);
+    const shell=document.getElementById('appShell');if(shell)shell.inert=projectUxPreviousInert;
+    state.activeProject=null;state.projectTagFilter='';projectUxShowSource=false;projectWindowEl.querySelector('[data-project-body]').innerHTML='';projectWindowEl.querySelector('[data-project-intro]').innerHTML='';projectWindowEl.querySelector('[data-project-source-slot]').innerHTML='';projectWindowEl.querySelector('[data-project-code]').textContent='';projectWindowEl.querySelector('[data-project-selector]').innerHTML='';
+    if(projectUxReturnFocus?.isConnected)projectUxReturnFocus.focus({preventScroll:true});restoreUiScroll(projectUxBackgroundScroll);
   }
+  async function projectUxExport(){
+    if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
+    const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
+    try{
+      const css=await Promise.all(['newosb.css?v=6.12.0','project-ux.css?v=6.12.0'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
+      const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
+      const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');
+      const holder=document.createElement('div');holder.innerHTML=htmlBody;holder.querySelectorAll('button').forEach(b=>{if(b.matches('[data-project-tag]')){const span=document.createElement('span');span.textContent=b.textContent;b.replaceWith(span);}else b.remove();});holder.querySelectorAll('img').forEach(img=>img.src=image);
+      const doc='<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(project.name||project.code)+' - Observatoire Prestaterre</title><style>'+css.join('\n').replace(/<\/style/gi,'<\\/style')+'\nbody{margin:0;padding:24px;font-family:Arial,sans-serif;background:#f3f6f4}.obs-project-ux10{position:static!important;visibility:visible!important;pointer-events:auto!important;max-width:1600px;margin:auto}.p10-export-section{margin-top:28px;break-before:auto}.p10-hero-actions{display:none!important}.p10-export-section>.obs-project-building,.p10-export-section>.obs-project-energy,.p10-export-section>.obs-project-carbon{max-width:none}.p10-tags>span{border:1px solid #dfe8e4;border-radius:16px;padding:6px 10px;background:#f6faf8}@media print{body{padding:0}.p10-card{break-inside:avoid}.p10-export-section{break-before:page}}</style></head><body><main class="obs-project-ux10">'+holder.innerHTML+'</main></body></html>';
+      const url=URL.createObjectURL(new Blob([doc],{type:'text/html;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='Fiche_'+String(project.code||'projet').replace(/[^a-z0-9_-]/gi,'_')+'_'+String(selected.technicalIndex||1)+'.html';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(error){console.error('Export fiche',error);const notice=document.createElement('p');notice.className='p10-export-error';notice.setAttribute('role','alert');notice.textContent='Export indisponible. Les donn\u00e9es restent accessibles dans la fiche.';projectWindowEl.querySelector('.p10-hero-actions')?.appendChild(notice);}
+    finally{projectUxExportBusy=false;if(button?.isConnected)button.disabled=false;}
+  }
+
   function openTechnicalOperation(code){
     const op=sourceTechnicalOperations().find(o=>String(o.code)===String(code));if(!op)return;
-    const parent=sourceOperations().find(p=>String(p.code)===String(op.projectCode)||(privacy()?.enabled?.()&&String(p.code)===String(privacy().operationCode(op.projectCode))));
-    if(parent){closeDrawer();openProjectWindow(parent.code,op.code);}
+    const parent=privacy()?.enabled?.()?privacy().operationCode(op.projectCode):op.projectCode;
+    openProjectWindow(parent,op.code);
   }
   function openOperation(code){closeDrawer();openProjectWindow(code);}
   function closeDrawer(){drawer.classList.remove('is-open');drawer.setAttribute('aria-hidden','true');state.activeMoaGroup='';state.activeGroupMoa='';}
@@ -2699,7 +2755,7 @@
   sidebarToggle?.addEventListener('click',()=>setSidebarCollapsed(!layoutEl?.classList.contains('is-sidebar-collapsed')));
   document.getElementById('obsNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)changePage(b.dataset.page);});
   document.getElementById('obsReportsNav')?.addEventListener('click',()=>changePage('reports'));
-  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openGlobalFilter='';state.autoMoaFromGroup=[];state.crossFilters=[];resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
+  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openGlobalFilter='';state.autoMoaFromGroup=[];state.crossFilters=[];state.performanceMatrixMentions=[];state.performanceMatrixPerformances=[];resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
   searchEl?.addEventListener('input',e=>{state.search=e.target.value||'';renderPage();});
   document.getElementById('obsSourceBtn')?.addEventListener('click',()=>engine.showDataSource());
   document.getElementById('obsDemoConnect')?.addEventListener('click',()=>engine.showDataSource());
@@ -2736,6 +2792,7 @@
     if(e.target.closest('[data-overview-total-toggle]')){preserveUiScroll(()=>{state.overviewShowTotal=!state.overviewShowTotal;renderPage();});return;}
     const solutionView=e.target.closest('[data-solution-view][data-view]'); if(solutionView){preserveUiScroll(()=>{const key=solutionView.dataset.solutionView;state.solutionViews[key]=solutionView.dataset.view==='pie'?'pie':'bar';renderPage();});return;}
     const energyCepView=e.target.closest('[data-energy-cep-view][data-view]');if(energyCepView){preserveUiScroll(()=>{const key=energyCepView.dataset.energyCepView;if(!state.energyCepViews)state.energyCepViews={};state.energyCepViews[key]=energyCepView.dataset.view==='bar'?'bar':'pie';renderPage();});return;}
+    const matrixClear=e.target.closest?.('[data-matrix-clear]');if(matrixClear){const kind=matrixClear.dataset.matrixClear,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances';state[key]=[];state.performanceMatrixPage=1;renderPage();return;}
         const tableView=e.target.closest('[data-table-view][data-view]'); if(tableView){const map={territory:'territoryTableView',moa:'moaTableView','status-year':'statusYearView',mention:'mentionTableView',performance:'performanceTableView','performance-matrix':'performanceMatrixView',operations:'operationsTableView'},key=map[tableView.dataset.tableView];if(key){state[key]=tableView.dataset.view;renderPage();}return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
     const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
@@ -2753,7 +2810,7 @@
   });
 
   pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;renderPage();return;}
-    const performanceSelect=e.target.closest?.('[data-performance-matrix-select]');if(performanceSelect){if(performanceSelect.dataset.performanceMatrixSelect==='mention')state.performanceMatrixMention=performanceSelect.value;else state.performanceMatrixPerformance=performanceSelect.value;renderPage();return;}
+    const performanceCheck=e.target.closest?.('[data-performance-matrix-check]');if(performanceCheck){const kind=performanceCheck.dataset.performanceMatrixCheck,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances',vals=matrixSelectionValues(kind).slice(),value=performanceCheck.value,idx=vals.findIndex(v=>norm(v)===norm(value));if(performanceCheck.checked&&idx<0)vals.push(value);if(!performanceCheck.checked&&idx>=0)vals.splice(idx,1);state[key]=vals;state.performanceMatrixPage=1;renderPage();return;}
     const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
     const mapGroup=e.target.closest?.('[data-map-grouping-toggle]'); if(mapGroup){state.mapOperationGrouping=state.mapFocusRegion?'department':(mapGroup.checked?'region':'department');state.territorySummaryPage=1;renderPage();return;}
@@ -2763,11 +2820,11 @@
   pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
   pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
 
-  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
+  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,q=norm(matrixSearch.value||'');pageEl.querySelectorAll(`[data-matrix-check-list="${kind}"] [data-matrix-option]`).forEach(el=>{const hide=Boolean(q)&&!String(el.dataset.matrixOption||'').includes(q);el.hidden=hide;});return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
   document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';const host=document.getElementById('obsTerritoryMap');if(host?._newosbOsmCtx)scheduleOsmRender(host._newosbOsmCtx);});
   window.addEventListener('newosb:requirementschange',e=>{if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
-  window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();if(state.activeProject){const refreshed=sourceOperations().find(p=>String(p.code)===String(state.activeProject.code));if(refreshed){state.activeProject=refreshed;renderProjectWindow();}else closeProjectWindow();}});
+  window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 

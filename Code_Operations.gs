@@ -262,8 +262,8 @@ function scoreHeaderRow_(values) {
   if (!normalized.length) return { score: 0, hints: [] };
   const joined = ' | ' + normalized.join(' | ') + ' | ';
   const groups = [
-    ['code', [/^code interne$/, /code operation/, /id operation/]],
-    ['nom', [/nom operation/, /nom du programme/, /^operation$/]],
+    ['code', [/^code interne$/, /operation code interne/, /code operation/, /id operation/]],
+    ['nom', [/nom de l operation/, /nom operation/, /nom du programme/, /^operation$/]],
     ['territoire', [/departement/, /^ville$/, /commune/, /code postal/, /region/]],
     ['referentiel', [/referentiel/]],
     ['moa', [/maitre d ouvrage/, /^moa$/]],
@@ -286,7 +286,7 @@ function scoreHeaderRow_(values) {
   const numericOnly = normalized.filter(function(h) { return /^\d+(?:[.,]\d+)?$/.test(h); }).length;
   score += Math.min(8, longLabels * 0.5);
   score -= Math.min(20, numericOnly * 2);
-  if (joined.indexOf(' | code interne | ') >= 0) score += 12;
+  if (joined.indexOf(' | code interne | ') >= 0 || joined.indexOf(' | operation code interne | ') >= 0) score += 12;
   return { score: score, hints: hints };
 }
 
@@ -312,7 +312,7 @@ function detectFirstDataRow_(sheet, headerRow, lastRow, lastColumn) {
   const headers = sheet.getRange(headerRow, 1, 1, scanCols).getDisplayValues()[0].map(normalizeHeader_);
   const identityColumns = [];
   headers.forEach(function(h, index) {
-    if (/^code interne$|code operation|id operation|nom operation|nom du programme/.test(h)) identityColumns.push(index);
+    if (/^code interne$|operation code interne|code operation|id operation|nom de l operation|nom operation|nom du programme/.test(h)) identityColumns.push(index);
   });
   const matrix = sheet.getRange(start, 1, count, scanCols).getDisplayValues();
   // Prefer a row carrying an operation identifier/name. This avoids treating a

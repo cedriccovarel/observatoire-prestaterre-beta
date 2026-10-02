@@ -8,10 +8,26 @@
     return Number.isFinite(n) ? n : null;
   };
   const rows = op => op?.rawRows || [op?.raw || {}];
+  const THICKNESS_KEYS=new Set(['roofThickness','wallThickness','floorThickness']);
+  const R_KEYS=new Set(['roofR','wallR','floorR']);
+  function numericTokens(value){
+    const s=String(value??'').replace(/,/g,'.');
+    const re=/(-?\d+(?:\.\d+)?)\s*(mm|cm)?/gi,out=[];let m;
+    while((m=re.exec(s))){const n=Number(m[1]);if(Number.isFinite(n))out.push({value:n,unit:String(m[2]||'').toLowerCase()});}
+    return out;
+  }
+  function maxMetricValue(value,key){
+    const tokens=numericTokens(value);if(!tokens.length)return null;
+    const vals=tokens.map(t=>{if(THICKNESS_KEYS.has(key)){if(t.unit==='cm')return t.value*10;return t.value;}if(R_KEYS.has(key)&&t.unit)return null;return t.value;}).filter(Number.isFinite);
+    return vals.length?Math.max(...vals):null;
+  }
   function rawValue(op,key){
-    const header=op?.fields?.[key];
-    if(header){for(const row of rows(op)){const v=row?.[header];if(String(v??'').trim()!=='')return v;}}
-    if(op && Object.prototype.hasOwnProperty.call(op,key) && String(op[key]??'').trim()!=='')return op[key];
+    const special=THICKNESS_KEYS.has(key)||R_KEYS.has(key),header=op?.fields?.[key];
+    if(header){
+      if(special){const vals=[];for(const row of rows(op)){const v=row?.[header];if(String(v??'').trim()==='')continue;const n=maxMetricValue(v,key);if(n!==null)vals.push(n);}if(vals.length)return Math.max(...vals);}
+      else {for(const row of rows(op)){const v=row?.[header];if(String(v??'').trim()!=='')return v;}}
+    }
+    if(op && Object.prototype.hasOwnProperty.call(op,key) && String(op[key]??'').trim()!==''){if(special){const n=maxMetricValue(op[key],key);return n===null?'':n;}return op[key];}
     return '';
   }
   const rawNumber=(op,key)=>number(rawValue(op,key));
@@ -26,20 +42,20 @@
   }
 
   const DICTIONARY = [
-    {key:'code',label:'Code projet',unit:'',source:'OPERATIONS',type:'source',definition:'Identifiant interne du projet. Plusieurs lignes portant le même Code interne appartiennent au même projet.',method:'Clé de regroupement Projet ; les statistiques générales dédupliquent ce code.'},
+    {key:'code',label:'Code projet',unit:'',source:'OPERATIONS',type:'source',definition:'Identifiant interne du projet. Plusieurs lignes portant le même code appartiennent au même projet.',method:'Colonne Opération: Code interne ; clé de regroupement Projet.'},
     {key:'name',label:'Nom projet',unit:'',source:'OPERATIONS',type:'source',definition:'Nom de l’opération.',method:'Valeur source.'},
-    {key:'moaGroup',label:'Groupe MOA',unit:'',source:'OPERATIONS',type:'source',definition:'Groupe principal auquel est rattaché le maître d’ouvrage.',method:"Colonne Maître d'ouvrage: Groupe principal Nom."},
-    {key:'moa',label:'Maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Société maître d’ouvrage retenue par le mapping NEWOSB.',method:'Priorité aux alias configurés par le moteur de données.'},
-    {key:'moaType',label:'Famille de maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Secteur/famille du maître d’ouvrage.',method:'Colonne Groupe principal / Secteur d’activité quand disponible.'},
-    {key:'department',label:'Département',unit:'',source:'OPERATIONS',type:'normalized',definition:'Code département de l’opération.',method:'Valeur source ou déduction depuis CP/adresse par le moteur historique.'},
-    {key:'region',label:'Région',unit:'',source:'Calcul NEWOSB',type:'calculated',definition:'Région administrative associée au département.',method:'Table de correspondance département → région.'},
-    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année utilisée par les filtres et chronologies de certification.',method:'Priorité à la date de décision CD, puis AP, puis date de création de l’évaluation. La colonne Année de la feuille OPERATIONS n’est jamais utilisée pour ce filtre.'},
-    {key:'constructionYear',label:'Année de construction',unit:'',source:'OPERATIONS',type:'source',definition:'Année de construction du bâtiment en particulier pour les opérations de rénovation.',method:'Colonne Année de la feuille OPERATIONS. Donnée descriptive du bâtiment, distincte de l’année de certification.'},
-    {key:'referential',label:'Référentiel',unit:'',source:'OPERATIONS',type:'normalized',definition:'Référentiel de certification.',method:'Valeur source normalisée.'},
+    {key:'moaGroup',label:'Groupe MOA',unit:'',source:'OPERATIONS',type:'source',definition:'Groupe principal auquel est rattaché le maître d’ouvrage.',method:"Colonne Nom de la société: Groupe principal Nom."},
+    {key:'moa',label:'Maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Société maître d’ouvrage retenue par le mapping NEWOSB.',method:'Colonne Nom de la société: Nom de la société.'},
+    {key:'moaType',label:'Famille de maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Secteur/famille du maître d’ouvrage.',method:"Colonne Nom de la société: Secteur d'activité."},
+    {key:'department',label:'Département',unit:'',source:'OPERATIONS',type:'normalized',definition:'Code département de l’opération.',method:"Colonne Département de l'opération ; repli sur CP/adresse si nécessaire."},
+    {key:'region',label:'Région',unit:'',source:'OPERATIONS',type:'normalized',definition:'Région administrative de l’opération.',method:"Colonne Région de l'opération ; repli sur la correspondance département → région si absente."},
+    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année utilisée par les filtres et chronologies de certification.',method:"Priorité à Certification: Date de décision CD, puis Date de décision de certification, puis AP, puis Opération: Évaluation: Date de première réception du dossier. L'année de construction n'est jamais utilisée pour ce filtre."},
+    {key:'constructionYear',label:'Année de construction',unit:'',source:'OPERATIONS',type:'source',definition:'Année de construction du bâtiment en particulier pour les opérations de rénovation.',method:"Colonne Année de construction (alias Année conservé pour compatibilité). Donnée descriptive du bâtiment, distincte de l'année de certification."},
+    {key:'referential',label:'Référentiel',unit:'',source:'OPERATIONS',type:'normalized',definition:'Référentiel de certification.',method:'Colonne Référentiel.'},
     {key:'nature',label:'Nature',unit:'',source:'OPERATIONS',type:'normalized',definition:'Neuf / rénovation / autre nature renseignée.',method:'Valeur source normalisée.'},
     {key:'tags',label:'Tags projet',unit:'',source:'OPERATIONS',type:'source',definition:'Mots-clés représentatifs du projet ou de l’opération technique.',method:'Dernière colonne Tags de la feuille OPERATIONS ; plusieurs tags sont séparés par des virgules.'},
-    {key:'status',label:'Avancement',unit:'',source:'Calcul NEWOSB',type:'calculated',definition:'Étape normalisée du tunnel de certification.',method:'Mapping des statuts sources vers les étapes NEWOSB.'},
-    {key:'affairStage',label:'Affaire : Étape',unit:'',source:'OPERATIONS',type:'source',definition:'Étape commerciale de l’affaire.',method:'Utilisée notamment pour exclure perdu / abandonné / annulé des statistiques actives.'},
+    {key:'status',label:'Avancement',unit:'',source:'Calcul NEWOSB',type:'calculated',definition:'Étape normalisée du tunnel de certification.',method:"Priorité à Opération: Évaluation: Statut, puis État du dossier ; mapping vers les étapes NEWOSB."},
+    {key:'affairStage',label:'Statut commercial',unit:'',source:'OPERATIONS',type:'source',definition:'Statut du contrat / de l’opération utilisé pour identifier les sorties définitives.',method:'Colonne Statut ; utilisée notamment pour exclure perdu / abandonné / annulé des statistiques actives.'},
     {key:'dwellings',label:'Logements',unit:'logements',source:'OPERATIONS',type:'source',definition:'Nombre de logements associé à l’opération.',method:'Valeur numérique source.'},
     {key:'buildings',label:'Bâtiments',unit:'bâtiments',source:'OPERATIONS',type:'source',definition:'Nombre de bâtiments associé à l’opération.',method:'Valeur numérique source.'},
     {key:'bbio',label:'Bbio projet',unit:'points',source:'OPERATIONS / RSET',type:'source',definition:'Besoin bioclimatique du projet.',method:'Valeur source identifiée par le mapping.'},
@@ -50,9 +66,9 @@
     {key:'dhMax',label:'DH max',unit:'°C.h',source:'OPERATIONS / RSET',type:'source',definition:'Seuil maximal de degrés-heures.',method:'Valeur source.'},
     {key:'ubatBefore',label:'Ubat initial',unit:'W/m².K',source:'OPERATIONS / étude thermique',type:'source',definition:'Coefficient moyen de déperdition initial.',method:'Valeur source.'},
     {key:'ubatAfter',label:'Ubat projet',unit:'W/m².K',source:'OPERATIONS / étude thermique',type:'source',definition:'Coefficient moyen de déperdition après travaux/projet.',method:'Valeur source.'},
-    {key:'roofR',label:'R toiture',unit:'m².K/W',source:'OPERATIONS / RSET',type:'source',definition:'Résistance thermique de la toiture.',method:'Valeur source.'},
-    {key:'wallR',label:'R façade',unit:'m².K/W',source:'OPERATIONS / RSET',type:'source',definition:'Résistance thermique de la façade.',method:'Valeur source.'},
-    {key:'floorR',label:'R plancher bas',unit:'m².K/W',source:'OPERATIONS / RSET',type:'source',definition:'Résistance thermique du plancher bas.',method:'Valeur source.'},
+    {key:'roofR',label:'R toiture',unit:'m².K/W',source:'OPERATIONS / RSET',type:'normalized',definition:'Résistance thermique de la toiture.',method:'Valeur source ; si plusieurs valeurs sont présentes dans une cellule / opération, NEWOSB retient la plus élevée.'},
+    {key:'wallR',label:'R façade',unit:'m².K/W',source:'OPERATIONS / RSET',type:'normalized',definition:'Résistance thermique de la façade.',method:'Valeur source ; si plusieurs valeurs sont présentes dans une cellule / opération, NEWOSB retient la plus élevée.'},
+    {key:'floorR',label:'R plancher bas',unit:'m².K/W',source:'OPERATIONS / RSET',type:'normalized',definition:'Résistance thermique du plancher bas.',method:'Valeur source ; si plusieurs valeurs sont présentes dans une cellule / opération, NEWOSB retient la plus élevée.'},
     {key:'icEnergy',label:'IC Énergie',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Indicateur carbone énergie.',method:'Valeur source.'},
     {key:'icEnergyMax',label:'IC Énergie max',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Seuil IC Énergie applicable.',method:'Valeur source.'},
     {key:'icConstruction',label:'IC Construction',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Indicateur carbone construction.',method:'Valeur source.'},
