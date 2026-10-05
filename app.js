@@ -230,6 +230,7 @@ const MAP_GEOJSON_URLS = [
       subtitle: 'PAR ÉTAPE DE LA CERTIFICATION',
       period: '2019-2026', cancelled: 69, sold: 20,
       statuses: [
+        {key:'proposal',value:0,label:'Proposition commerciale en cours'},
         {key:'notStarted',value:0,label:'Non démarrée'},
         {key:'incomplete',value:0,label:'Dossier incomplet'},
         {key:'complete',value:0,label:'Dossier complet'},
@@ -498,6 +499,7 @@ const MAP_GEOJSON_URLS = [
   if (state.tunnel && Array.isArray(state.tunnel.statuses)) {
     const oldTunnel = new Map(state.tunnel.statuses.filter(Boolean).map(item => [item.key, item]));
     state.tunnel.statuses = [
+      {key:'proposal',value:Number(oldTunnel.get('proposal')?.value)||0,label:'Proposition commerciale en cours'},
       {key:'notStarted',value:Number(oldTunnel.get('notStarted')?.value)||0,label:'Non démarrée'},
       {key:'incomplete',value:Number(oldTunnel.get('incomplete')?.value)||0,label:'Dossier incomplet'},
       {key:'complete',value:Number(oldTunnel.get('complete')?.value)||0,label:'Dossier complet'},
@@ -3299,7 +3301,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       <div class="tunnel-phase-wrap"><div class="tunnel-arrow">→</div><div class="tunnel-phase-row">${phases.map(p=>`<div class="phase-arrow ${p.cls}"><div><small>PHASE</small><b>${p.name}</b></div><img src="${p.icon}" alt=""></div>`).join('')}</div></div>
       <div class="tunnel-phase-desc">${phases.map(p=>`<div>${esc(p.desc)}</div>`).join('')}</div>
       <div class="tunnel-dotted"></div>
-      <div class="tunnel-bubbles">${state.tunnel.statuses.map((item,i)=>`<div class="tunnel-status ${colors[i]||'green1'} ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}" title="Afficher les opérations correspondantes"`:''}><div class="status-bubble ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${frSmart(item.value)}${item.key==='compliant'?'<sup>*</sup>':''}</div><div class="status-label ${dataRuntime.connected?'data-clickable data-status-label-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${esc(item.label)}</div><div class="status-pct ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${fr(tunnelPercent(item.value),1)} %</div>${item.key==='compliant'?`<div class="sold-note">* dont ${frSmart(state.tunnel.sold)} soldés</div>`:''}</div>`).join('')}</div>
+      <div class="tunnel-bubbles" style="--tunnel-steps:${state.tunnel.statuses.length}">${state.tunnel.statuses.map((item,i)=>`<div class="tunnel-status ${colors[i]||'green1'} ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}" title="Afficher les opérations correspondantes"`:''}><div class="status-bubble ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${frSmart(item.value)}${item.key==='compliant'?'<sup>*</sup>':''}</div><div class="status-label ${dataRuntime.connected?'data-clickable data-status-label-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${esc(item.label)}</div><div class="status-pct ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${fr(tunnelPercent(item.value),1)} %</div>${item.key==='compliant'?`<div class="sold-note">* dont ${frSmart(state.tunnel.sold)} soldés</div>`:''}</div>`).join('')}</div>
       <div class="tunnel-footer"><div class="period-box"><b>${esc(state.tunnel.period)}</b><span>PÉRIODE D’ÉTUDE</span></div><div class="cancelled-box">Sur la période <b>${frSmart(state.tunnel.cancelled)}</b> dossiers ont été annulés ou abandonnés</div></div>`;
   }
 
@@ -6683,6 +6685,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     affairStage:['statut','affaire: étape','affaire: etape','affaire étape','affaire etape','opération: étape','operation: etape'],
     status:['opération: évaluation: statut','operation: evaluation: statut','évaluation: statut','evaluation: statut','avancement','statut tunnel','tunnel','étape certification','etape certification','étape','etape','contrat: statut','statut'],
     dossierState:['état du dossier','etat du dossier'],
+    contractNumber:['numéro du contrat','numero du contrat','contrat: numéro du contrat','contrat: numero du contrat'],
     dwellings:['total logements','nombre de logements','logements'],
     buildings:['total bâtiments','total batiments','nombre de bâtiments','nombre de batiments','bâtiments','batiments'],
     constructionYear:['année de construction','annee de construction','année construction','annee construction','année du bâtiment','annee du batiment','année','annee','year'],
@@ -6724,7 +6727,10 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   function dataPrivacyApply(ops){const p=window.NEWOSB_PRIVACY;return p?.enabled?.()?p.anonymizeOperations(ops||[]):(ops||[]);}
   function dataPrivacyRefresh(){const src=(dataRuntime.sourceOperations&&dataRuntime.sourceOperations.length)?dataRuntime.sourceOperations:dataRuntime.operations;dataRuntime.operations=dataPrivacyApply(src);dataRuntime.filtered=[...dataRuntime.operations];dataRuntime.selection=[];dataRuntime.selectionTitle='';dataRuntime.selectionSub='';try{if(typeof dataExplorer!=='undefined'&&dataExplorer){dataExplorer.classList.remove('is-open');dataExplorer.setAttribute('aria-hidden','true');}}catch{}try{dataPopulateFilters();dataSyncViews();dataUpdateBadge();}catch(e){console.warn('NEWOSB anonymisation:',e);}try{window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE?.getRuntime?.()}));}catch{}}
 
-  function dataNorm(v){return String(v??'').replace(/&lt;br\s*\/?\s*&gt;/gi,' ').replace(/<br\s*\/?\s*>/gi,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’']/g,"'").replace(/\s+/g,' ').trim();}
+  // V6.13.4 : mémorisation (la normalisation des en-têtes était refaite des millions de fois :
+  // ~85 s de calcul à la connexion pour 6 000 lignes).
+  const DATA_NORM_CACHE=new Map();
+  function dataNorm(v){const key=String(v??'');let out=DATA_NORM_CACHE.get(key);if(out===undefined){out=key.replace(/&lt;br\s*\/?\s*&gt;/gi,' ').replace(/<br\s*\/?\s*>/gi,' ').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[’']/g,"'").replace(/\s+/g,' ').trim();;if(DATA_NORM_CACHE.size>200000)DATA_NORM_CACHE.clear();DATA_NORM_CACHE.set(key,out);}return out;}
   // V6.13 : lecture numérique commune (newosb-rules.js). Pour les comptages
   // (logements, bâtiments, années), une valeur absente ou illisible vaut 0.
   const DATA_RULES=window.NEWOSB_RULES;
@@ -6733,7 +6739,18 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   function dataNumber(v){const n=dataParseNumber(v);return n!==null&&Number.isFinite(n)?Math.max(0,n):0;}
   // Année de construction : nombre lisible, sinon une seule année explicite dans le texte (« avant 1948 »).
   function dataConstructionYear(v){const n=dataParseNumber(v);if(n!==null&&n>=1000&&n<=2100)return Math.round(n);const years=String(v??'').match(/\b(1[0-9]\d{2}|20\d{2})\b/g)||[];return years.length===1?Number(years[0]):0;}
+  // V6.13.4 : résultat mémorisé par jeu d'en-têtes et liste d'alias (appelé ligne par ligne).
+  const DATA_RESOLVE_CACHE=new WeakMap();
   function dataResolveHeader(headers,aliases,fieldKey){
+    const hk=(headers||[]).join('\u0001')+'\u0002'+(fieldKey||'');
+    let per=aliases&&typeof aliases==='object'?DATA_RESOLVE_CACHE.get(aliases):null;
+    if(aliases&&typeof aliases==='object'&&!per){per=new Map();DATA_RESOLVE_CACHE.set(aliases,per);}
+    if(per&&per.has(hk))return per.get(hk);
+    const idx=dataResolveHeaderUncached(headers,aliases,fieldKey);
+    if(per){if(per.size>200)per.clear();per.set(hk,idx);}
+    return idx;
+  }
+  function dataResolveHeaderUncached(headers,aliases,fieldKey){
     const hh=headers.map(dataNorm), aa=(aliases||[]).map(dataNorm).filter(Boolean);
     // 1) Une correspondance exacte reste toujours prioritaire.
     for(const a of aa){const i=hh.findIndex(h=>h===a);if(i>=0)return i;}
@@ -6915,8 +6932,11 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     dataResolveYearFields(headers,fields);
     const mapped=rows.map((r,i)=>{
       const affairStage=String(dataRawValue(r,fields.affairStage)||'').trim();
-      const progress=dataProgress(dataRawValue(r,fields.status));
+      // V6.13.4 : une ligne sans code interne est une proposition commerciale en cours.
+      const hasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
+      const progress=hasCode?dataProgress(dataRawValue(r,fields.status)):{key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',derived:'sans code interne'};
       const rawStatus=progress.label;
+      const contractNumber=String(dataRawValue(r,fields.contractNumber)||'').trim();
       const analysisExcluded=dataIsLostAbandonedStage(affairStage);
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||'';
       const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||'';
@@ -6926,19 +6946,19 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       const code=String(dataRawValue(r,fields.code)||'').trim();
       const sourceName=String(dataRawValue(r,fields.name)||'').trim();
       const name=sourceName||code;
-      return {code,name,region:String(dataRawValue(r,fields.region)||'').trim(),department:dataDepartment(dataFirstNonEmpty([dataRawValue(r,fields.department),dataRawValue(r,fields.postalCode),dataRawValue(r,fields.address)])),postalCode:String(dataRawValue(r,fields.postalCode)||'').trim(),city:String(dataRawValue(r,fields.city)||'').trim(),insee:String(dataRawValue(r,fields.insee)||'').trim(),intercommunality:String(dataRawValue(r,fields.intercommunality)||'').trim(),socialZone:socialZoneNormalizeLabel(dataRawValue(r,fields.socialZone)||''),longitude:Number(dataRawValue(r,fields.longitude))||null,latitude:Number(dataRawValue(r,fields.latitude))||null,address:String(dataRawValue(r,fields.address)||'').trim(),referential:String(dataRawValue(r,fields.referential)||'Non précisé').trim(),version:String(dataRawValue(r,fields.version)||'').trim(),moa:String(dataRawValue(r,fields.moa)||'Non précisé').trim(),moaGroup:String(dataRawValue(r,fields.moaGroup)||'').trim(),moaType:String(dataRawValue(r,fields.moaType)||'').trim(),affairStage,analysisExcluded,analysisExcludedReason:analysisExcluded?'Affaire perdue / abandonnée / annulée':'',status:progress.key,progressState:progress.state,rawStatus,sold:/sold/.test(dataNorm(affairStage))||/sold/.test(dataNorm(rawStatus)),dwellings:dataNumber(dataRawValue(r,fields.dwellings)),buildings:dataNumber(dataRawValue(r,fields.buildings)),year:certificationYear||'',certificationYear:certificationYear||'',createdYear:createdYear||'',constructionYear:constructionYear||'',tags:String(dataRawValue(r,fields.tags)||'').trim(),nature,heatingBefore:dataStandardEnergyVector(dataRawValue(r,fields.heatingBefore)),heatingAfter:dataStandardEnergyVector(dataRawValue(r,fields.heatingAfter)),heatingModeAfter:String(dataRawValue(r,fields.heatingModeAfter)||'').trim(),ecsBefore:dataStandardEnergyVector(dataRawValue(r,fields.ecsBefore)),ecsAfter:dataStandardEnergyVector(dataRawValue(r,fields.ecsAfter)),ecs:dataStandardEnergyVector(dataRawValue(r,fields.ecs)),cooling:dataStandardCooling(dataRawValue(r,fields.cooling)),ventilation:dataStandardVentilation(dataRawValue(r,fields.ventilation)),structure:dataStandardStructure(dataRawValue(r,fields.structure)),roofStructure:dataStandardStructure(dataRawValue(r,fields.roofStructure)),roofInsulation:dataStandardInsulation(dataRawValue(r,fields.roofInsulation)),wallStructure:dataStandardStructure(dataRawValue(r,fields.wallStructure)),wallInsulation:dataStandardInsulation(dataRawValue(r,fields.wallInsulation)),floorStructure:dataStandardStructure(dataRawValue(r,fields.floorStructure)),floorInsulation:dataStandardInsulation(dataRawValue(r,fields.floorInsulation)),windowMaterial:String(dataRawValue(r,fields.windowMaterial)||'').trim(),windowGlazing:String(dataRawValue(r,fields.windowGlazing)||'').trim(),windowShading:String(dataRawValue(r,fields.windowShading)||'').trim(),mentions:String(dataRawValue(r,fields.mentions)||'').trim(),performance:String(dataRawValue(r,fields.performance)||'').trim(),profile:String(dataRawValue(r,fields.profile)||'').trim(),raw:r,rawRows:[r],fields};
+      return {code,name,region:String(dataRawValue(r,fields.region)||'').trim(),department:dataDepartment(dataFirstNonEmpty([dataRawValue(r,fields.department),dataRawValue(r,fields.postalCode),dataRawValue(r,fields.address)])),postalCode:String(dataRawValue(r,fields.postalCode)||'').trim(),city:String(dataRawValue(r,fields.city)||'').trim(),insee:String(dataRawValue(r,fields.insee)||'').trim(),intercommunality:String(dataRawValue(r,fields.intercommunality)||'').trim(),socialZone:socialZoneNormalizeLabel(dataRawValue(r,fields.socialZone)||''),longitude:Number(dataRawValue(r,fields.longitude))||null,latitude:Number(dataRawValue(r,fields.latitude))||null,address:String(dataRawValue(r,fields.address)||'').trim(),referential:String(dataRawValue(r,fields.referential)||'Non précisé').trim(),version:String(dataRawValue(r,fields.version)||'').trim(),moa:String(dataRawValue(r,fields.moa)||'Non précisé').trim(),moaGroup:String(dataRawValue(r,fields.moaGroup)||'').trim(),moaType:String(dataRawValue(r,fields.moaType)||'').trim(),affairStage,analysisExcluded,analysisExcludedReason:analysisExcluded?'Affaire perdue / abandonnée / annulée':'',status:progress.key,progressState:progress.state,rawStatus,contractNumber,hasCode,sold:/sold/.test(dataNorm(affairStage))||/sold/.test(dataNorm(rawStatus)),dwellings:dataNumber(dataRawValue(r,fields.dwellings)),buildings:dataNumber(dataRawValue(r,fields.buildings)),year:certificationYear||'',certificationYear:certificationYear||'',createdYear:createdYear||'',constructionYear:constructionYear||'',tags:String(dataRawValue(r,fields.tags)||'').trim(),nature,heatingBefore:dataStandardEnergyVector(dataRawValue(r,fields.heatingBefore)),heatingAfter:dataStandardEnergyVector(dataRawValue(r,fields.heatingAfter)),heatingModeAfter:String(dataRawValue(r,fields.heatingModeAfter)||'').trim(),ecsBefore:dataStandardEnergyVector(dataRawValue(r,fields.ecsBefore)),ecsAfter:dataStandardEnergyVector(dataRawValue(r,fields.ecsAfter)),ecs:dataStandardEnergyVector(dataRawValue(r,fields.ecs)),cooling:dataStandardCooling(dataRawValue(r,fields.cooling)),ventilation:dataStandardVentilation(dataRawValue(r,fields.ventilation)),structure:dataStandardStructure(dataRawValue(r,fields.structure)),roofStructure:dataStandardStructure(dataRawValue(r,fields.roofStructure)),roofInsulation:dataStandardInsulation(dataRawValue(r,fields.roofInsulation)),wallStructure:dataStandardStructure(dataRawValue(r,fields.wallStructure)),wallInsulation:dataStandardInsulation(dataRawValue(r,fields.wallInsulation)),floorStructure:dataStandardStructure(dataRawValue(r,fields.floorStructure)),floorInsulation:dataStandardInsulation(dataRawValue(r,fields.floorInsulation)),windowMaterial:String(dataRawValue(r,fields.windowMaterial)||'').trim(),windowGlazing:String(dataRawValue(r,fields.windowGlazing)||'').trim(),windowShading:String(dataRawValue(r,fields.windowShading)||'').trim(),mentions:String(dataRawValue(r,fields.mentions)||'').trim(),performance:String(dataRawValue(r,fields.performance)||'').trim(),profile:String(dataRawValue(r,fields.profile)||'').trim(),raw:r,rawRows:[r],fields};
     }).filter(o=>o.code||o.name);
     // Une opération peut apparaître sur plusieurs lignes/bâtiments : on la compte une seule fois.
     const grouped=new Map();
-    mapped.forEach(o=>{const k=dataNorm(o.code)||dataNorm(o.name);if(!grouped.has(k)){grouped.set(k,o);return;}const g=grouped.get(k);g.rawRows.push(...o.rawRows);['name','region','department','postalCode','city','insee','intercommunality','socialZone','address','referential','version','moa','moaGroup','moaType','affairStage','nature','heatingBefore','heatingAfter','heatingModeAfter','ecsBefore','ecsAfter','ecs','cooling','ventilation','structure','roofStructure','roofInsulation','wallStructure','wallInsulation','floorStructure','floorInsulation','windowMaterial','windowGlazing','windowShading','mentions','performance','profile','tags','rawStatus'].forEach(key=>{if(!String(g[key]??'').trim()&&String(o[key]??'').trim())g[key]=o[key];});if(!g.year&&o.year)g.year=o.year;if(!g.certificationYear&&o.certificationYear)g.certificationYear=o.certificationYear;if(!g.createdYear&&o.createdYear)g.createdYear=o.createdYear;if(!g.constructionYear&&o.constructionYear)g.constructionYear=o.constructionYear;if(!g.dwellings&&o.dwellings)g.dwellings=o.dwellings;if(!g.buildings&&o.buildings)g.buildings=o.buildings;dataMergeProjectProgress(g,o);if(o.analysisExcluded){g.analysisExcluded=true;g.analysisExcludedReason=o.analysisExcludedReason||'Affaire perdue / abandonnée';if(o.affairStage)g.affairStage=o.affairStage;}g.sold=g.sold||o.sold;});
+    mapped.forEach(o=>{const k=o.code?`code:${dataNorm(o.code)}`:(o.contractNumber?`contrat:${dataNorm(o.contractNumber)}`:`nom:${dataNorm(o.name)}`);if(!grouped.has(k)){grouped.set(k,o);return;}const g=grouped.get(k);g.rawRows.push(...o.rawRows);['name','region','department','postalCode','city','insee','intercommunality','socialZone','address','referential','version','moa','moaGroup','moaType','affairStage','nature','heatingBefore','heatingAfter','heatingModeAfter','ecsBefore','ecsAfter','ecs','cooling','ventilation','structure','roofStructure','roofInsulation','wallStructure','wallInsulation','floorStructure','floorInsulation','windowMaterial','windowGlazing','windowShading','mentions','performance','profile','tags','rawStatus'].forEach(key=>{if(!String(g[key]??'').trim()&&String(o[key]??'').trim())g[key]=o[key];});if(!g.year&&o.year)g.year=o.year;if(!g.certificationYear&&o.certificationYear)g.certificationYear=o.certificationYear;if(!g.createdYear&&o.createdYear)g.createdYear=o.createdYear;if(!g.constructionYear&&o.constructionYear)g.constructionYear=o.constructionYear;if(!g.dwellings&&o.dwellings)g.dwellings=o.dwellings;if(!g.buildings&&o.buildings)g.buildings=o.buildings;dataMergeProjectProgress(g,o);if(o.analysisExcluded){g.analysisExcluded=true;g.analysisExcludedReason=o.analysisExcludedReason||'Affaire perdue / abandonnée';if(o.affairStage)g.affairStage=o.affairStage;}g.sold=g.sold||o.sold;});
     // V6.13.2 : contrôle de la colonne d'avancement, ligne à ligne, pour comparer avec la Sheet.
     const pd=dataRuntime.progressDiagnostics;
     if(pd){
       const counts=new Map();let filled=0;
-      rows.forEach(r=>{const raw=String(dataRawValue(r,fields.status)??'').trim();if(!raw)return;filled++;const p=dataProgress(raw);const k=raw;const c=counts.get(k)||{value:raw,count:0,key:p.key,label:p.state==='valid'?p.label:''};c.count++;counts.set(k,c);});
+      let noCode=0;rows.forEach(r=>{if(String(dataRawValue(r,fields.code)||'').trim()===''&&String(dataRawValue(r,fields.name)||dataRawValue(r,fields.contractNumber)||'').trim()!==''){noCode++;return;}const raw=String(dataRawValue(r,fields.status)??'').trim();if(!raw)return;filled++;const p=dataProgress(raw);const k=raw;const c=counts.get(k)||{value:raw,count:0,key:p.key,label:p.state==='valid'?p.label:''};c.count++;counts.set(k,c);});
       const conflicts=[];
       grouped.forEach(g=>{const keys=[...new Set((g.rawRows||[]).map(r=>dataProgress(dataRawValue(r,fields.status)).key).filter(k=>k!=='unknown'))];if(keys.length>1)conflicts.push({code:g.code,name:g.name,keys,retained:g.status});});
-      pd.reconciliation={sourceRows:rows.length,rowsWithStatus:filled,rowsWithoutIdentity:rows.length-mapped.length,projects:grouped.size,multiRowProjects:[...grouped.values()].filter(g=>(g.rawRows||[]).length>1).length,excludedProjects:[...grouped.values()].filter(g=>g.analysisExcluded).length,conflicts:conflicts.slice(0,200),conflictCount:conflicts.length};
+      pd.reconciliation={sourceRows:rows.length,rowsWithStatus:filled,rowsWithoutCode:noCode,rowsWithoutIdentity:rows.length-mapped.length,projects:grouped.size,multiRowProjects:[...grouped.values()].filter(g=>(g.rawRows||[]).length>1).length,excludedProjects:[...grouped.values()].filter(g=>g.analysisExcluded).length,conflicts:conflicts.slice(0,200),conflictCount:conflicts.length};
       pd.valueCounts=[...counts.values()].sort((a,b)=>b.count-a.count);
     }
     return [...grouped.values()];
@@ -6948,7 +6968,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     const fields=project?.fields||{};
     return rows.map((r,index)=>{
       const affairStage=String(dataRawValue(r,fields.affairStage)||project.affairStage||'').trim();
-      const progress=fields.status?dataProgress(dataRawValue(r,fields.status)):{key:project.status||'unknown',label:project.rawStatus||'',state:project.progressState||'empty'};
+      const rowHasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
+      const progress=!rowHasCode?{key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid'}:(fields.status?dataProgress(dataRawValue(r,fields.status)):{key:project.status||'unknown',label:project.rawStatus||'',state:project.progressState||'empty'});
       const rawStatus=progress.label;
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||project.constructionYear||'';
       const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||project.certificationYear||'';
@@ -7002,12 +7023,12 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     const ecsBefore=['Gaz','Électricité','Gaz','RCU'];
     const ecsAfter=['CET','Électricité','PAC','RCU'];
     const socialZones=['Zone 1','Zone 2','Zone 3'];
-    const statusLabels={notStarted:'Non démarrée',incomplete:'Dossier incomplet',complete:'Dossier complet',planned:'Analyse planifiée',analysis:'Analyse réalisée',visit:'Visite réalisée',compliant:'Évaluation conforme'};
+    const statusLabels={proposal:'Proposition commerciale en cours',notStarted:'Non démarrée',incomplete:'Dossier incomplet',complete:'Dossier complet',planned:'Analyse planifiée',analysis:'Analyse réalisée',visit:'Visite réalisée',compliant:'Évaluation conforme'};
     const fields={bbio:'Bbio',bbioMax:'Bbio max',cep:'Cep',cepMax:'Cep max',cepnr:'Cepnr',cepnrMax:'Cepnr max',dh:'DH',dhMax:'DH max',icEnergy:'IC énergie',icEnergyMax:'IC énergie max',icConstruction:'IC construction',icConstructionMax:'IC construction max',icConstruction2028:'IC construction seuil 2028',icConstruction2031:'IC construction seuil 2031',dpeEnergyBefore:'DPE énergie avant',dpeEnergyAfter:'DPE énergie après',dpeGesBefore:'DPE GES avant',dpeGesAfter:'DPE GES après',roofR:'R toiture',wallR:'R façade',floorR:'R plancher',roofThickness:'Épaisseur toiture',wallThickness:'Épaisseur façade',floorThickness:'Épaisseur plancher',ubatBefore:'Ubat avant',ubatAfter:'Ubat après',cepCooling:'Cep refroidissement',cepLighting:'Cep éclairage',cepAuxVent:'Cep auxiliaires ventilation',cepAuxDist:'Cep auxiliaires distribution',cepMobility:'Cep déplacement occupants',cepElectricity:'Cep électricité',cepGas:'Cep gaz',cepDistrict:'Cep réseau de chaleur',cepWood:'Cep bois / biomasse'};
     const out=[];
     for(let i=1;i<=96;i++){
       const mod=i%29;
-      const status=mod<5?'notStarted':mod<9?'incomplete':mod<12?'complete':mod<17?'planned':mod<20?'analysis':mod<24?'visit':'compliant';
+      const status=mod<3?'proposal':mod<5?'notStarted':mod<9?'incomplete':mod<12?'complete':mod<17?'planned':mod<20?'analysis':mod<24?'visit':'compliant';
       const idx=i%deps.length;
       const beforeHeat=heatBefore[i%heatBefore.length], afterHeat=heatAfter[(i+1)%heatAfter.length];
       const beforeEcs=ecsBefore[i%ecsBefore.length], afterEcs=ecsAfter[(i+2)%ecsAfter.length];
@@ -7039,7 +7060,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     saveState();
   }
   function dataFilteredOperations(){return [...dataRuntime.operations];}
-  function dataAggregateTunnel(ops){const counts={notStarted:0,incomplete:0,complete:0,planned:0,analysis:0,visit:0,compliant:0};let cancelled=0,sold=0,unknown=0;ops.forEach(o=>{if(o.analysisExcluded||o.status==='cancelled')cancelled++;else if(counts[o.status]!==undefined)counts[o.status]++;else unknown++;if(o.sold)sold++;});return {counts,cancelled,sold,unknown};}
+  function dataAggregateTunnel(ops){const counts={proposal:0,notStarted:0,incomplete:0,complete:0,planned:0,analysis:0,visit:0,compliant:0};let cancelled=0,sold=0,unknown=0;ops.forEach(o=>{if(o.analysisExcluded||o.status==='cancelled')cancelled++;else if(counts[o.status]!==undefined)counts[o.status]++;else unknown++;if(o.sold)sold++;});return {counts,cancelled,sold,unknown};}
   function dataAggregateMap(ops){
     const values={};
     ops.forEach(o=>{const code=dataDepartment(o.department);if(code&&DEPARTMENTS.some(d=>d.code===code))values[code]=(values[code]||0)+1;});
@@ -7117,6 +7138,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   function dataEnsureTunnelStatuses(model){
     if(!model)return;
     const wanted=[
+      ['proposal','Proposition commerciale en cours'],
       ['notStarted','Non démarrée'],
       ['incomplete','Dossier incomplet'],
       ['complete','Dossier complet'],

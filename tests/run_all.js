@@ -31,15 +31,22 @@ test('R : une épaisseur en mm est ignorée', () => assert.strictEqual(rr('R=4,2
 test('R : un coefficient U est refusé', () => { const r = R.parseMeasure('U=0,25 W/m².K', 'resistance'); assert.strictEqual(r.value, null); assert.strictEqual(r.status, 'doubtful'); });
 test('valeurs invraisemblables écartées et signalées', () => { assert.strictEqual(th('0,14'), null); assert.strictEqual(rr('25'), null); assert.strictEqual(R.parseMeasure('25', 'resistance').status, 'doubtful'); });
 
-section('3. Avancement (liste fermée de 7 étapes)');
-test('les 7 valeurs admises, dans l’ordre', () => assert.deepStrictEqual(R.PROGRESS_STATUSES.map(s => s.label), ['Non démarrée', 'Dossier incomplet', 'Dossier complet', 'Analyse planifiée', 'Analyse réalisée', 'Visite réalisée', 'Évaluation conforme']));
+section('3. Avancement (liste fermée de 8 étapes)');
+test('les 8 valeurs admises, dans l’ordre', () => assert.deepStrictEqual(R.PROGRESS_STATUSES.map(s => s.label), ['Proposition commerciale en cours', 'Non démarrée', 'Dossier incomplet', 'Dossier complet', 'Analyse planifiée', 'Analyse réalisée', 'Visite réalisée', 'Évaluation conforme']));
 test('tolère accents, majuscules et pluriels', () => { assert.strictEqual(R.progressStatus('non demarree').key, 'notStarted'); assert.strictEqual(R.progressStatus('DOSSIERS INCOMPLETS').key, 'incomplete'); assert.strictEqual(R.progressStatus('Analyse realisee').key, 'analysis'); });
 test('valeur hors liste → unknown + invalid', () => { const p = R.progressStatus('Gagnée'); assert.strictEqual(p.key, 'unknown'); assert.strictEqual(p.state, 'invalid'); });
 test('cellule vide → unknown + empty (plus « Non démarrée » par défaut)', () => { const p = R.progressStatus(''); assert.strictEqual(p.key, 'unknown'); assert.strictEqual(p.state, 'empty'); });
 const objs = asObjects(HEADERS, ROWS);
 test('colonne BC = index 54 ; l’avancement de la feuille de test est bien en BC', () => { assert.strictEqual(R.columnLetter(54), 'BC'); assert.strictEqual(R.columnLetter(0), 'A'); assert.strictEqual(R.columnLetter(26), 'AA'); assert.strictEqual(R.columnLetter(HEADERS.indexOf('Opération: Évaluation: Statut')), 'BC'); });
 test('colonne « Opération: Évaluation: Statut » retenue', () => { const r = R.resolveProgressColumn(HEADERS, objs); assert.strictEqual(r.header, 'Opération: Évaluation: Statut'); assert.strictEqual(r.origin, 'nom attendu'); });
-test('une faute de frappe sur 40 lignes n’invalide pas la colonne (seuil 95 %)', () => {
+test('seuil de 80 % : 8 valeurs reconnues sur 10 suffisent, 7 sur 10 déclenchent une alerte', () => {
+  const mk = n => Array.from({ length: 10 }, (_, i) => ({ X: i < n ? 'Analyse réalisée' : 'Gagnée' }));
+  const full = Array.from({ length: 60 }, (_, i) => (i === 54 ? 'X' : 'C' + i));
+  assert.strictEqual(R.resolveProgressColumn(['X'], mk(8), { fullHeaders: full }).found, true);
+  assert.strictEqual(R.resolveProgressColumn(['X'], mk(7), { fullHeaders: full }).found, false);
+  assert.strictEqual(R.PROGRESS_MIN_VALID_RATIO, 0.8);
+});
+test('une faute de frappe sur 40 lignes n’invalide pas la colonne', () => {
   const rows = Array.from({ length: 40 }, (_, i) => ({ 'Opération: Évaluation: Statut': i === 0 ? 'Analyse réalisé' : 'Analyse réalisée' }));
   assert.strictEqual(R.resolveProgressColumn(['Opération: Évaluation: Statut'], rows).found, true);
 });
@@ -61,6 +68,13 @@ test('colonne au bon nom mais pas en BC → utilisée, avec alerte « déplacée
 });
 test('feuille de test : colonne trouvée en BC sans alerte', () => { const r = R.resolveProgressColumn(HEADERS, objs, { fullHeaders: HEADERS }); assert.strictEqual(r.column, 'BC'); assert.strictEqual(r.warning, false); });
 test('numérotation et compléments tolérés (« 3 - Dossier complet », « Analyse réalisée - en attente »)', () => { assert.strictEqual(R.progressStatus('3 - Dossier complet').key, 'complete'); assert.strictEqual(R.progressStatus('05. Analyse planifiée').key, 'planned'); assert.strictEqual(R.progressStatus('Analyse réalisée - en attente').key, 'analysis'); assert.strictEqual(R.progressStatus('Dossier incomplet').key, 'incomplete'); });
+test('orthographe, majuscules, espaces et fautes légères tolérés', () => {
+  const cases = { 'NON  DÉMARRÉE': 'notStarted', 'Non-démarrée': 'notStarted', 'Nondémarrée': 'notStarted', 'Non démarée': 'notStarted', ' dossier  incomplet ': 'incomplete', 'Dossier imcomplet': 'incomplete',
+    'dossiercomplet': 'complete', 'Dossier complét': 'complete', 'analyse plannifiée': 'planned', 'Analyse prévue': 'planned', 'Analyse realisé': 'analysis', 'Analyse faite': 'analysis', 'Visite realisee': 'visit', 'Visite': 'visit',
+    'Evaluation Conforme': 'compliant', 'Eval. conforme': 'compliant', 'Évaluation conforme.': 'compliant', '\u200bAnalyse réalisée': 'analysis', 'Proposition commerciale en cours': 'proposal' };
+  for (const [v, k] of Object.entries(cases)) assert.strictEqual(R.progressStatus(v).key, k, v);
+});
+test('« non conforme » et les statuts commerciaux ne sont jamais lus comme un avancement', () => { for (const v of ['Non conforme', 'Évaluation non conforme', 'Gagnée', 'En cours', 'Soldé', 'Annulé', 'Analyse']) assert.strictEqual(R.progressStatus(v).key, 'unknown', v); });
 test('le statut commercial (Gagnée/Perdue) n’est jamais pris pour l’avancement', () => {
   const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows, { fullHeaders: ['Statut'] }).found, false);
 });
@@ -83,7 +97,7 @@ test('compatibilité V6.12 : maximum entre lignes et unités', () => { assert.st
 test('une cellule « n.c. » ne masque pas la valeur de la ligne suivante', () => assert.strictEqual(C.rawNumber(op('bbio', 'n.c.', '52'), 'bbio'), 52));
 test('valeurs illisibles listées pour la page Qualité', () => { const u = C.unreadableValues(op('bbio', '12,3 / 15'), 'bbio'); assert.strictEqual(u.length, 1); assert(u[0].reason); });
 test('Qualité : avancement hors liste signalé', () => { const q = C.qualityForOperation({ code: 'A', name: 'A', moa: 'M', department: '33', referential: 'R', progressState: 'invalid', rawStatus: 'Gagnée', fields: {}, rawRows: [{}] }); assert(q.issues.some(i => i.code === 'progress:invalid')); });
-test('dictionnaire : avancement documenté avec la liste fermée', () => assert(/Visite réalisée/.test(C.dictByKey.status.definition) && /95 %/.test(C.dictByKey.status.method)));
+test('dictionnaire : avancement documenté avec la liste fermée', () => assert(/Visite réalisée/.test(C.dictByKey.status.definition) && /80 %/.test(C.dictByKey.status.method) && /Proposition commerciale/.test(C.dictByKey.status.definition)));
 test('dictionnaire : années documentées (décision de certification / création)', () => assert(/Date de décision de certification/.test(C.dictByKey.year.method) && /Date de création/.test(C.dictByKey.createdYear.method)));
 test('date illisible listée pour la page Qualité', () => assert.strictEqual(C.unreadableValues({ fields: { createdDate: 'D' }, rawRows: [{ D: 'bientôt' }] }, 'createdDate').length, 1));
 
@@ -125,6 +139,10 @@ test('Exigences : clé d’accès respectée', () => {
   vm.createContext(ctx); vm.runInContext(read('Code_Exigences.gs') + ';this.__g=doGet;', ctx);
   assert.strictEqual(JSON.parse(ctx.__g({ parameter: {} }).text).ok, false);
 });
+
+section('6 bis. Listes à cocher (Mentions × performances, filtres)');
+test('CSS : l’attribut hidden masque réellement les lignes des listes à cocher', () => assert(/\.obs-matrix-check-list>label\[hidden\]\{display:none!important\}/.test(read('newosb.css'))));
+test('listes à cocher : défilement et recherche conservés lors d’un nouveau rendu', () => { const j = read('newosb.js'); assert(j.includes('data-scroll-key="matrix-list-${kind}"') && j.includes('data-scroll-key="global-filter-${key}"') && j.includes('function restoreInnerScroll(snap)') && j.includes('state.matrixSearch')); });
 
 section('7. Cohérence du paquet');
 const index = read('index.html'), gen = read('generator.html');

@@ -21,8 +21,8 @@ const server = http.createServer((req, res) => {
 
 const SHIM = `<script>window.google={script:{run:(function(){function R(ok,ko){this.ok=ok;this.ko=ko;}R.prototype.withSuccessHandler=function(f){return new R(f,this.ko);};R.prototype.withFailureHandler=function(f){return new R(this.ok,f);};R.prototype.newosbBridgeRequest=function(p){var s=this;fetch('/macros/s/TEST/__run',{method:'POST',body:JSON.stringify(p)}).then(function(r){return r.json();}).then(function(j){s.ok&&s.ok(j);}).catch(function(e){s.ko&&s.ko(e);});};return new R();})()}};</script>`;
 
-async function scenario(browser, origin, properties, { jsonFails = false } = {}) {
-  const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties });
+async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX } = {}) {
+  const gs = loadGs('Code_Operations.gs', { matrix, properties });
   const context = await browser.newContext();
   await context.route('https://script.google.com/**', async route => {
     const url = new URL(route.request().url());
@@ -51,16 +51,70 @@ async function scenario(browser, origin, properties, { jsonFails = false } = {})
     console.log('\nA. Site autorisé : connexion par le pont Apps Script');
     { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
       const rt = await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime());
-      check(rt.connected && rt.count === 10, `10 projets chargés (obtenu : ${rt.count})`);
+      check(rt.connected && rt.count === 13, `13 projets chargés : 10 codes internes + 3 propositions sans code, non fusionnées malgré un nom identique (obtenu : ${rt.count})`);
       check(rt.progress && rt.progress.header === 'Opération: Évaluation: Statut' && rt.progress.column === 'BC', `avancement lu dans « Opération: Évaluation: Statut », colonne BC (obtenu : ${rt.progress && rt.progress.column})`);
       const fb = await page.textContent('#dataFeedback'); check(/colonne BC/.test(fb), 'message de connexion : « colonne BC » affiché — ' + fb);
       const ops = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => [o.code, o.status, o.progressState]));
       const st = Object.fromEntries(ops.map(o => [o[0], o[1]]));
       check(st['OP-3'] === 'complete' && st['OP-6'] === 'visit' && st['OP-7'] === 'compliant', '« Dossier complet », « Visite réalisée », « Évaluation conforme » reconnus');
       check(st['OP-9'] === 'unknown', 'avancement vide → Non renseigné (plus « Non démarrée » par défaut)');
+      const props = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().filter(o => !o.code).map(o => o.status));
+      check(props.length === 3 && props.every(k => k === 'proposal'), 'lignes sans code interne → « Proposition commerciale en cours »');
+      // --- Labels & performances : tableau croisé Mentions × performances (V6.13.5) ---
+      await page.click('button[data-page="performance"]'); await page.waitForTimeout(400);
+      const mlist = '[data-matrix-check-list="mention"]', plist = '[data-matrix-check-list="performance"]';
+      const stat = (sel) => page.evaluate(s => { const l = document.querySelector(s); const all = [...l.querySelectorAll('[data-matrix-option]')]; return { total: all.length, shown: all.filter(e => getComputedStyle(e).display !== 'none').length, scrollTop: l.scrollTop, scrollable: l.scrollHeight > l.clientHeight + 20 }; }, sel);
+      const s0 = await stat(mlist);
+      check(s0.total >= 12 && s0.scrollable, `liste Mentions défilante (${s0.total} valeurs)`);
+      await page.fill('[data-matrix-search="mention"]', 'RT2012'); await page.waitForTimeout(150);
+      const s1 = await stat(mlist);
+      check(s1.shown === 2 && s1.total === s0.total, `recherche « RT2012 » : ${s1.shown} mentions visibles sur ${s1.total} (attendu 2)`);
+      await page.fill('[data-matrix-search="mention"]', 'rt2012 -20'); await page.waitForTimeout(150);
+      check((await stat(mlist)).shown === 1, 'recherche à plusieurs mots (ordre libre, casse ignorée) : « rt2012 -20 » → 1 mention');
+      await page.fill('[data-matrix-search="mention"]', 'biosource'); await page.waitForTimeout(150);
+      check((await stat(mlist)).shown === 3, 'recherche sans accent : « biosource » → 3 mentions « Biosourcé »');
+      await page.fill('[data-matrix-search="mention"]', 'zzzz'); await page.waitForTimeout(150);
+      check((await stat(mlist)).shown === 0 && await page.evaluate(() => !document.querySelector('[data-matrix-empty="mention"]').hidden), 'aucun résultat : message affiché');
+      await page.fill('[data-matrix-search="mention"]', ''); await page.waitForTimeout(150);
+      check((await stat(mlist)).shown === s0.total, 'recherche effacée : toutes les mentions reviennent');
+      await page.fill('[data-matrix-search="performance"]', 'ubat'); await page.waitForTimeout(150);
+      check((await stat(plist)).shown === 2, 'recherche dans la liste Performances : « ubat » → 2 valeurs');
+      await page.fill('[data-matrix-search="performance"]', ''); await page.waitForTimeout(150);
+      // défilement conservé quand on coche
+      await page.evaluate(s => { document.querySelector(s).scrollTop = 150; }, mlist);
+      const beforeScroll = (await stat(mlist)).scrollTop;
+      await page.evaluate(s => { const l = document.querySelector(s); const b = [...l.querySelectorAll('input[type=checkbox]')].find(x => x.getBoundingClientRect().top > l.getBoundingClientRect().top + 20); b.click(); }, mlist);
+      await page.waitForTimeout(500);
+      const afterScroll = (await stat(mlist)).scrollTop;
+      check(beforeScroll > 100 && Math.abs(afterScroll - beforeScroll) <= 2, `cocher une mention garde la position dans la liste (${Math.round(beforeScroll)} → ${Math.round(afterScroll)})`);
+      await page.locator('[data-matrix-check-list="mention"] input[type=checkbox]:not(:checked)').nth(5).click(); // vrai clic souris
+      await page.waitForTimeout(500);
+      check(Math.abs((await stat(mlist)).scrollTop - beforeScroll) <= 6, `cocher une deuxième mention à la souris : position conservée (${Math.round((await stat(mlist)).scrollTop)})`);
+      check(await page.evaluate(() => document.querySelectorAll('[data-matrix-check-list="mention"] input:checked').length === 2 && /2 sélectionnées/.test(document.querySelector('.obs-matrix-check-panel header b').textContent)), 'deux mentions cochées et comptées');
+      // la recherche et la position survivent à une case cochée
+      await page.evaluate(s => { document.querySelector(s).scrollTop = 0; }, plist);
+      await page.fill('[data-matrix-search="performance"]', 'cep'); await page.waitForTimeout(150);
+      await page.locator('[data-matrix-check-list="performance"] [data-matrix-option]:not([hidden]) input[type=checkbox]').nth(2).click(); // vrai clic souris : la case prend le focus
+      await page.waitForTimeout(500);
+      const sp = await stat(plist);
+      check(sp.shown === 4 && await page.inputValue('[data-matrix-search="performance"]') === 'cep', `cocher pendant une recherche : filtre « cep » conservé (${sp.shown} valeurs visibles)`);
+      check(await page.evaluate(() => document.activeElement && document.activeElement.matches('[data-performance-matrix-check]')), 'le focus reste sur la case cochée');
+      await page.evaluate(() => document.querySelector('[data-matrix-clear="mention"]').click()); await page.waitForTimeout(400);
+      check(await page.evaluate(() => document.querySelectorAll('[data-matrix-check-list="mention"] input:checked').length === 0), '« Tout afficher » décoche les mentions');
+      await page.evaluate(() => document.querySelector('[data-matrix-clear="performance"]').click()); await page.waitForTimeout(300);
+      await page.click('#obsResetFilters'); await page.waitForTimeout(400);
+      check(await page.inputValue('[data-matrix-search="performance"]') === '', 'Réinitialiser efface aussi les recherches');
+      // --- Filtres du haut de page : même défaut de défilement corrigé ---
+      await page.evaluate(() => { const d = [...document.querySelectorAll('#obsFilters details')].find(x => x.querySelector('[data-global-filter-search="referential"]')); d.open = true; });
+      await page.waitForTimeout(200);
+      await page.fill('[data-global-filter-search="referential"]', 'renovation'); await page.waitForTimeout(250);
+      const gShown = await page.evaluate(() => [...document.querySelectorAll('[data-filter-option="referential"]')].filter(e => getComputedStyle(e).display !== 'none').length);
+      check(gShown === 1, `filtre Référentiel : recherche « renovation » → ${gShown} valeur visible`);
+      await page.fill('[data-global-filter-search="referential"]', ''); await page.waitForTimeout(250);
+      await page.click('#obsResetFilters'); await page.waitForTimeout(300);
       await page.click('button[data-page="quality"]'); await page.waitForTimeout(300);
       const recon = await page.textContent('.obs-progress-card');
-      check(recon.includes('Contrôle ligne à ligne de la colonne BC') && recon.includes('11 lignes lues dans la Sheet') && recon.includes('10 projets après regroupement'), 'Qualité : contrôle ligne à ligne de la colonne BC (11 lignes → 10 projets)');
+      check(recon.includes('Contrôle ligne à ligne de la colonne BC') && recon.includes('14 lignes lues dans la Sheet') && recon.includes('3 sans code interne') && recon.includes('13 projets après regroupement'), 'Qualité : contrôle ligne à ligne de la colonne BC (14 lignes dont 3 propositions → 13 projets)');
       check(recon.includes('1 - Non démarrée') && /1 projet avec des statuts différents/.test(recon) && recon.includes('OP-2'), 'Qualité : valeurs brutes listées et projet à statuts différents signalé (OP-2)');
       check(recon.includes('Lignes Sheet') && recon.includes('Dans le tunnel'), 'Qualité : tableau lignes Sheet → projets → tunnel');
       const op2 = await page.evaluate(() => ({ project: window.NEWOSB_ENGINE.getOperations().find(o => o.code === 'OP-2').status, rows: window.NEWOSB_ENGINE.getTechnicalOperations().filter(o => o.projectCode === 'OP-2').map(o => o.status) }));
@@ -75,22 +129,22 @@ async function scenario(browser, origin, properties, { jsonFails = false } = {})
       check(filterLabels.includes('Année certification') && filterLabels.includes('Année de création'), 'filtres « Année certification » et « Année de création » présents');
       const certOpts = await page.$$eval('#obsFilters details:nth-of-type(1) [data-global-filter-check]', els => els.map(e => e.value));
       const createdOpts = await page.$$eval('#obsFilters details:nth-of-type(2) [data-global-filter-check]', els => els.map(e => e.value));
-      check(certOpts.join(',') === '2024,2025' && createdOpts.join(',') === '2022,2023,2024', `options : certification ${certOpts.join(',')} · création ${createdOpts.join(',')}`);
+      check(certOpts.join(',') === '2024,2025' && createdOpts.join(',') === '2022,2023,2024,2026', `options : certification ${certOpts.join(',')} · création ${createdOpts.join(',')}`);
       await page.evaluate(() => { const i = document.querySelector('#obsFilters details:nth-of-type(2) [data-global-filter-check][value="2022"]'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
       await page.waitForTimeout(300);
       check((await page.textContent('#obsFilterCount')).trim() === '1', 'filtre « Année de création = 2022 » : 1 projet actif (affaire perdue exclue)');
       await page.click('#obsResetFilters'); await page.waitForTimeout(300);
       const tunnel = await page.evaluate(() => window.NEWOSB_ENGINE.aggregateTunnel(window.NEWOSB_ENGINE.getOperations()));
-      check(tunnel.counts.visit === 1 && tunnel.counts.complete === 1 && tunnel.cancelled === 1, `tunnel : 1 visite, 1 dossier complet, 1 affaire perdue (${JSON.stringify(tunnel)})`);
+      check(tunnel.counts.visit === 1 && tunnel.counts.complete === 1 && tunnel.counts.proposal === 2 && tunnel.cancelled === 2, `tunnel : 2 propositions, 1 visite, 1 dossier complet, 2 annulés/perdus (${JSON.stringify(tunnel)})`);
       await page.click('button[data-page="certification"]'); await page.waitForTimeout(300);
       const steps = await page.$$eval('.obs-tunnel-step span', els => els.map(e => e.textContent));
-      check(steps.join('|') === 'Non démarrée|Dossier incomplet|Dossier complet|Analyse planifiée|Analyse réalisée|Visite réalisée|Évaluation conforme', 'tunnel affiché avec les 7 étapes dans l’ordre');
+      check(steps.join('|') === 'Proposition commerciale en cours|Non démarrée|Dossier incomplet|Dossier complet|Analyse planifiée|Analyse réalisée|Visite réalisée|Évaluation conforme', 'tunnel affiché avec les 8 étapes dans l’ordre');
       const pageText = await page.textContent('#obsPage');
       check(!/TUNNEL INTERACTIF/i.test(pageText) && /AVANCEMENT/.test(pageText), 'carte « Tunnel interactif » renommée « Avancement »');
       for (const w of [1440, 1100, 900]) {
         await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(250);
         const tops = await page.$$eval('#obsPage .obs-tunnel-oneline', ts => ts.map(t => new Set([...t.querySelectorAll('.obs-tunnel-step')].map(b => Math.round(b.getBoundingClientRect().top))).size));
-        check(tops.length && tops.every(n => n === 1), `largeur ${w}px : les 7 étapes tiennent sur une seule ligne`);
+        check(tops.length && tops.every(n => n === 1), `largeur ${w}px : les 8 étapes tiennent sur une seule ligne`);
       }
       await page.setViewportSize({ width: 1280, height: 900 });
       check(/Statut par année de création/.test(pageText), 'chronologie de l’avancement par année de création');
@@ -113,7 +167,7 @@ async function scenario(browser, origin, properties, { jsonFails = false } = {})
       await gen.evaluate(() => { document.getElementById('dataMode').value = 'demo'; return window.NEWOSB_ENGINE.connect(); });
       await gen.evaluate(() => { const el = [...document.querySelectorAll('#tabsNav *')].find(e => e.children.length === 0 && /Tunnel de certification/.test(e.textContent)); el && el.click(); }); await gen.waitForTimeout(500);
       const tops = await gen.$$eval('.tunnel-bubbles .tunnel-status', els => els.map(e => Math.round(e.getBoundingClientRect().top)));
-      check(tops.length === 7 && new Set(tops).size === 1, `slide tunnel : 7 bulles sur une seule ligne (${tops.length})`);
+      check(tops.length === 8 && new Set(tops).size === 1, `slide tunnel : 8 bulles sur une seule ligne (${tops.length})`);
       await context.close(); }
 
     console.log('\nB. Site non autorisé : le pont refuse de transmettre les données');
@@ -122,6 +176,14 @@ async function scenario(browser, origin, properties, { jsonFails = false } = {})
       const msg = await page.textContent('#dataFeedback');
       check(!rt.connected || rt.mode !== 'appsScript', 'aucune donnée chargée');
       check(/NEWOSB_ALLOWED_ORIGINS/.test(msg), 'message explicite : configurer NEWOSB_ALLOWED_ORIGINS');
+      await context.close(); }
+
+    console.log('\nD. Performance : 6 000 lignes chargées en moins de 40 s');
+    { const big = [MATRIX[0], MATRIX[1], MATRIX[2]]; const data = MATRIX.slice(3);
+      for (let i = 0; i < 6000; i++) { const r = [...data[i % data.length]]; if (r[0]) r[0] = 'OP-' + (1000 + i); big.push(r); }
+      const t0 = Date.now(); const { page, context } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: big }); const ms = Date.now() - t0;
+      const rt = await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime());
+      check(rt.connected && rt.count > 4000 && ms < 40000, `6 000 lignes : ${rt.count} projets en ${Math.round(ms / 1000)} s`);
       await context.close(); }
 
     console.log('\nC. Clé d’accès : URL sans clé refusée, URL avec clé acceptée');

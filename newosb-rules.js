@@ -194,7 +194,10 @@
   // Liste fermée : toute autre valeur signifie que la colonne lue n'est pas
   // la bonne (ou qu'une cellule est mal saisie).
   const PROGRESS_SOURCE_HEADER = 'Opération: Évaluation: Statut';
+  // V6.13.4 : « Proposition commerciale en cours » = ligne sans code interne
+  // (contrat sans opération). Première étape, la moins avancée.
   const PROGRESS_STATUSES = [
+    { key: 'proposal', label: 'Proposition commerciale en cours', color: '#b8a7d9' },
     { key: 'notStarted', label: 'Non démarrée', color: '#9aa8a2' },
     { key: 'incomplete', label: 'Dossier incomplet', color: '#d49a32' },
     { key: 'complete', label: 'Dossier complet', color: '#b4a24a' },
@@ -204,25 +207,96 @@
     { key: 'compliant', label: 'Évaluation conforme', color: '#06402b' }
   ];
   const PROGRESS_KEYS = PROGRESS_STATUSES.map(s => s.key);
-  const PROGRESS_MIN_VALID_RATIO = 0.95;
+  const PROGRESS_BY_KEY = Object.fromEntries(PROGRESS_STATUSES.map(s => [s.key, s]));
+  // V6.13.4 : seuil abaissé à 80 % des valeurs non vides.
+  const PROGRESS_MIN_VALID_RATIO = 0.80;
 
-  // Tolère majuscules, accents, pluriels et e muet final, rien de plus.
+  // Forme canonique : minuscules, sans accents, ponctuation et espaces superflus
+  // retirés, pluriels et e muet final ignorés.
   const progressCanon = v => headerKey(v).split(' ').filter(Boolean).map(w => w.replace(/s$/, '').replace(/e$/, '')).join(' ');
   const PROGRESS_INDEX = new Map(PROGRESS_STATUSES.map(s => [progressCanon(s.label), s]));
+  // Variantes d'écriture admises en plus du libellé exact (forme canonique).
+  const PROGRESS_VARIANTS = {
+    proposal: ['proposition commercial', 'proposition commercial en cour', 'proposition en cour', 'devis en cour', 'offre en cour'],
+    notStarted: ['non demarr', 'non demarre', 'pas demarr', 'non commenc', 'a demarr', 'non debut'],
+    incomplete: ['incomplet', 'dossier non complet', 'dossier incomplet en attente', 'piece manquant'],
+    complete: ['complet', 'dossier recu complet'],
+    planned: ['analyse planifi', 'analyse prevu', 'planifi'],
+    analysis: ['analyse realis', 'analyse fait', 'analyse termin', 'analyse effectu'],
+    visit: ['visite realis', 'visite fait', 'visite effectu', 'visite termin'],
+    compliant: ['evaluation conform', 'eval conform', 'evaluation valid', 'conform']
+  };
+  const VARIANT_INDEX = new Map();
+  Object.entries(PROGRESS_VARIANTS).forEach(([k, list]) => list.forEach(v => VARIANT_INDEX.set(progressCanon(v), PROGRESS_BY_KEY[k])));
+  PROGRESS_INDEX.forEach((s, c) => VARIANT_INDEX.set(c, s));
+  const squash = v => String(v).replace(/ /g, '');
 
-  // V6.13.2 : tolère une numérotation en tête (« 3 - Dossier complet », « 05. Analyse… »)
-  // et un complément après le libellé (« Analyse réalisée - en attente »).
+  function levenshtein(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i]; let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (cur[j] < best) best = cur[j];
+      }
+      if (best > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  // Numérotation en tête (« 3 - Dossier complet », « 05. Analyse… », « 1) … »).
   const stripNumbering = v => String(v ?? '').replace(/^\s*[\(\[]?\d{1,2}\s*[-.)\]–:/]?\s+/, '').replace(/^\s*[\(\[]?\d{1,2}\s*[-.)\]–:/]\s*/, '');
+  const matchCache = new Map();
+  // Lecture tolérante, dans l'ordre :
+  //  1. libellé exact ou variante connue (casse, accents, espaces, ponctuation,
+  //     pluriel, e muet, numérotation et espaces collés ignorés) ;
+  //  2. libellé suivi d'un complément (« Analyse réalisée - en attente ») ;
+  //  3. faute de frappe légère (jusqu'à 2 lettres d'écart, 1 pour les mots courts) ;
+  //  4. mot-clé caractéristique (incomplet, complet, planifié, visite, conforme…).
+  // « non conforme » n'est jamais lu comme « Évaluation conforme ».
   function progressMatch(raw) {
-    if (raw === null || raw === undefined || String(raw).trim() === '') return null;
-    const canon = progressCanon(stripNumbering(raw));
-    const exact = PROGRESS_INDEX.get(canon);
-    if (exact) return exact;
-    let best = null, bestLen = 0;
-    PROGRESS_INDEX.forEach((status, label) => {
-      if ((' ' + canon + ' ').indexOf(' ' + label + ' ') === 0 && label.length > bestLen) { best = status; bestLen = label.length; }
-    });
-    return best;
+    if (raw === null || raw === undefined) return null;
+    const text = String(raw).replace(/[\u200b\u200c\u200d\ufeff]/g, '').trim();
+    if (!text) return null;
+    if (matchCache.has(text)) return matchCache.get(text);
+    const canon = progressCanon(stripNumbering(text));
+    let found = null;
+    if (canon && !/\bnon conform|\bpas conform/.test(canon)) {
+      found = VARIANT_INDEX.get(canon) || null;
+      if (!found) {
+        const sq = squash(canon);
+        VARIANT_INDEX.forEach((s, c) => { if (!found && squash(c) === sq) found = s; });
+      }
+      if (!found) {
+        let bestLen = 0;
+        PROGRESS_INDEX.forEach((s, label) => { if ((' ' + canon + ' ').indexOf(' ' + label + ' ') === 0 && label.length > bestLen) { found = s; bestLen = label.length; } });
+      }
+      if (!found) {
+        const sq = squash(canon); let bestD = Infinity, ambiguous = false;
+        VARIANT_INDEX.forEach((s, c) => {
+          const target = squash(c); if (target.length < 6) return;
+          const max = target.length >= 12 ? 2 : 1, d = levenshtein(sq, target, max);
+          if (d <= max) { if (d < bestD) { bestD = d; found = s; ambiguous = false; } else if (d === bestD && found !== s) ambiguous = true; }
+        });
+        if (ambiguous) found = null;
+      }
+      if (!found) {
+        const has = re => re.test(canon);
+        if (has(/\bproposition\b/)) found = PROGRESS_BY_KEY.proposal;
+        else if (has(/\b(non|pas) (demarr|commenc|debut)/)) found = PROGRESS_BY_KEY.notStarted;
+        else if (has(/\bincomplet/)) found = PROGRESS_BY_KEY.incomplete;
+        else if (has(/\bcomplet\b/)) found = PROGRESS_BY_KEY.complete;
+        else if (has(/\bplanifi/)) found = PROGRESS_BY_KEY.planned;
+        else if (has(/\bvisit\b/)) found = PROGRESS_BY_KEY.visit;
+        else if (has(/\bconform/)) found = PROGRESS_BY_KEY.compliant;
+        else if (has(/\banalyse\b/) && has(/\b(realis|fait|termin|effectu)/)) found = PROGRESS_BY_KEY.analysis;
+      }
+    }
+    if (matchCache.size > 5000) matchCache.clear();
+    matchCache.set(text, found);
+    return found;
   }
   function progressStatus(raw) {
     if (raw === null || raw === undefined || String(raw).trim() === '') return { key: 'unknown', label: '', state: 'empty' };
@@ -249,9 +323,9 @@
   // V6.13.2 — Colonne d'avancement : TOUJOURS « Opération: Évaluation: Statut »
   // (colonne BC de la Google Sheet). Plus aucune recherche dans d'autres colonnes.
   //  1. colonne portant exactement ce nom (accents, casse, ponctuation ignorés) ;
-  //  2. à défaut, la colonne située en BC, si son contenu correspond (≥ 95 %).
+  //  2. à défaut, la colonne située en BC, si son contenu correspond (≥ 80 %).
   // La colonne retenue n'est jamais écartée : un taux de valeurs reconnues
-  // inférieur à 95 % déclenche une alerte, et chaque valeur brute est listée.
+  // inférieur à 80 % déclenche une alerte, et chaque valeur brute est listée.
   const PROGRESS_COLUMN_LETTER = 'BC';
   const PROGRESS_COLUMN_INDEX = 54;
   function resolveProgressColumn(headers, rows, options) {
@@ -269,7 +343,7 @@
       let message = `Avancement lu dans « ${header} »${column ? ` (colonne ${column})` : ''}.`;
       if (named.length > 1) message += ` ⚠ ${named.length} colonnes portent ce nom : la première est utilisée.`;
       if (wrongPlace) message += ` ⚠ Attendu en colonne ${PROGRESS_COLUMN_LETTER} : une colonne a été insérée ou déplacée dans la Sheet.`;
-      if (lowRatio) message += ` ⚠ Seulement ${Math.round(st.ratio * 100)} % des valeurs sont reconnues : voir Qualité & données.`;
+      if (lowRatio) message += ` ⚠ Seulement ${Math.round(st.ratio * 100)} % des valeurs sont reconnues (seuil ${Math.round(minRatio * 100)} %) : voir Qualité & données.`;
       if (!st.nonEmpty) message += ' ⚠ La colonne est vide.';
       return { header, found: true, origin, column, index, ratio: st.ratio, nonEmpty: st.nonEmpty, valid: st.valid, invalidValues: st.invalidValues,
         warning: !!(lowRatio || wrongPlace || named.length > 1 || !st.nonEmpty), duplicates: named.length, expectedHeader: PROGRESS_SOURCE_HEADER, expectedColumn: PROGRESS_COLUMN_LETTER, checked, minRatio, message };
@@ -345,7 +419,7 @@
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
     parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
-    progressMatch, progressStatus, columnProgressStats, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
+    progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };
   root.NEWOSB_RULES = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

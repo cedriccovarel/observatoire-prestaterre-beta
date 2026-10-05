@@ -1117,3 +1117,9 @@ body.obs-project-window-open{overflow:hidden!important}.obs-project-window{posit
 .obs-progress-recon h3{font-size:12.5px;margin:14px 0 4px;color:var(--obs-green)}
 .obs-progress-recon tr.is-unknown td{background:rgba(241,185,28,.08)}
 .obs-progress-steps{margin:10px 0 6px 18px;padding:0;font-size:11.5px;line-height:1.6;color:var(--obs-text)}
+
+/* V6.13.5 — listes à cocher Mentions × performances : le filtre de recherche doit réellement masquer
+   les lignes (display:grid!important écrasait l'attribut hidden), et un message s'affiche si rien ne correspond. */
+.obs-matrix-check-list>label[hidden]{display:none!important}
+.obs-matrix-check-empty{margin:2px 9px 4px;padding:7px 9px;border-radius:7px;background:#f6f9f7;color:#6d8278;font-size:9.5px;font-weight:700}
+.obs-matrix-check-empty[hidden]{display:none}

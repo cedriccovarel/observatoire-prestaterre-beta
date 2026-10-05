@@ -1,5 +1,27 @@
 # Historique
 
+## V6.13.5
+
+**Labels & performances — tableau croisé Mentions × performances**
+- Les champs de recherche des deux listes à cocher ne masquaient aucune ligne (une règle CSS annulait le masquage). Ils fonctionnent : tous les mots saisis doivent apparaître, dans n'importe quel ordre, sans tenir compte des accents ni de la casse (« rt2012 -20 » trouve « BEE+ Niveau RT2012 -20% »). Un message « Aucun résultat pour cette recherche » s'affiche si rien ne correspond.
+- Cocher une case ne ramène plus la liste en haut : la position de défilement, la recherche saisie et le focus sont conservés à chaque rafraîchissement du tableau.
+- « Réinitialiser » efface aussi ces recherches.
+- Même défaut corrigé dans les filtres déroulants du haut de page (Maître d'ouvrage, Référentiel…) : la liste revenait en haut à chaque case cochée.
+
+**Tests** : 64 tests unitaires, 52 vérifications navigateur (dont recherche, défilement, focus et clics souris réels sur le tableau croisé).
+
+## V6.13.4
+
+**Avancement**
+- Nouvelle première étape « Proposition commerciale en cours » : toute ligne sans code interne (colonne B). Ces lignes sont regroupées par numéro de contrat (et non plus par nom d'opération, qui fusionnait des contrats homonymes).
+- Seuil de reconnaissance abaissé à 80 % des valeurs non vides de la colonne BC.
+- Liste fermée élargie aux écarts d'écriture : majuscules, accents, espaces multiples ou collés, tirets et ponctuation, pluriels, e muet, numérotation, complément après le libellé, caractères invisibles, fautes de frappe légères (1 à 2 lettres), variantes courantes (« Eval. conforme », « Analyse faite », « Analyse prévue », « Visite »…). « Non conforme » n'est jamais lu comme « Évaluation conforme ».
+- Tunnel (Observatoire et slide du générateur) à 8 étapes, sur une seule ligne.
+- Dictionnaire mis à jour (il décrivait encore l'ancienne règle des 95 %).
+
+**Performance**
+- Connexion de la source fortement accélérée : la normalisation des en-têtes était recalculée des millions de fois. Sur l'export réel (7 003 lignes), le traitement dans le navigateur passe d'environ 85 s à environ 5 s. Pendant ce délai, les graphiques n'étaient pas encore alimentés.
+
 ## V6.13.3
 
 - Projet à plusieurs lignes (même code interne) : avancement global = étape la **moins avancée** parmi ses lignes renseignées. La fiche détaillée de chaque opération garde le statut exact de sa ligne (colonne BC).

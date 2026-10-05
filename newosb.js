@@ -28,14 +28,14 @@
   // V6.13 : avancement en liste fermée (newosb-rules.js). 'unknown' = vide ou hors liste ;
   // il n'apparaît ni dans le filtre Avancement ni dans le tunnel.
   const RULES = window.NEWOSB_RULES;
-  const PROGRESS_ORDER = (RULES?.PROGRESS_KEYS)||['notStarted','incomplete','complete','planned','analysis','visit','compliant'];
+  const PROGRESS_ORDER = (RULES?.PROGRESS_KEYS)||['proposal','notStarted','incomplete','complete','planned','analysis','visit','compliant'];
   const STATUS_LABELS = {
-    notStarted:'Non démarrée', incomplete:'Dossier incomplet', complete:'Dossier complet', planned:'Analyse planifiée',
+    proposal:'Proposition commerciale en cours', notStarted:'Non démarrée', incomplete:'Dossier incomplet', complete:'Dossier complet', planned:'Analyse planifiée',
     analysis:'Analyse réalisée', visit:'Visite réalisée', compliant:'Évaluation conforme', unknown:'Non renseigné', cancelled:'Annulée / abandonnée'
   };
   const CHRONOLOGY_STATUS_LABELS = {...STATUS_LABELS,lostAffair:'Affaire perdue',abandonedAffair:'Affaire abandonnée',cancelledAffair:'Affaire annulée'};
   const STATUS_COLORS = {
-    notStarted:'#9aa8a2', incomplete:'#d49a32', complete:'#b4a24a', planned:'#6f9cb9', analysis:'#4b9881', visit:'#16864f',
+    proposal:'#b8a7d9', notStarted:'#9aa8a2', incomplete:'#d49a32', complete:'#b4a24a', planned:'#6f9cb9', analysis:'#4b9881', visit:'#16864f',
     compliant:'#06402b', unknown:'#c9d1cd', cancelled:'#dc5b4d'
   };
   const CHRONOLOGY_STATUS_COLORS = {...STATUS_COLORS,lostAffair:'#9c3f3f',abandonedAffair:'#c96c45',cancelledAffair:'#dc5b4d'};
@@ -99,7 +99,7 @@
     performanceMatrixView:'matrix',
     performanceMatrixPage:1,
     performanceMatrixMentions:[],
-    performanceMatrixPerformances:[],
+    performanceMatrixPerformances:[],matrixSearch:{mention:'',performance:''},
     energyCepViews:{usage:'pie',vector:'pie'},
     activeProject:null,
     projectWindowTab:'general',
@@ -141,12 +141,39 @@
   }
 
   let uiScrollRestoreToken=0;
+  // V6.13.5 : les listes internes marquées data-scroll-key (listes à cocher défilantes)
+  // gardent leur position de défilement et le focus lors d'un nouveau rendu de la page.
+  function captureInnerScroll(){
+    const inner={}, roots=[pageEl,filtersEl].filter(Boolean);
+    roots.forEach(root=>root.querySelectorAll('[data-scroll-key]').forEach(el=>{inner[el.dataset.scrollKey]=el.scrollTop||0;}));
+    const a=document.activeElement;let focus=null;
+    if(a&&roots.some(r=>r.contains(a))){
+      if(a.matches?.('[data-performance-matrix-check]'))focus={type:'check',kind:a.dataset.performanceMatrixCheck,value:a.value};
+      else if(a.matches?.('[data-matrix-search]'))focus={type:'search',kind:a.dataset.matrixSearch,start:a.selectionStart,end:a.selectionEnd};
+      else if(a.matches?.('[data-global-filter-check]'))focus={type:'gcheck',kind:a.dataset.globalFilterCheck,value:a.value};
+    }
+    return {inner,focus};
+  }
+  function restoreInnerScroll(snap){
+    if(!snap)return;
+    const roots=[pageEl,filtersEl].filter(Boolean), {inner,focus}=snap;
+    const all=roots.flatMap(r=>[...r.querySelectorAll('[data-scroll-key]')]);
+    Object.keys(inner||{}).forEach(key=>{const el=all.find(x=>x.dataset.scrollKey===key);if(el&&Math.abs((el.scrollTop||0)-inner[key])>1)el.scrollTop=inner[key];});
+    if(focus){
+      let el=null;
+      if(focus.type==='check')el=[...pageEl.querySelectorAll('[data-performance-matrix-check]')].find(x=>x.dataset.performanceMatrixCheck===focus.kind&&x.value===focus.value);
+      else if(focus.type==='gcheck')el=[...(filtersEl?.querySelectorAll('[data-global-filter-check]')||[])].find(x=>x.dataset.globalFilterCheck===focus.kind&&x.value===focus.value);
+      else el=pageEl.querySelector(`[data-matrix-search="${focus.kind}"]`);
+      if(el){try{el.focus({preventScroll:true});if(focus.type==='search'&&focus.start!=null)el.setSelectionRange(focus.start,focus.end);}catch{}}
+    }
+  }
   function captureUiScroll(){
     return {
       pageTop:Number(pageEl?.scrollTop)||0,
       pageLeft:Number(pageEl?.scrollLeft)||0,
       winX:Number(window.scrollX)||0,
-      winY:Number(window.scrollY)||0
+      winY:Number(window.scrollY)||0,
+      ...captureInnerScroll()
     };
   }
   function restoreUiScroll(snapshot){
@@ -161,7 +188,8 @@
       if(Math.abs((window.scrollY||0)-snapshot.winY)>1 || Math.abs((window.scrollX||0)-snapshot.winX)>1) window.scrollTo(snapshot.winX,snapshot.winY);
     };
     apply();
-    requestAnimationFrame(()=>{apply();requestAnimationFrame(apply);});
+    restoreInnerScroll(snapshot);
+    requestAnimationFrame(()=>{apply();restoreInnerScroll(snapshot);requestAnimationFrame(apply);});
     setTimeout(apply,60);
     setTimeout(apply,140);
   }
@@ -1166,7 +1194,7 @@
 
   function tunnel(ops,{analytic=false}={}){
     const a=engine.aggregateTunnel(ops), order=PROGRESS_ORDER;
-    const icons={notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
+    const icons={proposal:'✎',notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
     return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>`;
   }
 
@@ -1390,9 +1418,15 @@
     return mentionOk&&performanceOk;
   }
   function applyMatrixSelection(ops){ return (ops||[]).filter(matrixSelectionMatch); }
+  // V6.13.5 : recherche dans les listes à cocher « Mentions × performances ».
+  // Tous les mots saisis doivent apparaître (ordre libre, accents et casse ignorés).
+  function matrixSearchTokens(query){return norm(query||'').split(/\s+/).filter(Boolean);}
+  function matrixOptionMatches(name,tokens){if(!tokens.length)return true;const n=norm(name);return tokens.every(t=>n.includes(t));}
   function matrixCheckboxPanel(kind,items){
     const selected=matrixSelectionValues(kind), label=kind==='mention'?'Mentions / labels':'Performances';
-    return `<section class="obs-matrix-check-panel"><header><div><span>${esc(label)}</span><b>${selected.length?`${fmt(selected.length)} sélectionnée${selected.length>1?'s':''}`:'Toutes'}</b></div><button type="button" data-matrix-clear="${kind}" ${selected.length?'':'disabled'}>Tout afficher</button></header><label class="obs-matrix-check-search"><span>⌕</span><input type="search" data-matrix-search="${kind}" placeholder="Rechercher…" autocomplete="off"></label><div class="obs-matrix-check-list" data-matrix-check-list="${kind}">${items.map(x=>`<label data-matrix-option="${attr(norm(x.name))}"><input type="checkbox" data-performance-matrix-check="${kind}" value="${attr(x.name)}" ${matrixSelectionHas(kind,x.name)?'checked':''}><span>${escLines(x.name)}</span><small>${fmt(x.value)}</small></label>`).join('')}</div></section>`;
+    const query=String(state.matrixSearch?.[kind]||''), tokens=matrixSearchTokens(query);
+    const visible=items.filter(x=>matrixOptionMatches(x.name,tokens)).length;
+    return `<section class="obs-matrix-check-panel"><header><div><span>${esc(label)}</span><b>${selected.length?`${fmt(selected.length)} sélectionnée${selected.length>1?'s':''}`:'Toutes'}</b></div><button type="button" data-matrix-clear="${kind}" ${selected.length?'':'disabled'}>Tout afficher</button></header><label class="obs-matrix-check-search"><span>⌕</span><input type="search" data-matrix-search="${kind}" value="${attr(query)}" placeholder="Rechercher…" autocomplete="off"></label><div class="obs-matrix-check-empty" data-matrix-empty="${kind}" ${visible?'hidden':''}>Aucun résultat pour cette recherche.</div><div class="obs-matrix-check-list" data-matrix-check-list="${kind}" data-scroll-key="matrix-list-${kind}">${items.map(x=>`<label data-matrix-option="${attr(norm(x.name))}" ${matrixOptionMatches(x.name,tokens)?'':'hidden'}><input type="checkbox" data-performance-matrix-check="${kind}" value="${attr(x.name)}" ${matrixSelectionHas(kind,x.name)?'checked':''}><span>${escLines(x.name)}</span><small>${fmt(x.value)}</small></label>`).join('')}</div></section>`;
   }
   function matrixSelectionSummary(ops){
     const ms=matrixSelectionValues('mention'),ps=matrixSelectionValues('performance');
@@ -1747,7 +1781,7 @@
     if(['ubatBefore','ubatAfter'].includes(k))return 'Plus Ubat est faible, plus l’enveloppe est performante thermiquement.';
     if(k.startsWith('dpe'))return 'Classe A = meilleure performance ; classe G = moins bonne. Lire avant/après pour mesurer l’évolution.';
     if(k==='dwellings'||k==='buildings')return 'Effectif brut du projet ; les agrégats généraux de l’Observatoire Prestaterre dédupliquent les projets par Code interne.';
-    if(k==='status')return 'Étape normalisée du tunnel ; les affaires perdues/abandonnées/annulées restent hors statistiques actives.';
+    if(k==='status')return 'Étape de la colonne BC (8 étapes, dont Proposition commerciale en cours pour les lignes sans code interne) ; les affaires perdues/abandonnées/annulées restent hors statistiques actives.';
     return d?.type==='calculated'?'Valeur calculée par l’Observatoire Prestaterre à partir des données sources et des règles documentées.':'Valeur issue de la source ; l’interpréter selon sa définition, son unité et le périmètre filtré.';
   }
   function dictionaryTable(){
@@ -1775,8 +1809,8 @@
     const y=runtime().years||null, yearLine=(diag,label,expected)=>diag?.header?`<b>${label}</b> : colonne « ${esc(diag.header)} »${diag.column?` (${esc(diag.column)})`:''}`:`<b>${label}</b> : colonne « ${esc(expected)} » ${diag?.match==='ambigu'?'ambiguë (plusieurs colonnes possibles)':'introuvable'}`;
     const yearsHtml=y?`<p class="obs-progress-diag ${y.certification?.header&&y.created?.header?'':'is-warn'}">${yearLine(y.certification,'Année de certification',RULES?.CERTIFICATION_DATE_HEADER||'Date de décision de certification')}<br>${yearLine(y.created,'Année de création',RULES?.CREATION_DATE_HEADER||'Date de création')}</p>`:'';
     const rec=d.reconciliation, vc=d.valueCounts||[];
-    const recHtml=rec?`<div class="obs-progress-recon"><h3>Contrôle ligne à ligne de la colonne ${esc(d.column||'BC')}</h3><p class="obs-progress-diag">Pour comparer avec la Google Sheet : filtre la colonne ${esc(d.column||'BC')} et compte les lignes par valeur.</p><div class="obs-table-wrap"><table class="obs-table obs-progress-recon-table"><thead><tr><th>Valeur dans la Sheet (${esc(d.column||'BC')})</th><th>Lue comme</th><th>Lignes Sheet</th><th>Projets</th><th>dont annulés / abandonnés</th><th>Dans le tunnel</th></tr></thead><tbody>${(()=>{const all=sourceOperations(),byKey=k=>all.filter(o=>o.status===k),cells=k=>{const p=byKey(k),x=p.filter(o=>o.analysisExcluded).length;return `<td>${fmt(p.length)}</td><td>${fmt(x)}</td><td><b>${fmt(p.length-x)}</b></td>`;};const seen=new Set();const out=vc.map(v=>{const first=!seen.has(v.key);seen.add(v.key);return `<tr class="${v.key==='unknown'?'is-unknown':''}"><td><code>${esc(v.value)}</code></td><td>${v.key==='unknown'?'<b class="obs-low-sample">non reconnue → Non renseigné</b>':esc(STATUS_LABELS[v.key]||v.label)}</td><td>${fmt(v.count)}</td>${first&&v.key!=='unknown'?cells(v.key):'<td colspan="3"></td>'}</tr>`;});out.push(`<tr><td><i>(vide)</i></td><td>Non renseigné</td><td>${fmt(rec.sourceRows-rec.rowsWithStatus)}</td>${cells('unknown')}</tr>`);return out.join('');})()}</tbody></table></div><p class="obs-progress-diag">« Lignes Sheet » doit correspondre exactement au filtre de la colonne ${esc(d.column||'BC')}. Le tunnel compte des <b>projets</b> (un code interne = un projet) et retire les affaires annulées ou abandonnées (colonne Statut).</p>
-      <ol class="obs-progress-steps"><li><b>${fmt(rec.sourceRows)}</b> lignes lues dans la Sheet</li>${rec.rowsWithoutIdentity?`<li><b>${fmt(rec.rowsWithoutIdentity)}</b> lignes ignorées (ni code interne ni nom d’opération)</li>`:''}<li><b>${fmt(rec.projects)}</b> projets après regroupement par code interne${rec.multiRowProjects?` (${fmt(rec.multiRowProjects)} projets ont plusieurs lignes : leur avancement global est l’étape la moins avancée de leurs lignes ; la fiche détaillée de chaque opération garde le statut exact de sa ligne)`:''}</li><li><b>${fmt(rec.excludedProjects)}</b> projets perdus / abandonnés / annulés (colonne Statut), hors tunnel</li><li><b>${fmt(rec.projects-rec.excludedProjects)}</b> projets dans le tunnel d’avancement (avant filtres)</li></ol>
+    const recHtml=rec?`<div class="obs-progress-recon"><h3>Contrôle ligne à ligne de la colonne ${esc(d.column||'BC')}</h3><p class="obs-progress-diag">Pour comparer avec la Google Sheet : filtre la colonne ${esc(d.column||'BC')} et compte les lignes par valeur.</p><div class="obs-table-wrap"><table class="obs-table obs-progress-recon-table"><thead><tr><th>Valeur dans la Sheet (${esc(d.column||'BC')})</th><th>Lue comme</th><th>Lignes Sheet</th><th>Projets</th><th>dont annulés / abandonnés</th><th>Dans le tunnel</th></tr></thead><tbody>${(()=>{const all=sourceOperations(),byKey=k=>all.filter(o=>o.status===k),cells=k=>{const p=byKey(k),x=p.filter(o=>o.analysisExcluded).length;return `<td>${fmt(p.length)}</td><td>${fmt(x)}</td><td><b>${fmt(p.length-x)}</b></td>`;};const seen=new Set();const out=vc.map(v=>{const first=!seen.has(v.key);seen.add(v.key);return `<tr class="${v.key==='unknown'?'is-unknown':''}"><td><code>${esc(v.value)}</code></td><td>${v.key==='unknown'?'<b class="obs-low-sample">non reconnue → Non renseigné</b>':esc(STATUS_LABELS[v.key]||v.label)}</td><td>${fmt(v.count)}</td>${first&&v.key!=='unknown'?cells(v.key):'<td colspan="3"></td>'}</tr>`;});if(rec.rowsWithoutCode)out.unshift(`<tr><td><i>(ligne sans code interne)</i></td><td>${esc(STATUS_LABELS.proposal)}</td><td>${fmt(rec.rowsWithoutCode)}</td>${cells('proposal')}</tr>`);out.push(`<tr><td><i>(vide)</i></td><td>Non renseigné</td><td>${fmt(rec.sourceRows-rec.rowsWithStatus-(rec.rowsWithoutCode||0))}</td>${cells('unknown')}</tr>`);return out.join('');})()}</tbody></table></div><p class="obs-progress-diag">« Lignes Sheet » doit correspondre exactement au filtre de la colonne ${esc(d.column||'BC')}. Le tunnel compte des <b>projets</b> (un code interne = un projet) et retire les affaires annulées ou abandonnées (colonne Statut).</p>
+      <ol class="obs-progress-steps"><li><b>${fmt(rec.sourceRows)}</b> lignes lues dans la Sheet${rec.rowsWithoutCode?`, dont <b>${fmt(rec.rowsWithoutCode)}</b> sans code interne → « Proposition commerciale en cours »`:''}</li>${rec.rowsWithoutIdentity?`<li><b>${fmt(rec.rowsWithoutIdentity)}</b> lignes ignorées (ni code interne ni nom d’opération)</li>`:''}<li><b>${fmt(rec.projects)}</b> projets après regroupement par code interne (sans code : par numéro de contrat)${rec.multiRowProjects?` (${fmt(rec.multiRowProjects)} projets ont plusieurs lignes : leur avancement global est l’étape la moins avancée de leurs lignes ; la fiche détaillée de chaque opération garde le statut exact de sa ligne)`:''}</li><li><b>${fmt(rec.excludedProjects)}</b> projets perdus / abandonnés / annulés (colonne Statut), hors tunnel</li><li><b>${fmt(rec.projects-rec.excludedProjects)}</b> projets dans le tunnel d’avancement (avant filtres)</li></ol>
       ${rec.conflictCount?`<p class="obs-progress-diag is-warn"><b>${fmt(rec.conflictCount)} projet${rec.conflictCount>1?'s':''} avec des statuts différents selon les lignes</b> : ${rec.conflicts.slice(0,12).map(c=>`${esc(c.code)} (${c.keys.map(k=>esc(STATUS_LABELS[k]||k)).join(' / ')} → retenu : ${esc(STATUS_LABELS[c.retained]||c.retained)})`).join(' · ')}${rec.conflictCount>12?' …':''}</p>`:''}</div>`:'';
     return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}${recHtml}${yearsHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
   }
@@ -1856,7 +1890,7 @@
       const values=options[key]||[],selected=globalFilterValues(key),query=norm(state.filterSearch?.[key]||'');
       const placeholder=`Rechercher dans ${String(label).toLowerCase()}…`;
       const search=`<label class="obs-check-search"><span>⌕</span><input type="search" data-global-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(placeholder)}" autocomplete="off"></label>`;
-      return `<details class="obs-check-filter ${selected.length?'has-selection':''}" ${state.openGlobalFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(selected.length===1?labeller(selected[0]):globalFilterSummary(key))}</b></summary><div class="obs-check-menu">${search}<div class="obs-check-actions"><button type="button" data-global-filter-all="${key}">Tout cocher</button><button type="button" data-global-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=labeller(v),hidden=query&&!norm(text).includes(query);return `<label data-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-global-filter-check="${key}" value="${attr(v)}" ${globalFilterHas(key,v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
+      return `<details class="obs-check-filter ${selected.length?'has-selection':''}" ${state.openGlobalFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(selected.length===1?labeller(selected[0]):globalFilterSummary(key))}</b></summary><div class="obs-check-menu" data-scroll-key="global-filter-${key}">${search}<div class="obs-check-actions"><button type="button" data-global-filter-all="${key}">Tout cocher</button><button type="button" data-global-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=labeller(v),hidden=query&&!norm(text).includes(query);return `<label data-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-global-filter-check="${key}" value="${attr(v)}" ${globalFilterHas(key,v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
     }).join('');
     restoreUiScroll(scrollSnapshot);
   }
@@ -2206,7 +2240,7 @@
     if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
     const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
     try{
-      const css=await Promise.all(['newosb.css?v=6.13.3','project-ux.css?v=6.13.3'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const css=await Promise.all(['newosb.css?v=6.13.5','project-ux.css?v=6.13.5'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
       const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
       const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
       const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');
@@ -2796,7 +2830,7 @@
   sidebarToggle?.addEventListener('click',()=>setSidebarCollapsed(!layoutEl?.classList.contains('is-sidebar-collapsed')));
   document.getElementById('obsNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)changePage(b.dataset.page);});
   document.getElementById('obsReportsNav')?.addEventListener('click',()=>changePage('reports'));
-  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openGlobalFilter='';state.autoMoaFromGroup=[];state.crossFilters=[];state.performanceMatrixMentions=[];state.performanceMatrixPerformances=[];resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
+  document.getElementById('obsResetFilters')?.addEventListener('click',()=>preserveUiScroll(()=>{Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openGlobalFilter='';state.autoMoaFromGroup=[];state.crossFilters=[];state.performanceMatrixMentions=[];state.performanceMatrixPerformances=[];state.matrixSearch={mention:'',performance:''};resetTerritoryMapFocus();state.search='';if(searchEl)searchEl.value='';renderFilters();renderPage();}));
   searchEl?.addEventListener('input',e=>{state.search=e.target.value||'';renderPage();});
   document.getElementById('obsSourceBtn')?.addEventListener('click',()=>engine.showDataSource());
   document.getElementById('obsDemoConnect')?.addEventListener('click',()=>engine.showDataSource());
@@ -2861,7 +2895,7 @@
   pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
   pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
 
-  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,q=norm(matrixSearch.value||'');pageEl.querySelectorAll(`[data-matrix-check-list="${kind}"] [data-matrix-option]`).forEach(el=>{const hide=Boolean(q)&&!String(el.dataset.matrixOption||'').includes(q);el.hidden=hide;});return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
+  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
   document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';const host=document.getElementById('obsTerritoryMap');if(host?._newosbOsmCtx)scheduleOsmRender(host._newosbOsmCtx);});
   window.addEventListener('newosb:requirementschange',e=>{if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});

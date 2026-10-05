@@ -47,10 +47,13 @@ const ROWS = [
   ['OP-8', 'Le Moulin', 'Perdue', 'Non démarrée', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '5', '', '', '', ''],
   ['OP-9', 'La Source', 'Gagnée', '', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '6', '48', '', '', ''],
   ['OP-2', 'Le Parc', 'Gagnée', '1 - Non démarrée', 'Promoteur A', 'Promoteur', '33', '33000', 'BEE Logement Neuf', '30', '52', '5', '140', '', '', ''],
+  ['', 'Proposition Nord', 'En cours', '', 'Promoteur E', 'Promoteur', '59', '59000', 'BEE Logement Neuf', '15', '', '', '', ''],
+  ['', 'Proposition Nord', 'En cours', '', 'Promoteur F', 'Promoteur', '59', '59100', 'BEE Logement Neuf', '22', '', '', '', ''],
+  ['', 'Proposition Sud', 'Annulé', '', 'Promoteur G', 'Promoteur', '13', '13000', 'BEE Logement Neuf', '9', '', '', '', ''],
   ['OP-10', 'Le Bourg', 'Gagnée', 'Analyse réalisée', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '9', '47', '', '', '']
 ];
 // Colonnes de dates (V6.13.1) : deux colonnes « leurres » vérifient qu'aucune autre date n'est utilisée.
-const DATE_HEADERS = ['Certification: Date de décision CD', 'Date de décision de certification', 'Affaire: Date de création', 'Date de création'];
+const DATE_HEADERS = ['Certification: Date de décision CD', 'Date de décision de certification', 'Affaire: Date de création', 'Date de création', 'Numéro du contrat'];
 const DATES = {
   'OP-1': ['01/01/2019', '', '01/01/2015', '12/02/2023'],
   'OP-2': ['01/01/2019', '', '01/01/2015', '2023-06-30'],
@@ -69,8 +72,16 @@ const FILLERS = Array.from({ length: 51 }, (_, i) => `Colonne libre ${i + 1}`);
 HEADERS.splice(3, 0, ...FILLERS);
 ROWS.forEach(r => r.splice(3, 0, ...FILLERS.map(() => '')));
 const BASE_LEN = HEADERS.length;
-ROWS.forEach(r => { while (r.length < BASE_LEN) r.push(''); r.push(...DATES[r[0]]); });
+const NOCODE = { 'Promoteur E': ['', '', '', '05/05/2026', 'CT-901'], 'Promoteur F': ['', '', '', '06/05/2026', 'CT-902'], 'Promoteur G': ['', '', '', '07/05/2026', 'CT-903'] };
+ROWS.forEach(r => { while (r.length < BASE_LEN) r.push(''); r.push(...(r[0] ? [...DATES[r[0]], 'CT-' + r[0]] : NOCODE[r[55]])); });
 HEADERS.push(...DATE_HEADERS);
+// Mentions et performances (V6.13.5) : assez de valeurs distinctes pour que les listes à cocher défilent.
+const MENTION_NAMES = ['BEE+', 'BEE+ Niveau RT2012 -10%', 'BEE+ Niveau RT2012 -20%', 'BEE+ option TFPB', 'BBCA Standard', 'BBCA Excellence', 'BPEC Niveau 1', 'BPEC Niveau 2', 'Biosourcé niveau 1', 'Biosourcé niveau 2', 'Biosourcé niveau 3', 'Énergie positive', 'Bas carbone', 'Réemploi matériaux', 'Confort d’été', 'Qualité de l’air'];
+const PERF_NAMES = ['Cep -5%', 'Cep -10%', 'Cep -15%', 'Cep -20%', 'Bbio -10%', 'Bbio -20%', 'Bbio -30%', 'IC Construction 2025', 'IC Construction 2028', 'IC Énergie 2025', 'DH max réduit', 'Ubat -10%', 'Ubat -20%', 'Étanchéité renforcée', 'Ventilation double flux', 'Production ENR'];
+HEADERS.push('Opération: Mentions', 'Opération: Performance');
+ROWS.forEach((r, i) => {
+  r.push([0, 1, 2].map(k => MENTION_NAMES[(i * 3 + k) % MENTION_NAMES.length]).join(' ; '), [0, 1, 2].map(k => PERF_NAMES[(i * 3 + k + 1) % PERF_NAMES.length]).join(' ; '));
+});
 const MATRIX = [['OBSERVATOIRE'], HEADERS, [], ...ROWS];
 const asObjects = (headers, rows) => rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 
