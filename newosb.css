@@ -1090,3 +1090,15 @@ body.obs-project-window-open{overflow:hidden!important}.obs-project-window{posit
 .obs-dpe-matrix-scope{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;padding:9px 12px;border:1px solid #cfe3d8;border-radius:11px;background:#f2f8f5;color:#34584a}.obs-dpe-matrix-scope b{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#06402b}.obs-dpe-matrix-scope span{font-size:10px;font-weight:800}.obs-dpe-matrix-scope small{font-size:9px;color:#6f8179;margin-left:auto}
 @media(max-width:1100px){.obs-matrix-selector-multi{grid-template-columns:1fr}.obs-matrix-selector-multi .obs-matrix-selection-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.obs-dpe-matrix-scope small{width:100%;margin-left:0}}
 @media(max-width:720px){.obs-matrix-checks{grid-template-columns:1fr}.obs-matrix-times{display:none}.obs-matrix-check-list{max-height:155px}.obs-matrix-selector-multi .obs-matrix-selection-kpis{grid-template-columns:1fr 1fr}}
+
+/* V6.13 — diagnostics de lecture (avancement, nombres) et petits échantillons */
+.obs-low-sample{color:#a8660b;font-weight:800;white-space:nowrap}
+.obs-progress-card{margin-top:12px}
+.obs-progress-diag{margin:8px 0;padding:9px 11px;border-radius:9px;background:var(--obs-viz-soft);border:1px solid var(--obs-line);font-size:11.5px;line-height:1.45;color:var(--obs-text)}
+.obs-progress-diag.is-ok{border-color:rgba(11,107,67,.35);background:rgba(11,107,67,.06)}
+.obs-progress-diag.is-warn{border-color:rgba(241,185,28,.55);background:rgba(241,185,28,.09)}
+.obs-progress-diag.is-error{border-color:rgba(220,91,77,.55);background:rgba(220,91,77,.08);color:#7d2219}
+.obs-progress-counts{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.obs-progress-counts span{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--obs-line);border-radius:999px;font-size:11px;background:#fff}
+.obs-progress-counts i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.obs-progress-counts b{color:var(--obs-green)}

@@ -25,14 +25,18 @@
     return;
   }
 
+  // V6.13 : avancement en liste fermée (newosb-rules.js). 'unknown' = vide ou hors liste ;
+  // il n'apparaît ni dans le filtre Avancement ni dans le tunnel.
+  const RULES = window.NEWOSB_RULES;
+  const PROGRESS_ORDER = (RULES?.PROGRESS_KEYS)||['notStarted','incomplete','complete','planned','analysis','visit','compliant'];
   const STATUS_LABELS = {
-    notStarted:'Non démarrée', incomplete:'Dossier incomplet', planned:'Analyse planifiée',
-    analysis:'Analyse réalisée', visit:'Visite réalisée', compliant:'Évaluation conforme', cancelled:'Annulée / abandonnée'
+    notStarted:'Non démarrée', incomplete:'Dossier incomplet', complete:'Dossier complet', planned:'Analyse planifiée',
+    analysis:'Analyse réalisée', visit:'Visite réalisée', compliant:'Évaluation conforme', unknown:'Non renseigné', cancelled:'Annulée / abandonnée'
   };
   const CHRONOLOGY_STATUS_LABELS = {...STATUS_LABELS,lostAffair:'Affaire perdue',abandonedAffair:'Affaire abandonnée',cancelledAffair:'Affaire annulée'};
   const STATUS_COLORS = {
-    notStarted:'#9aa8a2', incomplete:'#d49a32', planned:'#6f9cb9', analysis:'#4b9881',
-    visit:'#16864f', compliant:'#06402b', cancelled:'#dc5b4d'
+    notStarted:'#9aa8a2', incomplete:'#d49a32', complete:'#b4a24a', planned:'#6f9cb9', analysis:'#4b9881', visit:'#16864f',
+    compliant:'#06402b', unknown:'#c9d1cd', cancelled:'#dc5b4d'
   };
   const CHRONOLOGY_STATUS_COLORS = {...STATUS_COLORS,lostAffair:'#9c3f3f',abandonedAffair:'#c96c45',cancelledAffair:'#dc5b4d'};
   const ANALYTIC_PAGES = new Set(['territories','stakeholders','certification','performance','solutions','energy','carbon','crossdata','operations','quality','dictionary']);
@@ -1101,7 +1105,7 @@
   }
 
   function kpiGrid(items){
-    return `<div class="obs-grid-kpi">${items.map(item=>`<article class="obs-kpi obs-kpi-visual ${item.className||''}" data-audit-label="${attr(item.label)}" data-audit-metric="${attr(item.metric||'')}" ${item.crossKey?crossAttrs(item.crossKey,item.crossValue,item.crossLabel||item.label):''}><i class="obs-kpi-visual-icon" aria-hidden="true">${visualIconFor(item.label)}</i><span>${esc(item.label)}</span><strong>${item.raw?item.value:esc(item.value)}</strong><small>${esc(item.note||'')}</small><em class="obs-kpi-visual-ring" aria-hidden="true"></em></article>`).join('')}</div>`;
+    return `<div class="obs-grid-kpi">${items.map(item=>`<article class="obs-kpi obs-kpi-visual ${item.className||''}" data-audit-label="${attr(item.label)}" data-audit-metric="${attr(item.metric||'')}" ${item.crossKey?crossAttrs(item.crossKey,item.crossValue,item.crossLabel||item.label):''}><i class="obs-kpi-visual-icon" aria-hidden="true">${visualIconFor(item.label)}</i><span>${esc(item.label)}</span><strong>${item.raw?item.value:esc(item.value)}</strong><small>${esc(item.note||'')}${item.sample!==undefined?lowSample(item.sample):''}</small><em class="obs-kpi-visual-ring" aria-hidden="true"></em></article>`).join('')}</div>`;
   }
   function kpis(ops){
     const grid=kpiGrid([
@@ -1159,8 +1163,8 @@
   }
 
   function tunnel(ops,{analytic=false}={}){
-    const a=engine.aggregateTunnel(ops), order=['notStarted','incomplete','planned','analysis','visit','compliant'];
-    const icons={notStarted:'▤',incomplete:'◔',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
+    const a=engine.aggregateTunnel(ops), order=PROGRESS_ORDER;
+    const icons={notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
     return `<div class="obs-tunnel obs-tunnel-visual">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div>`;
   }
 
@@ -1310,7 +1314,7 @@
 
   function statusYearMatrix(ops){
     const years=uniq(ops.map(o=>o.year)).filter(v=>/^\d{4}$/.test(String(v))).sort((a,b)=>Number(a)-Number(b));
-    const activeStatuses=['notStarted','incomplete','planned','analysis','visit','compliant'];
+    const activeStatuses=[...PROGRESS_ORDER,'unknown'];
     const excludedStatuses=['lostAffair','abandonedAffair','cancelledAffair'];
     const statuses=state.statusYearShowExcluded?[...activeStatuses,...excludedStatuses]:activeStatuses;
     if(!years.length) return '<div class="obs-empty">Aucune année disponible.</div>';
@@ -1454,7 +1458,7 @@
   function envelopeCard(title,cardKey,materialKey,materialLabel,rKey,thicknessKey,structureNormKey=''){
     const view=solutionCardView(cardKey), material=normalizedDistribution(materialKey), r=averageRaw(filteredTechnicalOperations(),rKey), th=averageRaw(filteredTechnicalOperations(),thicknessKey);
     const structure=structureNormKey?normalizedDistribution(structureNormKey):null;
-    return `<article class="obs-card obs-envelope-card"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>${r.count?`${fmt(r.count)} valeurs R`:'R non renseigné'}</small>${solutionViewToggle(cardKey)}</div></div>
+    return `<article class="obs-card obs-envelope-card"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>${r.count?`${fmt(r.count)} valeurs R`:'R non renseigné'}${lowSample(r.count)}</small>${solutionViewToggle(cardKey)}</div></div>
       <div class="obs-envelope-metrics"><div><span>R moyen</span><b>${r.avg===null?'—':fmt(r.avg,2)}</b><small>m²·K/W</small></div><div><span>Épaisseur moy.</span><b>${th.avg===null?'—':fmt(th.avg,0)}</b><small>mm</small></div></div>
       <div class="obs-subsection-title">${esc(materialLabel)}</div>${distributionVisual(material.items,{view,key:material.crossKey,maxItems:10,labelPrefix:title})}
       ${structure?`<div class="obs-subsection-title">${structureNormKey==='floorSolution'?'Type de plancher':'Famille de structure'}</div>${distributionVisual(structure.items,{view,key:structure.crossKey,maxItems:10,labelPrefix:`${title} · structure`})}`:''}
@@ -1489,12 +1493,12 @@
       dh:{label:'DH moyen',key:'dh',refKey:'dhMax',digits:0,unit:'°C·h',note:'DH projet / DH max'}
     };
     const d=defs[metric]||defs.ubat, val=averageRaw(ops,d.key), ref=averageRaw(ops,d.refKey);
-    return `<article class="obs-kpi obs-kpi-selector"><div class="obs-kpi-selectline"><span>INDICATEUR ENVELOPPE / CONFORT</span><select data-solution-metric aria-label="Indicateur enveloppe et confort"><option value="ubat" ${metric==='ubat'?'selected':''}>Ubat</option><option value="tic" ${metric==='tic'?'selected':''}>TIC</option><option value="dh" ${metric==='dh'?'selected':''}>DH</option></select></div><strong>${val.avg===null?'—':fmt(val.avg,d.digits)}</strong><small>${esc(d.unit)} · ${ref.avg===null?`${fmt(val.count)} / ${fmt(val.population)} opérations · couverture ${fmt(val.coverage,1)} %`:`${d.note} : ${fmt(ref.avg,d.digits)} · couverture ${fmt(val.coverage,1)} %`}</small></article>`;
+    return `<article class="obs-kpi obs-kpi-selector"><div class="obs-kpi-selectline"><span>INDICATEUR ENVELOPPE / CONFORT</span><select data-solution-metric aria-label="Indicateur enveloppe et confort"><option value="ubat" ${metric==='ubat'?'selected':''}>Ubat</option><option value="tic" ${metric==='tic'?'selected':''}>TIC</option><option value="dh" ${metric==='dh'?'selected':''}>DH</option></select></div><strong>${val.avg===null?'—':fmt(val.avg,d.digits)}</strong><small>${esc(d.unit)} · ${ref.avg===null?`${fmt(val.count)} / ${fmt(val.population)} opérations · couverture ${fmt(val.coverage,1)} %`:`${d.note} : ${fmt(ref.avg,d.digits)} · couverture ${fmt(val.coverage,1)} %`}${lowSample(val.count)}</small></article>`;
   }
 
   function solutionRGauge(label,metric,icon,max=10,reference=3){
     const value=metric.avg, pos=value===null?0:Math.max(0,Math.min(100,100*value/max)), ref=Math.max(0,Math.min(100,100*reference/max));
-    return `<article class="obs-kpi obs-solution-rgauge"><i class="obs-solution-r-icon">${icon}</i><span>${esc(label)}</span><strong>${value===null?'—':fmt(value,1)}</strong><small>m²·K/W · ${fmt(metric.count)} / ${fmt(metric.population)} opérations · couverture ${fmt(metric.coverage,1)} %</small><div class="obs-solution-r-track"><i style="width:${pos}%"></i><b style="left:${ref}%"></b></div><div class="obs-solution-r-scale"><em>0</em><em>Réf. ${fmt(reference,1)}</em><em>${fmt(max,0)}</em></div></article>`;
+    return `<article class="obs-kpi obs-solution-rgauge"><i class="obs-solution-r-icon">${icon}</i><span>${esc(label)}</span><strong>${value===null?'—':fmt(value,1)}</strong><small>m²·K/W · ${fmt(metric.count)} / ${fmt(metric.population)} opérations · couverture ${fmt(metric.coverage,1)} %${lowSample(metric.count)}</small><div class="obs-solution-r-track"><i style="width:${pos}%"></i><b style="left:${ref}%"></b></div><div class="obs-solution-r-scale"><em>0</em><em>Réf. ${fmt(reference,1)}</em><em>${fmt(max,0)}</em></div></article>`;
   }
 
   function renderSolutions(){
@@ -1539,7 +1543,7 @@
     const ratio=stats.maxAvg?Math.max(0,Math.min(1.35,stats.valueAvg/stats.maxAvg)):0;
     const marker=Math.min(100,ratio*100), digits=Number.isInteger(options.digits)?options.digits:1, unit=options.unit?` ${options.unit}`:'';
     const left=options.leftLabel||'0', right=options.referenceLabel||`${label} max moyen`;
-    return `<div class="obs-performance-gauge"><div class="obs-gauge-scale"><span>${esc(left)}</span><span>${esc(right)} · ${fmt(stats.maxAvg,digits)}${esc(unit)}</span></div><div class="obs-gauge-track"><i class="obs-gauge-good"></i><b style="left:${marker}%"></b></div><div class="obs-gauge-project"><span>${esc(label)} projet moyen</span><strong>${fmt(stats.valueAvg,digits)}${esc(unit)}</strong><small>Marge moyenne ${stats.marginAvg>=0?'+':''}${fmt(stats.marginAvg,digits)}${esc(unit)} · ${fmt(stats.rate,1)} % sous la référence · couverture ${fmt(pct(stats.count,stats.population),1)} % (${fmt(stats.count)}/${fmt(stats.population)})</small></div></div>`;
+    return `<div class="obs-performance-gauge"><div class="obs-gauge-scale"><span>${esc(left)}</span><span>${esc(right)} · ${fmt(stats.maxAvg,digits)}${esc(unit)}</span></div><div class="obs-gauge-track"><i class="obs-gauge-good"></i><b style="left:${marker}%"></b></div><div class="obs-gauge-project"><span>${esc(label)} projet moyen</span><strong>${fmt(stats.valueAvg,digits)}${esc(unit)}</strong><small>Marge moyenne ${stats.marginAvg>=0?'+':''}${fmt(stats.marginAvg,digits)}${esc(unit)} · ${fmt(stats.rate,1)} % sous la référence · couverture ${fmt(pct(stats.count,stats.population),1)} % (${fmt(stats.count)}/${fmt(stats.population)})${lowSample(stats.count)}</small></div></div>`;
   }
   function beforeAfterGauge(before,after,label,unit='',digits=2){
     if(before.avg===null||after.avg===null)return '<div class="obs-empty">Valeurs avant / après insuffisantes.</div>';
@@ -1564,7 +1568,7 @@
     const dhStats=metricPairStats(ops,'dh','dhMax'), ticStats=metricPairStats(ops,'tic','ticRef');
     const ubBefore=averageRaw(ops,'ubatBefore'), ubAfter=averageRaw(ops,'ubatAfter');
     return `${pageHead('energy',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
-      {label:'Cep projet moyen',value:cepStats.valueAvg===null?'—':fmt(cepStats.valueAvg,1),note:`${fmt(cepStats.count)} / ${fmt(ops.length)} opérations · couverture ${fmt(pct(cepStats.count,ops.length),1)} %`,metric:'cep'},
+      {label:'Cep projet moyen',value:cepStats.valueAvg===null?'—':fmt(cepStats.valueAvg,1),note:`${fmt(cepStats.count)} / ${fmt(ops.length)} opérations · couverture ${fmt(pct(cepStats.count,ops.length),1)} %`,sample:cepStats.count,metric:'cep'},
       {label:'Cep max moyen',value:cepStats.maxAvg===null?'—':fmt(cepStats.maxAvg,1),note:`référence maximale moyenne · couverture ${fmt(pct(cepStats.count,ops.length),1)} %`,metric:'cepMax'},
       {label:'Marge au Cep max',value:cepStats.marginAvg===null?'—':`${cepStats.marginAvg>=0?'+':''}${fmt(cepStats.marginAvg,1)}`,note:'Cep max − Cep projet'},
       {label:'Sous le Cep max',value:cepStats.count?`${fmt(cepStats.rate,1)} %`:'—',note:`${fmt(cepStats.under)} / ${fmt(cepStats.count)} opérations comparables`}
@@ -1622,6 +1626,9 @@
     </div>`;
   }
 
+  // V6.13 : signalement des petits échantillons (moyenne affichée mais à lire avec prudence).
+  const MIN_SAMPLE=5;
+  function lowSample(n){n=Number(n)||0;return n>0&&n<MIN_SAMPLE?` · <b class="obs-low-sample" title="Moins de ${MIN_SAMPLE} valeurs : moyenne peu représentative">⚠ échantillon faible (n = ${fmt(n)})</b>`:'';}
   function averageRaw(ops,key){const vals=ops.map(o=>rawNumber(o,key)).filter(v=>v!==null);return {avg:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,count:vals.length,population:ops.length,coverage:ops.length?100*vals.length/ops.length:0};}
   function averageDpe(ops,key){const vals=ops.map(o=>dpeLetter(o,key)).filter(Boolean).map(l=>'ABCDEFG'.indexOf(l)+1);if(!vals.length)return {avg:null,count:0,label:'—'};const avg=vals.reduce((a,b)=>a+b,0)/vals.length;return {avg,count:vals.length,label:'ABCDEFG'[Math.max(0,Math.min(6,Math.round(avg)-1))]};}
 
@@ -1635,9 +1642,9 @@
     const ops=filteredTechnicalOperations(), transitionOps=applyMatrixSelection(ops), ice=averageRaw(ops,'icEnergy'), icc=averageRaw(ops,'icConstruction'), db=averageDpe(transitionOps,'dpeEnergyBefore'), da=averageDpe(transitionOps,'dpeEnergyAfter'), gb=averageDpe(transitionOps,'dpeGesBefore'), ga=averageDpe(transitionOps,'dpeGesAfter');
     const iceStats=metricPairStats(ops,'icEnergy','icEnergyMax'), iccStats=metricPairStats(ops,'icConstruction','icConstructionMax');
     return `${pageHead('carbon',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
-      {label:'IC Énergie projet moyen',value:ice.avg===null?'—':fmt(ice.avg,1),note:`${fmt(ice.count)} opérations renseignées`},
+      {label:'IC Énergie projet moyen',value:ice.avg===null?'—':fmt(ice.avg,1),note:`${fmt(ice.count)} opérations renseignées`,sample:ice.count},
       {label:'IC Énergie sous seuil',value:iceStats.count?`${fmt(iceStats.rate,1)} %`:'—',note:`${fmt(iceStats.under)} / ${fmt(iceStats.count)} comparables`,crossKey:'threshold:icEnergy',crossValue:'under',crossLabel:'IC Énergie sous seuil'},
-      {label:'IC Construction projet moyen',value:icc.avg===null?'—':fmt(icc.avg,1),note:`${fmt(icc.count)} opérations renseignées`},
+      {label:'IC Construction projet moyen',value:icc.avg===null?'—':fmt(icc.avg,1),note:`${fmt(icc.count)} opérations renseignées`,sample:icc.count},
       {label:'IC Construction sous seuil',value:iccStats.count?`${fmt(iccStats.rate,1)} %`:'—',note:`${fmt(iccStats.under)} / ${fmt(iccStats.count)} comparables`,crossKey:'threshold:icConstruction',crossValue:'under',crossLabel:'IC Construction sous seuil'}
     ])}
     ${dpeVisualSummary(db,da,gb,ga)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
@@ -1748,7 +1755,31 @@
   function renderQuality(){
     const ops=filteredOperations(), technicalOps=filteredTechnicalOperations(), q=core?.qualitySummary?core.qualitySummary(ops):{avgScore:0,errors:0,warnings:0,withIssues:0}, cov=core?coverageRows(ops,technicalOps):[],dup=core?.duplicateSummary?.(ops)||{duplicateCodes:0,duplicateNames:0},geo=core?.geoIssues?.(ops)||0;
     const thresholdIssues=q.reports?.reduce((n,r)=>n+r.report.issues.filter(i=>String(i.code||'').startsWith('threshold:')).length,0)||0;
-    return `${pageHead('quality')}${analyticsToolbar()}${kpiGrid([{label:'Complétude / cohérence',value:`${fmt(q.avgScore,0)} %`,note:'indice transparent basé sur contrôles',metric:''},{label:'Projets avec anomalie',value:fmt(q.withIssues),note:`sur ${fmt(ops.length)} projets`,metric:''},{label:'Doublons potentiels',value:fmt(dup.duplicateCodes+dup.duplicateNames),note:`${fmt(dup.duplicateCodes)} codes · ${fmt(dup.duplicateNames)} noms`,metric:''},{label:'Incohérences géographiques',value:fmt(geo),note:'code postal / département',metric:''}])}<div class="obs-quality-checks"><div><span>Seuils dépassés / incohérents</span><b>${fmt(thresholdIssues)}</b><small>énergie, confort ou carbone</small></div><div><span>Erreurs bloquantes</span><b>${fmt(q.errors)}</b><small>données essentielles manquantes</small></div><div><span>Alertes</span><b>${fmt(q.warnings)}</b><small>valeurs atypiques ou cohérence</small></div></div><div class="obs-grid-2wide"><article class="obs-card"><div class="obs-card-head"><div><span>COUVERTURE STATISTIQUE</span><h2>Disponibilité des indicateurs</h2></div><small>${fmt(ops.length)} projets · ${fmt(technicalOps.length)} opérations techniques</small></div><div class="obs-coverage-list">${cov.map(c=>`<button type="button" class="obs-coverage-row" data-audit-label="${attr(c.label)}" data-audit-metric="${attr(c.key)}"><span><b>${esc(c.label)}</b><small>${esc(c.populationType)} · ${fmt(c.available)} renseignées · ${fmt(c.missing)} manquantes</small></span><i><em style="width:${Math.max(0,Math.min(100,c.rate)).toFixed(1)}%"></em></i><strong>${fmt(c.rate,1)} %</strong></button>`).join('')}</div></article><article class="obs-card"><div class="obs-card-head"><div><span>RÈGLES DE FIABILITÉ</span><h2>Contrôles automatiques</h2></div><small>15 lignes par page</small></div>${qualityIssueTable(ops)}</article></div>`;
+    return `${pageHead('quality')}${analyticsToolbar()}${kpiGrid([{label:'Complétude / cohérence',value:`${fmt(q.avgScore,0)} %`,note:'indice transparent basé sur contrôles',metric:''},{label:'Projets avec anomalie',value:fmt(q.withIssues),note:`sur ${fmt(ops.length)} projets`,metric:''},{label:'Doublons potentiels',value:fmt(dup.duplicateCodes+dup.duplicateNames),note:`${fmt(dup.duplicateCodes)} codes · ${fmt(dup.duplicateNames)} noms`,metric:''},{label:'Incohérences géographiques',value:fmt(geo),note:'code postal / département',metric:''}])}<div class="obs-quality-checks"><div><span>Seuils dépassés / incohérents</span><b>${fmt(thresholdIssues)}</b><small>énergie, confort ou carbone</small></div><div><span>Erreurs bloquantes</span><b>${fmt(q.errors)}</b><small>données essentielles manquantes</small></div><div><span>Alertes</span><b>${fmt(q.warnings)}</b><small>valeurs atypiques ou cohérence</small></div></div><div class="obs-grid-2wide"><article class="obs-card"><div class="obs-card-head"><div><span>COUVERTURE STATISTIQUE</span><h2>Disponibilité des indicateurs</h2></div><small>${fmt(ops.length)} projets · ${fmt(technicalOps.length)} opérations techniques</small></div><div class="obs-coverage-list">${cov.map(c=>`<button type="button" class="obs-coverage-row" data-audit-label="${attr(c.label)}" data-audit-metric="${attr(c.key)}"><span><b>${esc(c.label)}</b><small>${esc(c.populationType)} · ${fmt(c.available)} renseignées · ${fmt(c.missing)} manquantes</small></span><i><em style="width:${Math.max(0,Math.min(100,c.rate)).toFixed(1)}%"></em></i><strong>${fmt(c.rate,1)} %</strong></button>`).join('')}</div></article><article class="obs-card"><div class="obs-card-head"><div><span>RÈGLES DE FIABILITÉ</span><h2>Contrôles automatiques</h2></div><small>15 lignes par page</small></div>${qualityIssueTable(ops)}</article></div><div class="obs-grid-2wide">${progressQualityCard(ops)}${unreadableValuesCard(ops)}</div>`;
+  }
+  // V6.13 : contrôle de la colonne d'avancement (liste fermée).
+  function progressQualityCard(ops){
+    const d=runtime().progress||null, pct1=v=>fmt(100*(Number(v)||0),1);
+    const empty=ops.filter(o=>o.status==='unknown'&&o.progressState!=='invalid').length, invalidOps=ops.filter(o=>o.progressState==='invalid');
+    const counts=PROGRESS_ORDER.map(k=>({k,v:ops.filter(o=>o.status===k).length}));
+    const head=`<div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Colonne « ${esc(RULES?.PROGRESS_SOURCE_HEADER||'Opération: Évaluation: Statut')} »</h2></div><small>valeurs admises : ${esc(PROGRESS_ORDER.map(k=>STATUS_LABELS[k]).join(' · '))}</small></div>`;
+    if(!d) return `<article class="obs-card">${head}<div class="obs-empty">Aucun diagnostic disponible (source non connectée).</div></article>`;
+    const status=d.found?`<p class="obs-progress-diag is-ok"><b>Colonne utilisée : « ${esc(d.header)} »</b>${d.ratio!==undefined?` · ${pct1(d.ratio)} % des valeurs conformes`:''}${d.origin&&d.origin!=='nom attendu'?` · détectée par ${esc(d.origin)}`:''}</p>`:`<p class="obs-progress-diag is-error"><b>${esc(d.message||'Colonne d’avancement non trouvée.')}</b><br>L’avancement est affiché « Non renseigné » tant que la colonne n’est pas corrigée dans la Google Sheet.</p>`;
+    const rejected=(d.checked||[]).filter(c=>c.header!==d.header);
+    const rejectedHtml=rejected.length?`<p class="obs-progress-diag is-warn">Colonne${rejected.length>1?'s':''} écartée${rejected.length>1?'s':''} : ${rejected.map(c=>`« ${esc(c.header)} » (${pct1(c.ratio)} % conformes${c.invalidValues?.length?`, ex. ${esc(c.invalidValues.slice(0,3).map(x=>x.value).join(', '))}`:''})`).join(' ; ')}</p>`:'';
+    const invalidByValue=countBy(invalidOps,o=>o.rawStatus||'(vide)').slice(0,8);
+    const invalidHtml=invalidOps.length?`<p class="obs-progress-diag is-warn"><b>${fmt(invalidOps.length)} projet${invalidOps.length>1?'s':''} avec une valeur hors liste</b> : ${invalidByValue.map(x=>`« ${esc(x.name)} » ×${fmt(x.value)}`).join(' · ')}</p>`:'';
+    return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
+  }
+  // V6.13 : valeurs numériques présentes mais illisibles (jamais converties en chiffre).
+  function unreadableValuesCard(ops){
+    const list=[];
+    if(core?.unreadableValues&&core?.numericKeys)ops.forEach(o=>core.numericKeys.forEach(k=>core.unreadableValues(o,k).forEach(u=>list.push({...u,code:o.code,label:core.dictByKey?.[k]?.label||k}))));
+    const byField=countBy(list,u=>u.label).slice(0,10);
+    const head=`<div class="obs-card-head"><div><span>LECTURE DES NOMBRES</span><h2>Valeurs non interprétées</h2></div><small>${fmt(list.length)} cellule${list.length>1?'s':''} exclue${list.length>1?'s':''} des moyennes</small></div>`;
+    if(!list.length) return `<article class="obs-card">${head}<div class="obs-empty">Toutes les valeurs numériques renseignées sont lisibles.</div></article>`;
+    const rows=list.slice(0,40).map(u=>`<tr><td><strong>${esc(u.code)}</strong>${u.row>1?`<br><small>ligne ${fmt(u.row)}</small>`:''}</td><td>${esc(u.label)}</td><td><code>${esc(u.raw)}</code></td><td>${esc(u.reason)}</td></tr>`).join('');
+    return `<article class="obs-card">${head}<p class="obs-progress-diag">${byField.map(x=>`${esc(x.name)} : <b>${fmt(x.value)}</b>`).join(' · ')}</p><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Projet</th><th>Donnée</th><th>Valeur saisie</th><th>Raison</th></tr></thead><tbody>${rows}</tbody></table>${list.length>40?`<p class="obs-progress-diag">… et ${fmt(list.length-40)} autres. Corriger la Google Sheet puis actualiser.</p>`:''}</div></article>`;
   }
 
 
@@ -1781,7 +1812,7 @@
     const depOps=selectedRegions.length?ops.filter(o=>selectedRegions.some(r=>norm(operationRegion(o))===norm(r))):ops;
     return {
       year:uniq(ops.map(o=>o.year)).sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
-      status:uniq(ops.map(o=>o.status)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>operationRegion(o))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
+      status:PROGRESS_ORDER.filter(k=>ops.some(o=>o.status===k)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>operationRegion(o))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
       profile:uniq(ops.map(o=>o.profile||'Non précisé')), socialZone:uniq(ops.map(o=>o.socialZone||'Non précisé'))
     };
   }
@@ -1999,7 +2030,8 @@
     const m=s.match(/^([+-]?\d+(?:[.,]\d+)?)\s*(?:kWh(?:EP|EF)?(?:\/[\w\u00b2\u00b7.\/-]+)?|m\u00b2[\u00b7.]?K\/W|W\/m\u00b2[\u00b7.]?K|kgCO\u2082e?\/m\u00b2|points?|\u00b0C(?:[\u00b7.]?h)?)?$/i);
     if(!m)return null;const n=Number(m[1].replace(',','.'));return Number.isFinite(n)?n:null;
   }
-  function projectUxNumber(op,key){return projectUxNumericValue(projectUxValue(op,key));}
+  const PROJECT_UX_MEASURES={roofR:'resistance',wallR:'resistance',floorR:'resistance',roofThickness:'thickness',wallThickness:'thickness',floorThickness:'thickness'};
+  function projectUxNumber(op,key){const v=projectUxValue(op,key),kind=PROJECT_UX_MEASURES[key];if(kind&&RULES&&typeof v!=='number'){const r=RULES.parseMeasure(v,kind);return r.status==='ok'?r.value:null;}return projectUxNumericValue(v);}
   function projectUxLetter(op,key){
     const s=projectUxText(projectUxValue(op,key)).toUpperCase();
     const m=s.match(/^(?:CLASSE\s+)?([A-G])(?:\s*\([^)]*\))?$/);return m?m[1]:'';
@@ -2037,7 +2069,7 @@
     return `<section class="p10-kpis" aria-label="Chiffres cl\u00e9s du projet et du b\u00e2timent">${projectUxKpi('Logements',amount(project.dwellings),'Total du projet','home')}${projectUxKpi('B\u00e2timents',amount(project.buildings),`${techs.length} ligne${techs.length>1?'s':''} technique${techs.length>1?'s':''} analys\u00e9e${techs.length>1?'s':''}`,'building')}${projectUxKpi('CEP projet',cep===null?'\u2014':fmt(cep,1),'kWhEP/m\u00b2.an \u00b7 b\u00e2timent','energy')}${projectUxKpi('Gain CEP',gain===null?'\u2014':`${gain>0?'+':''}${fmt(gain,1)} %`,gain===null?'Avant / apr\u00e8s non disponibles':gain<0?'Hausse de consommation':'R\u00e9duction avant / apr\u00e8s','chart',gain!==null&&gain<0?'p10-warning':'')}${projectUxKpi('DPE \u00e9nergie',`${before||'\u2014'} \u2192 ${after||'\u2014'}`,'Classes du b\u00e2timent','chart')}${projectUxKpi('IC construction',ic===null?'\u2014':fmt(ic,1),'kgCO\u2082e/m\u00b2 \u00b7 b\u00e2timent','leaf')}</section>`;
   }
   function projectUxTimelineHtml(project,op){
-    const status=projectUxStatus(op||project),order=['notStarted','incomplete','planned','analysis','visit','compliant'];
+    const status=projectUxStatus(op||project),order=PROGRESS_ORDER;
     const dates=[['D\u00e9cision AP','certificationApDate'],['D\u00e9cision CD','certificationCdDate']];
     return `<article class="p10-card p10-timeline-card">${projectUxHeading('Parcours de certification','check')}<div class="p10-timeline" aria-label="Statut d\u00e9clar\u00e9 : ${attr(status.label)}">${order.map((k,i)=>`<div class="${status.code===k?'is-current':''}" ${status.code===k?'aria-current="step"':''}><i>${status.code===k&&k==='compliant'?projectUxIcon('check'):i+1}</i><span>${esc(STATUS_LABELS[k])}</span></div>`).join('')}</div><p class="p10-stage"><i style="background:${status.color}"></i><b>${esc(status.label)}</b><small>Statut d\u00e9clar\u00e9, pas un pourcentage de travaux.</small></p><div class="p10-dates">${dates.map(([l,k])=>`<div>${projectUxIcon('clock')}<span>${l}<b>${esc(projectUxText(projectUxValue(op,k))||'Non renseign\u00e9e')}</b></span></div>`).join('')}</div></article>`;
   }
@@ -2165,7 +2197,7 @@
     if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
     const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
     try{
-      const css=await Promise.all(['newosb.css?v=6.12.0','project-ux.css?v=6.12.0'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const css=await Promise.all(['newosb.css?v=6.13.0','project-ux.css?v=6.13.0'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
       const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
       const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
       const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');
