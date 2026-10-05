@@ -1,5 +1,21 @@
 # Historique
 
+## V6.13.6
+
+**Avancement : restauration du repli sur « État du dossier »**
+- Correction d'une erreur introduite en V6.13 : le repli sur la colonne « État du dossier » (AV) avait été supprimé. Sur l'export réel du 30/09/26, 903 lignes historiques sans code interne n'ont aucune valeur en BC et portent leur avancement dans AV (754 « Évaluation conforme », 80 « Visite réalisée », 48 « Analyse réalisée », 16 « Non démarrée », 5 « Dossier incomplet »). Aucune ligne n'a les deux colonnes renseignées. Sans ce repli, elles tombaient en « Non renseigné » (V6.13 à V6.13.3) ou en « Proposition commerciale en cours » (V6.13.4 et V6.13.5), d'où une répartition très différente de la V6.12.
+- Règle : BC d'abord ; si BC est vide, « État du dossier » ; une valeur BC non reconnue n'est pas remplacée (signalée en Qualité).
+- « Proposition commerciale en cours » = ligne sans code interne ET sans avancement en BC ni en AV (88 lignes sur l'export, toutes annulées ou abandonnées).
+- Résultat sur l'export réel (projets actifs) : Non démarrée 745, Dossier incomplet 303, Dossier complet 3, Analyse planifiée 73, Analyse réalisée 1 227, Visite réalisée 853, Évaluation conforme 1 943, Non renseigné 18 — contre 759 / 303 / – / 73 / 1 225 / 851 / 1 928 en V6.12.
+
+**Visibilité**
+- Qualité & données : tableau de contrôle avec lignes lues en BC, lignes lues en « État du dossier », lignes sans avancement, projets, annulés / abandonnés, projets dans le tunnel ; valeurs non reconnues listées par colonne.
+- Message de connexion : colonnes lues et nombre de lignes lues en repli.
+- Note sous le tunnel avec le nombre de projets « Non renseigné » et un lien pour les lister ; « Non renseigné » ajouté au filtre Avancement.
+- Bouton « Copier le diagnostic de l'avancement » (version, colonnes, lignes par source, valeurs non reconnues, tunnel ; aucune donnée client).
+
+**Tests** : 67 tests unitaires, 56 vérifications navigateur.
+
 ## V6.13.5
 
 **Labels & performances — tableau croisé Mentions × performances**

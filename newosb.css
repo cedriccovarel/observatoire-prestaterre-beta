@@ -1123,3 +1123,8 @@ body.obs-project-window-open{overflow:hidden!important}.obs-project-window{posit
 .obs-matrix-check-list>label[hidden]{display:none!important}
 .obs-matrix-check-empty{margin:2px 9px 4px;padding:7px 9px;border-radius:7px;background:#f6f9f7;color:#6d8278;font-size:9.5px;font-weight:700}
 .obs-matrix-check-empty[hidden]{display:none}
+
+/* V6.13.6 — projets sans avancement : note sous le tunnel, lien, ligne « proposition » du contrôle */
+.obs-tunnel-note{margin:8px 2px 0;font-size:10.5px;color:#6d5a1d;background:rgba(241,185,28,.10);border:1px solid rgba(241,185,28,.45);border-radius:8px;padding:6px 10px}
+.obs-link-btn{border:0;background:transparent;color:#168456;font:inherit;font-weight:800;text-decoration:underline;cursor:pointer;padding:0}
+.obs-progress-recon-table tr.is-proposal td{background:rgba(184,167,217,.14)}

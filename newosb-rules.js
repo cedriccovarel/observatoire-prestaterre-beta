@@ -320,6 +320,30 @@
     };
   }
 
+  // V6.13.6 — Repli sur « État du dossier » (colonne AV).
+  // Sur l'export réel, les 903 lignes historiques SANS code interne n'ont aucune valeur en BC :
+  // leur avancement est dans « État du dossier » (même liste de valeurs). Aucune ligne n'a les
+  // deux colonnes renseignées. Règle : BC d'abord ; si BC est vide, « État du dossier ».
+  // Une valeur BC renseignée mais non reconnue n'est PAS remplacée (elle est signalée en Qualité).
+  const PROGRESS_FALLBACK_HEADER = 'État du dossier';
+  function resolveProgressFallback(fullHeaders) {
+    const target = headerKey(PROGRESS_FALLBACK_HEADER);
+    const list = (fullHeaders || []).map(h => String(h ?? '').trim());
+    const idx = list.findIndex(h => h && headerKey(h) === target);
+    return idx >= 0
+      ? { header: list[idx], index: idx, column: columnLetter(idx), expectedHeader: PROGRESS_FALLBACK_HEADER }
+      : { header: null, index: -1, column: '', expectedHeader: PROGRESS_FALLBACK_HEADER };
+  }
+  const isBlank = v => v === null || v === undefined || String(v).trim() === '';
+  // Lit l'avancement d'UNE ligne. source : 'primary' (BC), 'fallback' (État du dossier) ou 'none'.
+  function readProgress(row, primaryHeader, fallbackHeader) {
+    const p = primaryHeader && row ? row[primaryHeader] : undefined;
+    if (!isBlank(p)) return Object.assign(progressStatus(p), { source: 'primary', raw: String(p).trim() });
+    const f = fallbackHeader && row ? row[fallbackHeader] : undefined;
+    if (!isBlank(f)) return Object.assign(progressStatus(f), { source: 'fallback', raw: String(f).trim() });
+    return { key: 'unknown', label: '', state: 'empty', source: 'none', raw: '' };
+  }
+
   // V6.13.2 — Colonne d'avancement : TOUJOURS « Opération: Évaluation: Statut »
   // (colonne BC de la Google Sheet). Plus aucune recherche dans d'autres colonnes.
   //  1. colonne portant exactement ce nom (accents, casse, ponctuation ignorés) ;
@@ -419,7 +443,7 @@
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
     parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
-    progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
+    PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };
   root.NEWOSB_RULES = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -78,9 +78,11 @@ HEADERS.push(...DATE_HEADERS);
 // Mentions et performances (V6.13.5) : assez de valeurs distinctes pour que les listes à cocher défilent.
 const MENTION_NAMES = ['BEE+', 'BEE+ Niveau RT2012 -10%', 'BEE+ Niveau RT2012 -20%', 'BEE+ option TFPB', 'BBCA Standard', 'BBCA Excellence', 'BPEC Niveau 1', 'BPEC Niveau 2', 'Biosourcé niveau 1', 'Biosourcé niveau 2', 'Biosourcé niveau 3', 'Énergie positive', 'Bas carbone', 'Réemploi matériaux', 'Confort d’été', 'Qualité de l’air'];
 const PERF_NAMES = ['Cep -5%', 'Cep -10%', 'Cep -15%', 'Cep -20%', 'Bbio -10%', 'Bbio -20%', 'Bbio -30%', 'IC Construction 2025', 'IC Construction 2028', 'IC Énergie 2025', 'DH max réduit', 'Ubat -10%', 'Ubat -20%', 'Étanchéité renforcée', 'Ventilation double flux', 'Production ENR'];
-HEADERS.push('Opération: Mentions', 'Opération: Performance');
+HEADERS.push('Opération: Mentions', 'Opération: Performance', 'État du dossier');
 ROWS.forEach((r, i) => {
-  r.push([0, 1, 2].map(k => MENTION_NAMES[(i * 3 + k) % MENTION_NAMES.length]).join(' ; '), [0, 1, 2].map(k => PERF_NAMES[(i * 3 + k + 1) % PERF_NAMES.length]).join(' ; '));
+  // « État du dossier » : renseigné uniquement pour les lignes historiques sans code interne (comme dans l'export réel).
+  const AV = { 'Promoteur E': 'Évaluation conforme', 'Promoteur G': 'Visite réalisée' };
+  r.push([0, 1, 2].map(k => MENTION_NAMES[(i * 3 + k) % MENTION_NAMES.length]).join(' ; '), [0, 1, 2].map(k => PERF_NAMES[(i * 3 + k + 1) % PERF_NAMES.length]).join(' ; '), r[0] ? '' : (AV[r[4 + 51]] || ''));
 });
 const MATRIX = [['OBSERVATOIRE'], HEADERS, [], ...ROWS];
 const asObjects = (headers, rows) => rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));

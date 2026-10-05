@@ -75,6 +75,19 @@ test('orthographe, majuscules, espaces et fautes légères tolérés', () => {
   for (const [v, k] of Object.entries(cases)) assert.strictEqual(R.progressStatus(v).key, k, v);
 });
 test('« non conforme » et les statuts commerciaux ne sont jamais lus comme un avancement', () => { for (const v of ['Non conforme', 'Évaluation non conforme', 'Gagnée', 'En cours', 'Soldé', 'Annulé', 'Analyse']) assert.strictEqual(R.progressStatus(v).key, 'unknown', v); });
+test('repli « État du dossier » : lu seulement quand BC est vide', () => {
+  assert.strictEqual(R.readProgress({ BC: 'Visite réalisée', AV: 'Évaluation conforme' }, 'BC', 'AV').key, 'visit');
+  const fb = R.readProgress({ BC: '', AV: 'Évaluation conforme' }, 'BC', 'AV'); assert.strictEqual(fb.key, 'compliant'); assert.strictEqual(fb.source, 'fallback');
+  const bad = R.readProgress({ BC: 'Gagnée', AV: 'Évaluation conforme' }, 'BC', 'AV'); assert.strictEqual(bad.state, 'invalid'); assert.strictEqual(bad.source, 'primary');
+  assert.strictEqual(R.readProgress({ BC: '  ', AV: '' }, 'BC', 'AV').state, 'empty');
+  assert.strictEqual(R.readProgress({ AV: 'Visite réalisée' }, null, 'AV').key, 'visit');
+});
+test('colonne de repli retrouvée par son intitulé (accents et casse ignorés), jamais par son contenu', () => {
+  assert.strictEqual(R.resolveProgressFallback(['a', 'Etat du dossier']).column, 'B');
+  assert.strictEqual(R.resolveProgressFallback(['a', 'Autre']).header, null);
+  const r = R.resolveProgressFallback(HEADERS); assert.strictEqual(r.header, 'État du dossier');
+});
+test('moteur : la lecture ligne à ligne utilise BC puis le repli', () => { const a = read('app.js'); assert(a.includes('DATA_RULES.readProgress(r,fields.status,fields.progressFallback)') && a.includes('resolveProgressFallback')); });
 test('le statut commercial (Gagnée/Perdue) n’est jamais pris pour l’avancement', () => {
   const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows, { fullHeaders: ['Statut'] }).found, false);
 });
@@ -97,7 +110,7 @@ test('compatibilité V6.12 : maximum entre lignes et unités', () => { assert.st
 test('une cellule « n.c. » ne masque pas la valeur de la ligne suivante', () => assert.strictEqual(C.rawNumber(op('bbio', 'n.c.', '52'), 'bbio'), 52));
 test('valeurs illisibles listées pour la page Qualité', () => { const u = C.unreadableValues(op('bbio', '12,3 / 15'), 'bbio'); assert.strictEqual(u.length, 1); assert(u[0].reason); });
 test('Qualité : avancement hors liste signalé', () => { const q = C.qualityForOperation({ code: 'A', name: 'A', moa: 'M', department: '33', referential: 'R', progressState: 'invalid', rawStatus: 'Gagnée', fields: {}, rawRows: [{}] }); assert(q.issues.some(i => i.code === 'progress:invalid')); });
-test('dictionnaire : avancement documenté avec la liste fermée', () => assert(/Visite réalisée/.test(C.dictByKey.status.definition) && /80 %/.test(C.dictByKey.status.method) && /Proposition commerciale/.test(C.dictByKey.status.definition)));
+test('dictionnaire : avancement documenté avec la liste fermée', () => assert(/Visite réalisée/.test(C.dictByKey.status.definition) && /80 %/.test(C.dictByKey.status.method) && /État du dossier/.test(C.dictByKey.status.method) && /Proposition commerciale/.test(C.dictByKey.status.definition)));
 test('dictionnaire : années documentées (décision de certification / création)', () => assert(/Date de décision de certification/.test(C.dictByKey.year.method) && /Date de création/.test(C.dictByKey.createdYear.method)));
 test('date illisible listée pour la page Qualité', () => assert.strictEqual(C.unreadableValues({ fields: { createdDate: 'D' }, rawRows: [{ D: 'bientôt' }] }, 'createdDate').length, 1));
 

@@ -58,8 +58,11 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const st = Object.fromEntries(ops.map(o => [o[0], o[1]]));
       check(st['OP-3'] === 'complete' && st['OP-6'] === 'visit' && st['OP-7'] === 'compliant', '« Dossier complet », « Visite réalisée », « Évaluation conforme » reconnus');
       check(st['OP-9'] === 'unknown', 'avancement vide → Non renseigné (plus « Non démarrée » par défaut)');
-      const props = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().filter(o => !o.code).map(o => o.status));
-      check(props.length === 3 && props.every(k => k === 'proposal'), 'lignes sans code interne → « Proposition commerciale en cours »');
+      const noCodeOps = Object.fromEntries(await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().filter(o => !o.code).map(o => [o.moa, o.status])));
+      check(noCodeOps['Promoteur E'] === 'compliant' && noCodeOps['Promoteur G'] === 'visit', 'ligne sans code interne dont BC est vide : avancement lu dans « État du dossier » (comme en V6.12)');
+      check(noCodeOps['Promoteur F'] === 'proposal', 'ligne sans code interne ET sans avancement → « Proposition commerciale en cours »');
+      const fbMsg = await page.textContent('#dataFeedback');
+      check(fbMsg.includes('puis « État du dossier » (colonne BW) quand BC est vide (2 lignes)'), 'message de connexion : repli sur « État du dossier » annoncé — ' + fbMsg.slice(-170));
       // --- Labels & performances : tableau croisé Mentions × performances (V6.13.5) ---
       await page.click('button[data-page="performance"]'); await page.waitForTimeout(400);
       const mlist = '[data-matrix-check-list="mention"]', plist = '[data-matrix-check-list="performance"]';
@@ -114,9 +117,14 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.click('#obsResetFilters'); await page.waitForTimeout(300);
       await page.click('button[data-page="quality"]'); await page.waitForTimeout(300);
       const recon = await page.textContent('.obs-progress-card');
-      check(recon.includes('Contrôle ligne à ligne de la colonne BC') && recon.includes('14 lignes lues dans la Sheet') && recon.includes('3 sans code interne') && recon.includes('13 projets après regroupement'), 'Qualité : contrôle ligne à ligne de la colonne BC (14 lignes dont 3 propositions → 13 projets)');
-      check(recon.includes('1 - Non démarrée') && /1 projet avec des statuts différents/.test(recon) && recon.includes('OP-2'), 'Qualité : valeurs brutes listées et projet à statuts différents signalé (OP-2)');
-      check(recon.includes('Lignes Sheet') && recon.includes('Dans le tunnel'), 'Qualité : tableau lignes Sheet → projets → tunnel');
+      check(recon.includes('Contrôle ligne à ligne de l’avancement') && recon.includes('14 lignes lues dans la Sheet') && recon.includes('3 sans code interne') && recon.includes('2 ont leur avancement dans « État du dossier »') && recon.includes('13 projets après regroupement'), 'Qualité : contrôle ligne à ligne (14 lignes dont 3 sans code : 2 lues en État du dossier, 1 sans avancement → 13 projets)');
+      check(/1 projet avec des statuts différents/.test(recon) && recon.includes('OP-2'), 'Qualité : projet à statuts différents signalé (OP-2)');
+      check(recon.includes('Lignes en BC') && recon.includes('Lignes en BW (État du dossier)') && recon.includes('Dans le tunnel'), 'Qualité : tableau lignes BC / État du dossier → projets → tunnel');
+      check(await page.evaluate(() => !!document.querySelector('[data-copy-progress-report]')), 'bouton « Copier le diagnostic de l’avancement » présent');
+      await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('refusé')) }, configurable: true }); });
+      await page.click('[data-copy-progress-report]'); await page.waitForTimeout(400);
+      const report = await page.inputValue('[data-progress-report-text]').catch(() => '');
+      check(report.includes('DIAGNOSTIC AVANCEMENT') && report.includes('Colonne principale : « Opération: Évaluation: Statut » colonne BC') && report.includes('Colonne de repli : « État du dossier » colonne BW') && report.includes('Sans code ni avancement (→ proposition commerciale) : 1'), 'diagnostic copiable : colonnes, lignes lues par source, propositions');
       const op2 = await page.evaluate(() => ({ project: window.NEWOSB_ENGINE.getOperations().find(o => o.code === 'OP-2').status, rows: window.NEWOSB_ENGINE.getTechnicalOperations().filter(o => o.projectCode === 'OP-2').map(o => o.status) }));
       check(op2.project === 'notStarted', `projet à plusieurs lignes : avancement global = étape la moins avancée (obtenu : ${op2.project})`);
       check(op2.rows.join(',') === 'incomplete,notStarted', `opération détaillée : statut exact de chaque ligne (obtenu : ${op2.rows.join(',')})`);
@@ -135,7 +143,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check((await page.textContent('#obsFilterCount')).trim() === '1', 'filtre « Année de création = 2022 » : 1 projet actif (affaire perdue exclue)');
       await page.click('#obsResetFilters'); await page.waitForTimeout(300);
       const tunnel = await page.evaluate(() => window.NEWOSB_ENGINE.aggregateTunnel(window.NEWOSB_ENGINE.getOperations()));
-      check(tunnel.counts.visit === 1 && tunnel.counts.complete === 1 && tunnel.counts.proposal === 2 && tunnel.cancelled === 2, `tunnel : 2 propositions, 1 visite, 1 dossier complet, 2 annulés/perdus (${JSON.stringify(tunnel)})`);
+      check(tunnel.counts.visit === 1 && tunnel.counts.complete === 1 && tunnel.counts.proposal === 1 && tunnel.counts.compliant === 2 && tunnel.cancelled === 2, `tunnel : 1 proposition, 1 visite, 1 dossier complet, 2 conformes (dont 1 ligne historique), 2 annulés/perdus (${JSON.stringify(tunnel)})`);
       await page.click('button[data-page="certification"]'); await page.waitForTimeout(300);
       const steps = await page.$$eval('.obs-tunnel-step span', els => els.map(e => e.textContent));
       check(steps.join('|') === 'Proposition commerciale en cours|Non démarrée|Dossier incomplet|Dossier complet|Analyse planifiée|Analyse réalisée|Visite réalisée|Évaluation conforme', 'tunnel affiché avec les 8 étapes dans l’ordre');

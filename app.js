@@ -6812,6 +6812,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   const DATA_PROGRESS_LABELS=Object.fromEntries((DATA_RULES?.PROGRESS_STATUSES||[]).map(x=>[x.key,x.label]));
   function dataResolveProgressField(headers,rows){
     const res=DATA_RULES?DATA_RULES.resolveProgressColumn(headers,rows,{fullHeaders:dataRuntime.sourceHeaders||headers}):{header:null,found:false,message:'Règles d’avancement indisponibles.'};
+    // V6.13.6 : repli « État du dossier » quand BC est vide pour une ligne.
+    res.fallback=DATA_RULES?DATA_RULES.resolveProgressFallback(dataRuntime.sourceHeaders||headers):{header:null,column:''};
     dataRuntime.progressDiagnostics=res;
     return res;
   }
@@ -6919,7 +6921,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   const DATA_PROGRESS_RANK=Object.fromEntries((DATA_RULES?.PROGRESS_KEYS||[]).map((k,i)=>[k,i]));
   function dataMergeProjectProgress(g,o){
     const rg=DATA_PROGRESS_RANK[g.status],ro=DATA_PROGRESS_RANK[o.status];
-    if(ro!==undefined&&(rg===undefined||ro<rg)){g.status=o.status;g.rawStatus=o.rawStatus;g.progressState=o.progressState;}
+    if(ro!==undefined&&(rg===undefined||ro<rg)){g.status=o.status;g.rawStatus=o.rawStatus;g.progressState=o.progressState;g.progressSource=o.progressSource;}
     else if(rg===undefined&&g.progressState==='empty'&&o.progressState==='invalid'){g.rawStatus=o.rawStatus;g.progressState='invalid';}
   }
   function dataRowsToOperations(rows){
@@ -6928,13 +6930,16 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     Object.entries(DATA_FIELD_ALIASES).forEach(([k,a])=>{const i=dataResolveHeader(headers,a,k);fields[k]=i>=0?headers[i]:null;});
     // Avancement : colonne validée par son contenu (liste fermée), jamais de repli
     // sur le statut commercial ni sur une autre colonne « étape ».
-    fields.status=dataResolveProgressField(headers,rows).header||null;
+    { const pres=dataResolveProgressField(headers,rows); fields.status=pres.header||null; fields.progressFallback=pres.fallback?.header||null; }
     dataResolveYearFields(headers,fields);
     const mapped=rows.map((r,i)=>{
       const affairStage=String(dataRawValue(r,fields.affairStage)||'').trim();
       // V6.13.4 : une ligne sans code interne est une proposition commerciale en cours.
       const hasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
-      const progress=hasCode?dataProgress(dataRawValue(r,fields.status)):{key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',derived:'sans code interne'};
+      // V6.13.6 : BC, puis « État du dossier » si BC est vide. « Proposition commerciale en cours »
+      // seulement pour une ligne sans code interne ET sans aucun avancement.
+      let progress=DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{key:'unknown',label:'',state:'empty',source:'none'};
+      if(!hasCode&&progress.state==='empty')progress={key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',source:'proposal'};
       const rawStatus=progress.label;
       const contractNumber=String(dataRawValue(r,fields.contractNumber)||'').trim();
       const analysisExcluded=dataIsLostAbandonedStage(affairStage);
@@ -6946,7 +6951,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       const code=String(dataRawValue(r,fields.code)||'').trim();
       const sourceName=String(dataRawValue(r,fields.name)||'').trim();
       const name=sourceName||code;
-      return {code,name,region:String(dataRawValue(r,fields.region)||'').trim(),department:dataDepartment(dataFirstNonEmpty([dataRawValue(r,fields.department),dataRawValue(r,fields.postalCode),dataRawValue(r,fields.address)])),postalCode:String(dataRawValue(r,fields.postalCode)||'').trim(),city:String(dataRawValue(r,fields.city)||'').trim(),insee:String(dataRawValue(r,fields.insee)||'').trim(),intercommunality:String(dataRawValue(r,fields.intercommunality)||'').trim(),socialZone:socialZoneNormalizeLabel(dataRawValue(r,fields.socialZone)||''),longitude:Number(dataRawValue(r,fields.longitude))||null,latitude:Number(dataRawValue(r,fields.latitude))||null,address:String(dataRawValue(r,fields.address)||'').trim(),referential:String(dataRawValue(r,fields.referential)||'Non précisé').trim(),version:String(dataRawValue(r,fields.version)||'').trim(),moa:String(dataRawValue(r,fields.moa)||'Non précisé').trim(),moaGroup:String(dataRawValue(r,fields.moaGroup)||'').trim(),moaType:String(dataRawValue(r,fields.moaType)||'').trim(),affairStage,analysisExcluded,analysisExcludedReason:analysisExcluded?'Affaire perdue / abandonnée / annulée':'',status:progress.key,progressState:progress.state,rawStatus,contractNumber,hasCode,sold:/sold/.test(dataNorm(affairStage))||/sold/.test(dataNorm(rawStatus)),dwellings:dataNumber(dataRawValue(r,fields.dwellings)),buildings:dataNumber(dataRawValue(r,fields.buildings)),year:certificationYear||'',certificationYear:certificationYear||'',createdYear:createdYear||'',constructionYear:constructionYear||'',tags:String(dataRawValue(r,fields.tags)||'').trim(),nature,heatingBefore:dataStandardEnergyVector(dataRawValue(r,fields.heatingBefore)),heatingAfter:dataStandardEnergyVector(dataRawValue(r,fields.heatingAfter)),heatingModeAfter:String(dataRawValue(r,fields.heatingModeAfter)||'').trim(),ecsBefore:dataStandardEnergyVector(dataRawValue(r,fields.ecsBefore)),ecsAfter:dataStandardEnergyVector(dataRawValue(r,fields.ecsAfter)),ecs:dataStandardEnergyVector(dataRawValue(r,fields.ecs)),cooling:dataStandardCooling(dataRawValue(r,fields.cooling)),ventilation:dataStandardVentilation(dataRawValue(r,fields.ventilation)),structure:dataStandardStructure(dataRawValue(r,fields.structure)),roofStructure:dataStandardStructure(dataRawValue(r,fields.roofStructure)),roofInsulation:dataStandardInsulation(dataRawValue(r,fields.roofInsulation)),wallStructure:dataStandardStructure(dataRawValue(r,fields.wallStructure)),wallInsulation:dataStandardInsulation(dataRawValue(r,fields.wallInsulation)),floorStructure:dataStandardStructure(dataRawValue(r,fields.floorStructure)),floorInsulation:dataStandardInsulation(dataRawValue(r,fields.floorInsulation)),windowMaterial:String(dataRawValue(r,fields.windowMaterial)||'').trim(),windowGlazing:String(dataRawValue(r,fields.windowGlazing)||'').trim(),windowShading:String(dataRawValue(r,fields.windowShading)||'').trim(),mentions:String(dataRawValue(r,fields.mentions)||'').trim(),performance:String(dataRawValue(r,fields.performance)||'').trim(),profile:String(dataRawValue(r,fields.profile)||'').trim(),raw:r,rawRows:[r],fields};
+      return {code,name,region:String(dataRawValue(r,fields.region)||'').trim(),department:dataDepartment(dataFirstNonEmpty([dataRawValue(r,fields.department),dataRawValue(r,fields.postalCode),dataRawValue(r,fields.address)])),postalCode:String(dataRawValue(r,fields.postalCode)||'').trim(),city:String(dataRawValue(r,fields.city)||'').trim(),insee:String(dataRawValue(r,fields.insee)||'').trim(),intercommunality:String(dataRawValue(r,fields.intercommunality)||'').trim(),socialZone:socialZoneNormalizeLabel(dataRawValue(r,fields.socialZone)||''),longitude:Number(dataRawValue(r,fields.longitude))||null,latitude:Number(dataRawValue(r,fields.latitude))||null,address:String(dataRawValue(r,fields.address)||'').trim(),referential:String(dataRawValue(r,fields.referential)||'Non précisé').trim(),version:String(dataRawValue(r,fields.version)||'').trim(),moa:String(dataRawValue(r,fields.moa)||'Non précisé').trim(),moaGroup:String(dataRawValue(r,fields.moaGroup)||'').trim(),moaType:String(dataRawValue(r,fields.moaType)||'').trim(),affairStage,analysisExcluded,analysisExcludedReason:analysisExcluded?'Affaire perdue / abandonnée / annulée':'',status:progress.key,progressState:progress.state,progressSource:progress.source,rawStatus,contractNumber,hasCode,sold:/sold/.test(dataNorm(affairStage))||/sold/.test(dataNorm(rawStatus)),dwellings:dataNumber(dataRawValue(r,fields.dwellings)),buildings:dataNumber(dataRawValue(r,fields.buildings)),year:certificationYear||'',certificationYear:certificationYear||'',createdYear:createdYear||'',constructionYear:constructionYear||'',tags:String(dataRawValue(r,fields.tags)||'').trim(),nature,heatingBefore:dataStandardEnergyVector(dataRawValue(r,fields.heatingBefore)),heatingAfter:dataStandardEnergyVector(dataRawValue(r,fields.heatingAfter)),heatingModeAfter:String(dataRawValue(r,fields.heatingModeAfter)||'').trim(),ecsBefore:dataStandardEnergyVector(dataRawValue(r,fields.ecsBefore)),ecsAfter:dataStandardEnergyVector(dataRawValue(r,fields.ecsAfter)),ecs:dataStandardEnergyVector(dataRawValue(r,fields.ecs)),cooling:dataStandardCooling(dataRawValue(r,fields.cooling)),ventilation:dataStandardVentilation(dataRawValue(r,fields.ventilation)),structure:dataStandardStructure(dataRawValue(r,fields.structure)),roofStructure:dataStandardStructure(dataRawValue(r,fields.roofStructure)),roofInsulation:dataStandardInsulation(dataRawValue(r,fields.roofInsulation)),wallStructure:dataStandardStructure(dataRawValue(r,fields.wallStructure)),wallInsulation:dataStandardInsulation(dataRawValue(r,fields.wallInsulation)),floorStructure:dataStandardStructure(dataRawValue(r,fields.floorStructure)),floorInsulation:dataStandardInsulation(dataRawValue(r,fields.floorInsulation)),windowMaterial:String(dataRawValue(r,fields.windowMaterial)||'').trim(),windowGlazing:String(dataRawValue(r,fields.windowGlazing)||'').trim(),windowShading:String(dataRawValue(r,fields.windowShading)||'').trim(),mentions:String(dataRawValue(r,fields.mentions)||'').trim(),performance:String(dataRawValue(r,fields.performance)||'').trim(),profile:String(dataRawValue(r,fields.profile)||'').trim(),raw:r,rawRows:[r],fields};
     }).filter(o=>o.code||o.name);
     // Une opération peut apparaître sur plusieurs lignes/bâtiments : on la compte une seule fois.
     const grouped=new Map();
@@ -6954,10 +6959,26 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     // V6.13.2 : contrôle de la colonne d'avancement, ligne à ligne, pour comparer avec la Sheet.
     const pd=dataRuntime.progressDiagnostics;
     if(pd){
-      const counts=new Map();let filled=0;
-      let noCode=0;rows.forEach(r=>{if(String(dataRawValue(r,fields.code)||'').trim()===''&&String(dataRawValue(r,fields.name)||dataRawValue(r,fields.contractNumber)||'').trim()!==''){noCode++;return;}const raw=String(dataRawValue(r,fields.status)??'').trim();if(!raw)return;filled++;const p=dataProgress(raw);const k=raw;const c=counts.get(k)||{value:raw,count:0,key:p.key,label:p.state==='valid'?p.label:''};c.count++;counts.set(k,c);});
+      // V6.13.6 : décompte ligne à ligne de ce qui est lu en BC, en « État du dossier », ou absent.
+      const rc={primary:{},fallback:{},proposal:0,emptyCoded:0,noCode:0,noCodeFromFallback:0,invalid:{primary:new Map(),fallback:new Map()},invalidCount:0,invalidTotals:{primary:0,fallback:0}};
+      rows.forEach(r=>{
+        const hasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
+        const p=DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{state:'empty',source:'none'};
+        if(!hasCode)rc.noCode++;
+        if(p.state==='empty'){if(hasCode)rc.emptyCoded++;else rc.proposal++;return;}
+        const bucket=p.source==='primary'?'primary':'fallback';
+        if(p.state==='valid'){rc[bucket][p.key]=(rc[bucket][p.key]||0)+1;if(!hasCode&&bucket==='fallback')rc.noCodeFromFallback++;}
+        else{rc.invalidCount++;rc.invalidTotals[bucket]++;rc.invalid[bucket].set(p.raw,(rc.invalid[bucket].get(p.raw)||0)+1);}
+      });
+      const counts=new Map(),filled=rc.invalidCount+Object.values(rc.primary).reduce((a,b)=>a+b,0)+Object.values(rc.fallback).reduce((a,b)=>a+b,0);
+      const toList=m=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([value,count])=>({value,count}));
+      const noCode=rc.noCode;
+      rc.invalidValues={primary:toList(rc.invalid.primary),fallback:toList(rc.invalid.fallback)};delete rc.invalid;
+      pd.rowCounts=rc;
+      {const nFb=Object.values(rc.fallback).reduce((a,b)=>a+b,0);if(pd.fallback?.header&&nFb>0)pd.message+=` Quand BC est vide, « ${pd.fallback.header} »${pd.fallback.column?` (colonne ${pd.fallback.column})`:''} est utilisé : ${nFb.toLocaleString('fr-FR')} lignes.`;
+      if(!pd.fallback?.header&&rc.proposal>0)pd.message+=` ⚠ Colonne « ${DATA_RULES?.PROGRESS_FALLBACK_HEADER||'État du dossier'} » introuvable : ${rc.proposal.toLocaleString('fr-FR')} lignes sans code interne n’ont aucun avancement.`;}
       const conflicts=[];
-      grouped.forEach(g=>{const keys=[...new Set((g.rawRows||[]).map(r=>dataProgress(dataRawValue(r,fields.status)).key).filter(k=>k!=='unknown'))];if(keys.length>1)conflicts.push({code:g.code,name:g.name,keys,retained:g.status});});
+      grouped.forEach(g=>{const keys=[...new Set((g.rawRows||[]).map(r=>(DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback).key:'unknown')).filter(k=>k!=='unknown'))];if(keys.length>1)conflicts.push({code:g.code,name:g.name,keys,retained:g.status});});
       pd.reconciliation={sourceRows:rows.length,rowsWithStatus:filled,rowsWithoutCode:noCode,rowsWithoutIdentity:rows.length-mapped.length,projects:grouped.size,multiRowProjects:[...grouped.values()].filter(g=>(g.rawRows||[]).length>1).length,excludedProjects:[...grouped.values()].filter(g=>g.analysisExcluded).length,conflicts:conflicts.slice(0,200),conflictCount:conflicts.length};
       pd.valueCounts=[...counts.values()].sort((a,b)=>b.count-a.count);
     }
@@ -6969,7 +6990,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     return rows.map((r,index)=>{
       const affairStage=String(dataRawValue(r,fields.affairStage)||project.affairStage||'').trim();
       const rowHasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
-      const progress=!rowHasCode?{key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid'}:(fields.status?dataProgress(dataRawValue(r,fields.status)):{key:project.status||'unknown',label:project.rawStatus||'',state:project.progressState||'empty'});
+      let progress=(fields.status||fields.progressFallback)&&DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{key:project.status||'unknown',label:project.rawStatus||'',state:project.progressState||'empty',source:project.progressSource||'none'};
+      if(!rowHasCode&&progress.state==='empty')progress={key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',source:'proposal'};
       const rawStatus=progress.label;
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||project.constructionYear||'';
       const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||project.certificationYear||'';
@@ -6980,7 +7002,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       const child={...project};
       child.projectCode=project.code; child.projectName=project.name; child.technicalIndex=index+1;
       child.code=`${project.code}::${index+1}`; child.name=rows.length>1?`${project.name} · opération ${index+1}`:project.name;
-      child.affairStage=affairStage; child.rawStatus=rawStatus; child.status=progress.key; child.progressState=progress.state; child.year=certificationYear; child.certificationYear=certificationYear; child.createdYear=createdYear; child.constructionYear=constructionYear; child.tags=String(dataRawValue(r,fields.tags)||project.tags||'').trim(); child.nature=nature;
+      child.affairStage=affairStage; child.rawStatus=rawStatus; child.status=progress.key; child.progressState=progress.state; child.progressSource=progress.source; child.year=certificationYear; child.certificationYear=certificationYear; child.createdYear=createdYear; child.constructionYear=constructionYear; child.tags=String(dataRawValue(r,fields.tags)||project.tags||'').trim(); child.nature=nature;
       child.analysisExcluded=Boolean(project.analysisExcluded)||dataIsLostAbandonedStage(affairStage);
       child.region=String(dataRawValue(r,fields.region)||project.region||'').trim();
       child.department=dataDepartment(dataFirstNonEmpty([dataRawValue(r,fields.department),dataRawValue(r,fields.postalCode),dataRawValue(r,fields.address)]))||project.department;
