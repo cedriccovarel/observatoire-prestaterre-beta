@@ -58,6 +58,15 @@ async function scenario(browser, origin, properties, { jsonFails = false } = {})
       const st = Object.fromEntries(ops.map(o => [o[0], o[1]]));
       check(st['OP-3'] === 'complete' && st['OP-6'] === 'visit' && st['OP-7'] === 'compliant', '« Dossier complet », « Visite réalisée », « Évaluation conforme » reconnus');
       check(st['OP-9'] === 'unknown', 'avancement vide → Non renseigné (plus « Non démarrée » par défaut)');
+      await page.click('button[data-page="quality"]'); await page.waitForTimeout(300);
+      const recon = await page.textContent('.obs-progress-card');
+      check(recon.includes('Contrôle ligne à ligne de la colonne BC') && recon.includes('11 lignes lues dans la Sheet') && recon.includes('10 projets après regroupement'), 'Qualité : contrôle ligne à ligne de la colonne BC (11 lignes → 10 projets)');
+      check(recon.includes('1 - Non démarrée') && /1 projet avec des statuts différents/.test(recon) && recon.includes('OP-2'), 'Qualité : valeurs brutes listées et projet à statuts différents signalé (OP-2)');
+      check(recon.includes('Lignes Sheet') && recon.includes('Dans le tunnel'), 'Qualité : tableau lignes Sheet → projets → tunnel');
+      const op2 = await page.evaluate(() => ({ project: window.NEWOSB_ENGINE.getOperations().find(o => o.code === 'OP-2').status, rows: window.NEWOSB_ENGINE.getTechnicalOperations().filter(o => o.projectCode === 'OP-2').map(o => o.status) }));
+      check(op2.project === 'notStarted', `projet à plusieurs lignes : avancement global = étape la moins avancée (obtenu : ${op2.project})`);
+      check(op2.rows.join(',') === 'incomplete,notStarted', `opération détaillée : statut exact de chaque ligne (obtenu : ${op2.rows.join(',')})`);
+      await page.click('button[data-page="overview"]'); await page.waitForTimeout(200);
       const yrs = Object.fromEntries((await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => [o.code, [o.year, o.createdYear]]))));
       check(String(yrs['OP-7'][0]) === '2024' && String(yrs['OP-10'][0]) === '2024' && String(yrs['OP-9'][0]) === '2025', 'année de certification lue dans « Date de décision de certification » (15/03/24 → 2024)');
       check(String(yrs['OP-1'][0]) === '', 'pas de décision de certification → pas d’année de certification (plus de repli sur la date CD)');

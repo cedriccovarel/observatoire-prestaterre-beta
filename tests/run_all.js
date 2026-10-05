@@ -43,16 +43,26 @@ test('une faute de frappe sur 40 lignes n’invalide pas la colonne (seuil 95 %)
   const rows = Array.from({ length: 40 }, (_, i) => ({ 'Opération: Évaluation: Statut': i === 0 ? 'Analyse réalisé' : 'Analyse réalisée' }));
   assert.strictEqual(R.resolveProgressColumn(['Opération: Évaluation: Statut'], rows).found, true);
 });
-test('colonne au bon nom mais au mauvais contenu → rejetée', () => {
+test('colonne au bon nom mais au contenu inattendu → utilisée quand même, avec alerte', () => {
   const rows = Array.from({ length: 10 }, () => ({ 'Opération: Évaluation: Statut': 'Gagnée', Autre: 'x' }));
-  const r = R.resolveProgressColumn(['Opération: Évaluation: Statut', 'Autre'], rows); assert.strictEqual(r.found, false); assert(/pas la bonne colonne/.test(r.message));
+  const r = R.resolveProgressColumn(['Opération: Évaluation: Statut', 'Autre'], rows); assert.strictEqual(r.header, 'Opération: Évaluation: Statut'); assert.strictEqual(r.warning, true); assert(/reconnues/.test(r.message));
 });
-test('colonne renommée retrouvée par son contenu', () => {
-  const rows = objs.map(o => ({ Code: o['Opération: Code interne'], 'Étape éval.': o['Opération: Évaluation: Statut'], Statut: o.Statut }));
-  const r = R.resolveProgressColumn(['Code', 'Statut', 'Étape éval.'], rows); assert.strictEqual(r.header, 'Étape éval.'); assert.strictEqual(r.origin, 'contenu reconnu');
+test('aucune autre colonne n’est utilisée, même si son contenu ressemble à un avancement', () => {
+  const rows = objs.map(o => ({ Code: o['Opération: Code interne'], 'Étape éval.': o['Opération: Évaluation: Statut'] }));
+  assert.strictEqual(R.resolveProgressColumn(['Code', 'Étape éval.'], rows, { fullHeaders: ['Code', 'Étape éval.'] }).found, false);
 });
+test('colonne BC renommée : utilisée si son contenu correspond', () => {
+  const full = Array.from({ length: 60 }, (_, i) => (i === 54 ? 'Statut évaluation' : 'C' + i));
+  const rows = objs.map(o => ({ 'Statut évaluation': o['Opération: Évaluation: Statut'] }));
+  const r = R.resolveProgressColumn(['Statut évaluation'], rows, { fullHeaders: full }); assert.strictEqual(r.header, 'Statut évaluation'); assert.strictEqual(r.column, 'BC');
+});
+test('colonne au bon nom mais pas en BC → utilisée, avec alerte « déplacée »', () => {
+  const r = R.resolveProgressColumn(['A', 'Opération: Évaluation: Statut'], objs, { fullHeaders: ['A', 'Opération: Évaluation: Statut'] }); assert.strictEqual(r.column, 'B'); assert(r.warning && /BC/.test(r.message));
+});
+test('feuille de test : colonne trouvée en BC sans alerte', () => { const r = R.resolveProgressColumn(HEADERS, objs, { fullHeaders: HEADERS }); assert.strictEqual(r.column, 'BC'); assert.strictEqual(r.warning, false); });
+test('numérotation et compléments tolérés (« 3 - Dossier complet », « Analyse réalisée - en attente »)', () => { assert.strictEqual(R.progressStatus('3 - Dossier complet').key, 'complete'); assert.strictEqual(R.progressStatus('05. Analyse planifiée').key, 'planned'); assert.strictEqual(R.progressStatus('Analyse réalisée - en attente').key, 'analysis'); assert.strictEqual(R.progressStatus('Dossier incomplet').key, 'incomplete'); });
 test('le statut commercial (Gagnée/Perdue) n’est jamais pris pour l’avancement', () => {
-  const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows).found, false);
+  const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows, { fullHeaders: ['Statut'] }).found, false);
 });
 
 section('3 bis. Années de certification et de création');
@@ -64,6 +74,7 @@ test('« Date de création » choisie, jamais « Affaire: Date de création »',
 test('intitulé préfixé accepté s’il est unique', () => assert.strictEqual(R.resolveExactHeader(['Certification: Date de décision de certification'], R.CERTIFICATION_DATE_HEADER).header, 'Certification: Date de décision de certification'));
 test('plusieurs colonnes possibles → aucune n’est devinée', () => assert.strictEqual(R.resolveExactHeader(['Affaire: Date de création', 'Contrat: Date de création'], R.CREATION_DATE_HEADER).header, null));
 
+test('règle « étape la moins avancée » présente dans le moteur', () => { const a = read('app.js'); assert(a.includes('function dataMergeProjectProgress(g,o)') && a.includes('ro<rg')); });
 section('4. Moteur Observatoire (newosb-core.js)');
 const coreCtx = { window: { NEWOSB_RULES: R }, console }; vm.createContext(coreCtx); vm.runInContext(read('newosb-core.js'), coreCtx);
 const C = coreCtx.window.NEWOSB_CORE;

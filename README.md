@@ -1,8 +1,8 @@
-# Observatoire Prestaterre — V6.13.1
+# Observatoire Prestaterre — V6.13.3
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 
-- **Mettre à jour depuis la V6.12 ou la V6.13** : voir `GUIDE_MISE_A_JOUR_V6_13_1.md`.
+- **Mettre à jour depuis la V6.12 ou une V6.13.x** : voir `GUIDE_MISE_A_JOUR_V6_13_3.md`.
 - **Historique des versions** : `CHANGELOG.md` (anciens README/QA par version dans `docs/historique/`).
 - **Tests** : `node tests/run_all.js` (non-régression, sans dépendance) et `node tests/e2e_browser.js` (navigateur, optionnel).
 

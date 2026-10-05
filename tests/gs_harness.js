@@ -46,6 +46,7 @@ const ROWS = [
   ['OP-7', 'Le Phare', 'Soldée', 'Évaluation conforme', 'Promoteur A', 'Promoteur', '33', '33400', 'BEE Logement Neuf', '25', '40', '8', '220', ''],
   ['OP-8', 'Le Moulin', 'Perdue', 'Non démarrée', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '5', '', '', '', ''],
   ['OP-9', 'La Source', 'Gagnée', '', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '6', '48', '', '', ''],
+  ['OP-2', 'Le Parc', 'Gagnée', '1 - Non démarrée', 'Promoteur A', 'Promoteur', '33', '33000', 'BEE Logement Neuf', '30', '52', '5', '140', '', '', ''],
   ['OP-10', 'Le Bourg', 'Gagnée', 'Analyse réalisée', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '9', '47', '', '', '']
 ];
 // Colonnes de dates (V6.13.1) : deux colonnes « leurres » vérifient qu'aucune autre date n'est utilisée.

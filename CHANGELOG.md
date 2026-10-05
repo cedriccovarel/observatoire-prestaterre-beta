@@ -1,5 +1,23 @@
 # Historique
 
+## V6.13.3
+
+- Projet à plusieurs lignes (même code interne) : avancement global = étape la **moins avancée** parmi ses lignes renseignées. La fiche détaillée de chaque opération garde le statut exact de sa ligne (colonne BC).
+- Fiche : libellé « Avancement global (étape la moins avancée) » pour les projets à plusieurs lignes.
+- Qualité & données : tableau de contrôle par valeur de la colonne BC — lignes Sheet, projets, dont annulés / abandonnés, dans le tunnel.
+- Contrôlé sur l'export réel « Tous contrat 30/09/26 » (7 003 lignes) : les lignes lues par valeur de BC sont identiques à la Sheet.
+
+## V6.13.2
+
+**Avancement : colonne BC uniquement**
+- L'avancement est lu exclusivement dans « Opération: Évaluation: Statut » (colonne BC). La recherche d'une autre colonne « par contenu » est supprimée.
+- Si l'intitulé a changé, la colonne située en BC est utilisée à condition que son contenu corresponde.
+- La colonne n'est plus jamais écartée : si moins de 95 % des valeurs sont reconnues, ou si la colonne n'est plus en BC, une alerte s'affiche à la connexion.
+- Valeurs tolérées en plus : numérotation en tête (« 3 - Dossier complet », « 05. Analyse planifiée ») et complément après le libellé (« Analyse réalisée - en attente »).
+- Nouveau contrôle ligne à ligne dans Qualité & données : chaque valeur distincte de la colonne BC, comment elle est lue, nombre de lignes ; passage lignes → projets → projets exclus → projets du tunnel ; projets dont les lignes ont des statuts différents.
+
+**Tests** : 58 tests unitaires, 32 vérifications navigateur.
+
 ## V6.13.1
 
 **Années**

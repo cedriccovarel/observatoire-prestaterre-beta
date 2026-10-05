@@ -210,9 +210,19 @@
   const progressCanon = v => headerKey(v).split(' ').filter(Boolean).map(w => w.replace(/s$/, '').replace(/e$/, '')).join(' ');
   const PROGRESS_INDEX = new Map(PROGRESS_STATUSES.map(s => [progressCanon(s.label), s]));
 
+  // V6.13.2 : tolère une numérotation en tête (« 3 - Dossier complet », « 05. Analyse… »)
+  // et un complément après le libellé (« Analyse réalisée - en attente »).
+  const stripNumbering = v => String(v ?? '').replace(/^\s*[\(\[]?\d{1,2}\s*[-.)\]–:/]?\s+/, '').replace(/^\s*[\(\[]?\d{1,2}\s*[-.)\]–:/]\s*/, '');
   function progressMatch(raw) {
     if (raw === null || raw === undefined || String(raw).trim() === '') return null;
-    return PROGRESS_INDEX.get(progressCanon(raw)) || null;
+    const canon = progressCanon(stripNumbering(raw));
+    const exact = PROGRESS_INDEX.get(canon);
+    if (exact) return exact;
+    let best = null, bestLen = 0;
+    PROGRESS_INDEX.forEach((status, label) => {
+      if ((' ' + canon + ' ').indexOf(' ' + label + ' ') === 0 && label.length > bestLen) { best = status; bestLen = label.length; }
+    });
+    return best;
   }
   function progressStatus(raw) {
     if (raw === null || raw === undefined || String(raw).trim() === '') return { key: 'unknown', label: '', state: 'empty' };
@@ -236,47 +246,45 @@
     };
   }
 
-  // Détermine la colonne d'avancement :
-  //  1. « Opération: Évaluation: Statut » (ou variante d'écriture) ;
-  //  2. toute autre colonne Évaluation + Statut ;
-  //  3. sinon, n'importe quelle colonne dont le contenu respecte la liste fermée.
-  // Une colonne n'est retenue que si au moins 95 % de ses valeurs non vides
-  // appartiennent à la liste. Sinon, ce n'est pas la bonne colonne.
+  // V6.13.2 — Colonne d'avancement : TOUJOURS « Opération: Évaluation: Statut »
+  // (colonne BC de la Google Sheet). Plus aucune recherche dans d'autres colonnes.
+  //  1. colonne portant exactement ce nom (accents, casse, ponctuation ignorés) ;
+  //  2. à défaut, la colonne située en BC, si son contenu correspond (≥ 95 %).
+  // La colonne retenue n'est jamais écartée : un taux de valeurs reconnues
+  // inférieur à 95 % déclenche une alerte, et chaque valeur brute est listée.
+  const PROGRESS_COLUMN_LETTER = 'BC';
+  const PROGRESS_COLUMN_INDEX = 54;
   function resolveProgressColumn(headers, rows, options) {
     const minRatio = (options && options.minRatio) || PROGRESS_MIN_VALID_RATIO;
-    const list = (headers || []).filter(h => String(h || '').trim() !== '');
+    const full = (options && Array.isArray(options.fullHeaders) && options.fullHeaders.length) ? options.fullHeaders.map(h => String(h ?? '').trim()) : (headers || []);
     const target = headerKey(PROGRESS_SOURCE_HEADER);
-    const exact = list.filter(h => headerKey(h) === target);
-    const named = list.filter(h => !exact.includes(h) && /\bevaluation\b/.test(headerKey(h)) && /\bstatut\b/.test(headerKey(h)));
-    const others = list.filter(h => !exact.includes(h) && !named.includes(h));
+    const named = full.map((h, i) => ({ h, i })).filter(x => x.h && headerKey(x.h) === target);
     const checked = [];
-    const accept = (h, origin) => {
-      const st = Object.assign(columnProgressStats(rows, h), { origin });
+    const finish = (header, index, origin) => {
+      const st = Object.assign(columnProgressStats(rows, header), { origin });
       checked.push(st);
-      return st.nonEmpty > 0 && st.ratio >= minRatio ? st : null;
+      const column = index >= 0 ? columnLetter(index) : '';
+      const lowRatio = st.nonEmpty > 0 && st.ratio < minRatio;
+      const wrongPlace = column && column !== PROGRESS_COLUMN_LETTER;
+      let message = `Avancement lu dans « ${header} »${column ? ` (colonne ${column})` : ''}.`;
+      if (named.length > 1) message += ` ⚠ ${named.length} colonnes portent ce nom : la première est utilisée.`;
+      if (wrongPlace) message += ` ⚠ Attendu en colonne ${PROGRESS_COLUMN_LETTER} : une colonne a été insérée ou déplacée dans la Sheet.`;
+      if (lowRatio) message += ` ⚠ Seulement ${Math.round(st.ratio * 100)} % des valeurs sont reconnues : voir Qualité & données.`;
+      if (!st.nonEmpty) message += ' ⚠ La colonne est vide.';
+      return { header, found: true, origin, column, index, ratio: st.ratio, nonEmpty: st.nonEmpty, valid: st.valid, invalidValues: st.invalidValues,
+        warning: !!(lowRatio || wrongPlace || named.length > 1 || !st.nonEmpty), duplicates: named.length, expectedHeader: PROGRESS_SOURCE_HEADER, expectedColumn: PROGRESS_COLUMN_LETTER, checked, minRatio, message };
     };
-    for (const h of exact) { const st = accept(h, 'nom attendu'); if (st) return finish(st); }
-    for (const h of named) { const st = accept(h, 'nom proche'); if (st) return finish(st); }
-    const minCount = Math.max(3, Math.ceil(0.1 * (rows || []).length));
-    for (const h of others) {
-      const st = columnProgressStats(rows, h);
-      if (st.nonEmpty >= minCount && st.ratio >= minRatio) { st.origin = 'contenu reconnu'; checked.push(st); return finish(st); }
+    if (named.length) return finish(named[0].h, named[0].i, 'nom attendu');
+    const atBC = full[PROGRESS_COLUMN_INDEX];
+    if (atBC) {
+      const st = Object.assign(columnProgressStats(rows, atBC), { origin: 'position BC' });
+      checked.push(st);
+      if (st.nonEmpty > 0 && st.ratio >= minRatio) return finish(atBC, PROGRESS_COLUMN_INDEX, `position ${PROGRESS_COLUMN_LETTER} (intitulé différent : « ${atBC} »)`);
     }
     return {
-      header: null, found: false, expectedHeader: PROGRESS_SOURCE_HEADER, checked, minRatio,
-      message: exact.length || named.length
-        ? `La colonne « ${(exact[0] || named[0])} » ne contient pas les valeurs d’avancement attendues : ce n’est pas la bonne colonne.`
-        : `Colonne « ${PROGRESS_SOURCE_HEADER} » introuvable et aucune autre colonne ne contient les valeurs d’avancement attendues.`
+      header: null, found: false, expectedHeader: PROGRESS_SOURCE_HEADER, expectedColumn: PROGRESS_COLUMN_LETTER, checked, minRatio,
+      message: `Colonne « ${PROGRESS_SOURCE_HEADER} » introuvable${atBC ? ` (la colonne ${PROGRESS_COLUMN_LETTER} s’intitule « ${atBC} » et ne contient pas les valeurs d’avancement)` : ''}. L’avancement reste « Non renseigné ».`
     };
-    function finish(st) {
-      return {
-        header: st.header, found: true, origin: st.origin, ratio: st.ratio, nonEmpty: st.nonEmpty, valid: st.valid,
-        invalidValues: st.invalidValues, expectedHeader: PROGRESS_SOURCE_HEADER, checked, minRatio,
-        message: st.origin === 'nom attendu'
-          ? `Avancement lu dans « ${st.header} ».`
-          : `Avancement lu dans « ${st.header} » (${st.origin}) : la colonne « ${PROGRESS_SOURCE_HEADER} » est absente ou non conforme.`
-      };
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -337,7 +345,7 @@
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
     parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
-    progressMatch, progressStatus, columnProgressStats, resolveProgressColumn
+    progressMatch, progressStatus, columnProgressStats, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };
   root.NEWOSB_RULES = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
