@@ -99,7 +99,7 @@
     performanceMatrixView:'matrix',
     performanceMatrixPage:1,
     performanceMatrixMentions:[],
-    performanceMatrixPerformances:[],matrixSearch:{mention:'',performance:''},
+    performanceMatrixPerformances:[],matrixSearch:{mention:'',performance:''},tunnelShowExcluded:false,
     energyCepViews:{usage:'pie',vector:'pie'},
     activeProject:null,
     projectWindowTab:'general',
@@ -1192,10 +1192,14 @@
     return `<div class="obs-evolution-multi obs-evolution-visual"><svg class="obs-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution des projets par année et par référentiel">${defs}${grid}${paths}${totalPath}${labels}</svg>${legend}</div>`;
   }
 
-  function tunnel(ops,{analytic=false}={}){
-    const a=engine.aggregateTunnel(ops), order=PROGRESS_ORDER;
+  // V6.13.7 : includeExcluded=true compte aussi les affaires annulées / abandonnées / perdues
+  // (chiffres bruts de la colonne BC) ; sinon elles sont hors tunnel (comportement historique).
+  function tunnel(ops,{analytic=false,includeExcluded=false,excludedCount=0}={}){
+    let a=engine.aggregateTunnel(ops);
+    if(includeExcluded){const counts={};PROGRESS_ORDER.forEach(k=>counts[k]=0);let unknown=0;ops.forEach(o=>{if(counts[o.status]!==undefined)counts[o.status]++;else unknown++;});a={...a,counts,unknown};}
+    const order=PROGRESS_ORDER;
     const icons={proposal:'✎',notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
-    return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>${tunnelUnknownNote(a,analytic)}`;
+    return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>${tunnelUnknownNote(a,analytic)}${includeExcluded?'<p class="obs-tunnel-note is-info">Les cartes incluent les affaires annulées, abandonnées et perdues : elles reprennent les chiffres de la colonne BC. Le reste de la page les exclut.</p>':(excludedCount?`<p class="obs-tunnel-note is-info"><b>${fmt(excludedCount)}</b> affaire${excludedCount>1?'s':''} annulée${excludedCount>1?'s':''} / abandonnée${excludedCount>1?'s':''} / perdue${excludedCount>1?'s':''} ne ${excludedCount>1?'sont':'est'} pas comptée${excludedCount>1?'s':''} dans le tunnel (cocher « Inclure annulés / abandonnés » pour retrouver les chiffres de la Sheet).</p>`:'')}`;
   }
   // V6.13.6 : les projets sans avancement exploitable restent visibles et listables.
   function tunnelUnknownNote(a,analytic){
@@ -1344,7 +1348,7 @@
       {label:'Soldés',value:fmt(a.sold),note:'dossiers marqués soldés',crossKey:'sold',crossValue:'true',crossLabel:'Dossiers soldés'},
       {label:'Perdus / abandonnés / annulés',value:fmt(inactive.length),note:'hors tunnel actif'}
     ])}
-    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><small>Chaque étape filtre l’ensemble du dashboard</small></div>${tunnel(statusUniverse,{analytic:true})}</article>
+    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Compter aussi les affaires annulées, abandonnées et perdues, comme dans la colonne BC de la Sheet"><input type="checkbox" data-tunnel-excluded-toggle="1" ${state.tunnelShowExcluded?'checked':''}><span>Inclure annulés / abandonnés</span></label><small>Chaque étape filtre l’ensemble du dashboard</small></div></div>${tunnel(state.tunnelShowExcluded?[...statusUniverse,...excluded]:statusUniverse,{analytic:true,includeExcluded:state.tunnelShowExcluded,excludedCount:excluded.length})}</article>
     <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année de création</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>`;
   }
 
@@ -1813,6 +1817,7 @@
     const invalidByValue=countBy(invalidOps,o=>o.rawStatus||'(vide)').slice(0,8);
     const invalidHtml=invalidOps.length?`<p class="obs-progress-diag is-warn"><b>${fmt(invalidOps.length)} projet${invalidOps.length>1?'s':''} avec une valeur hors liste</b> : ${invalidByValue.map(x=>`« ${esc(x.name)} » ×${fmt(x.value)}`).join(' · ')}</p>`:'';
     const y=runtime().years||null, yearLine=(diag,label,expected)=>diag?.header?`<b>${label}</b> : colonne « ${esc(diag.header)} »${diag.column?` (${esc(diag.column)})`:''}`:`<b>${label}</b> : colonne « ${esc(expected)} » ${diag?.match==='ambigu'?'ambiguë (plusieurs colonnes possibles)':'introuvable'}`;
+    const dup=(runtime().duplicateHeaders||[]);const dupHtml=dup.length?`<p class="obs-progress-diag is-warn"><b>${fmt(dup.length)} nom${dup.length>1?'s':''} de colonne en double dans la Sheet</b> : ${dup.slice(0,8).map(x=>`« ${esc(x.header)} » (colonnes ${esc(x.letters.join(', '))})`).join(' · ')}. Pour l’avancement, la colonne ${esc(d.column||'BC')} est lue par sa position.</p>`:'';
     const yearsHtml=y?`<p class="obs-progress-diag ${y.certification?.header&&y.created?.header?'':'is-warn'}">${yearLine(y.certification,'Année de certification',RULES?.CERTIFICATION_DATE_HEADER||'Date de décision de certification')}<br>${yearLine(y.created,'Année de création',RULES?.CREATION_DATE_HEADER||'Date de création')}</p>`:'';
     const rec=d.reconciliation, rc=d.rowCounts||null, fbCol=d.fallback?.column||'AV', fbHead=d.fallback?.header||'État du dossier';
     const recHtml=rec&&rc?`<div class="obs-progress-recon"><h3>Contrôle ligne à ligne de l’avancement</h3><p class="obs-progress-diag">Pour comparer avec la Google Sheet : filtre la colonne ${esc(d.column||'BC')} (puis « ${esc(fbHead)} », colonne ${esc(fbCol)}, pour les lignes dont BC est vide) et compte les lignes par valeur. Les deux colonnes sont complémentaires : BC pour les opérations avec code interne, « ${esc(fbHead)} » pour les lignes historiques.</p><div class="obs-table-wrap"><table class="obs-table obs-progress-recon-table"><thead><tr><th>Avancement lu</th><th>Lignes en ${esc(d.column||'BC')}</th><th>Lignes en ${esc(fbCol)} (${esc(fbHead)})</th><th>Lignes sans avancement</th><th>Projets</th><th>dont annulés / abandonnés</th><th>Dans le tunnel</th></tr></thead><tbody>${(()=>{const all=sourceOperations(),cells=k=>{const p=all.filter(o=>o.status===k),x=p.filter(o=>o.analysisExcluded).length;return `<td>${fmt(p.length)}</td><td>${fmt(x)}</td><td><b>${fmt(p.length-x)}</b></td>`;};const rows=PROGRESS_ORDER.map(k=>`<tr class="${k==='proposal'?'is-proposal':''}"><td>${esc(STATUS_LABELS[k])}</td><td>${k==='proposal'?'—':fmt(rc.primary[k]||0)}</td><td>${k==='proposal'?'—':fmt(rc.fallback[k]||0)}</td><td>${k==='proposal'?fmt(rc.proposal):'—'}</td>${cells(k)}</tr>`);rows.push(`<tr class="is-unknown"><td>Non renseigné</td><td>${fmt(rc.invalidTotals?.primary||0)}</td><td>${fmt(rc.invalidTotals?.fallback||0)}</td><td>${fmt(rc.emptyCoded)}</td>${cells('unknown')}</tr>`);return rows.join('');})()}</tbody></table></div><p class="obs-progress-diag">« Lignes en ${esc(d.column||'BC')} » doit correspondre exactement au filtre de la colonne ${esc(d.column||'BC')} dans la Sheet. « Proposition commerciale en cours » = ligne sans code interne <b>et</b> sans avancement ni en ${esc(d.column||'BC')} ni en ${esc(fbCol)}. « Non renseigné » = ligne avec code interne mais sans avancement exploitable. Le tunnel compte des <b>projets</b> (un code interne = un projet) et retire les affaires annulées ou abandonnées (colonne Statut).</p>
@@ -1821,7 +1826,7 @@
       ${rec.conflictCount?`<p class="obs-progress-diag is-warn"><b>${fmt(rec.conflictCount)} projet${rec.conflictCount>1?'s':''} avec des statuts différents selon les lignes</b> : ${rec.conflicts.slice(0,12).map(c=>`${esc(c.code)} (${c.keys.map(k=>esc(STATUS_LABELS[k]||k)).join(' / ')} → retenu : ${esc(STATUS_LABELS[c.retained]||c.retained)})`).join(' · ')}${rec.conflictCount>12?' …':''}</p>`:''}
       <p class="obs-progress-diag"><button type="button" class="obs-card-action" data-copy-progress-report>Copier le diagnostic de l’avancement</button> <small data-copy-progress-report-status></small></p></div>`:'';
 
-    return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}${recHtml}${yearsHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
+    return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}${dupHtml}${recHtml}${yearsHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
   }
   // V6.13.6 : texte de diagnostic compact (sans URL ni donnée client) à copier-coller pour le support.
   function progressReportText(){
@@ -1833,7 +1838,8 @@
       'DIAGNOSTIC AVANCEMENT — Observatoire '+(document.querySelector('.obs-version b')?.textContent||''),
       `Navigateur : ${navigator.userAgent}`,
       `Source : ${rt.mode||'?'} ; en-têtes ligne ${sm.headerRow||'?'} ; 1re ligne de données ${sm.firstDataRow||'?'} ; chargé le ${rt.lastLoadedAt||'?'}`,
-      `Lignes lues : ${rec.sourceRows??'?'} ; projets : ${rec.projects??'?'} ; lignes sans code interne : ${rec.rowsWithoutCode??'?'}`,
+      `Lignes annoncées par la Sheet : ${sm.totalRows??'?'} (colonnes : ${sm.lastColumn??'?'}) ; lignes lues non vides : ${rec.sourceRows??'?'} ; projets : ${rec.projects??'?'} ; lignes sans code interne : ${rec.rowsWithoutCode??'?'}`,
+      `En-têtes en double dans la Sheet : ${(rt.duplicateHeaders||[]).map(x=>`« ${x.header} » (colonnes ${x.letters.join(', ')})`).join(' ; ')||'aucun'}`,
       `Colonne principale : ${d.header?`« ${d.header} » colonne ${d.column||'?'} (${d.ratio!==undefined?Math.round(d.ratio*100):'?'} % reconnu)`:'INTROUVABLE'}${d.warning?' — ALERTE : '+d.message:''}`,
       `Colonne de repli : ${fb.header?`« ${fb.header} » colonne ${fb.column||'?'}`:'INTROUVABLE'}`,
       line('Lu en colonne principale (lignes)',rc.primary),
@@ -2272,7 +2278,7 @@
     if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
     const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
     try{
-      const css=await Promise.all(['newosb.css?v=6.13.6','project-ux.css?v=6.13.6'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const css=await Promise.all(['newosb.css?v=6.13.7','project-ux.css?v=6.13.7'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
       const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
       const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
       const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');
@@ -2919,6 +2925,7 @@
 
   pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;renderPage();return;}
     const performanceCheck=e.target.closest?.('[data-performance-matrix-check]');if(performanceCheck){const kind=performanceCheck.dataset.performanceMatrixCheck,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances',vals=matrixSelectionValues(kind).slice(),value=performanceCheck.value,idx=vals.findIndex(v=>norm(v)===norm(value));if(performanceCheck.checked&&idx<0)vals.push(value);if(!performanceCheck.checked&&idx>=0)vals.splice(idx,1);state[key]=vals;state.performanceMatrixPage=1;renderPage();return;}
+    const tunnelExcluded=e.target.closest?.('[data-tunnel-excluded-toggle]');if(tunnelExcluded){state.tunnelShowExcluded=Boolean(tunnelExcluded.checked);renderPage();return;}
     const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
     const mapGroup=e.target.closest?.('[data-map-grouping-toggle]'); if(mapGroup){state.mapOperationGrouping=state.mapFocusRegion?'department':(mapGroup.checked?'region':'department');state.territorySummaryPage=1;renderPage();return;}

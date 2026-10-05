@@ -326,13 +326,13 @@
   // deux colonnes renseignées. Règle : BC d'abord ; si BC est vide, « État du dossier ».
   // Une valeur BC renseignée mais non reconnue n'est PAS remplacée (elle est signalée en Qualité).
   const PROGRESS_FALLBACK_HEADER = 'État du dossier';
-  function resolveProgressFallback(fullHeaders) {
+  function resolveProgressFallback(fullHeaders, keys) {
     const target = headerKey(PROGRESS_FALLBACK_HEADER);
     const list = (fullHeaders || []).map(h => String(h ?? '').trim());
     const idx = list.findIndex(h => h && headerKey(h) === target);
     return idx >= 0
-      ? { header: list[idx], index: idx, column: columnLetter(idx), expectedHeader: PROGRESS_FALLBACK_HEADER }
-      : { header: null, index: -1, column: '', expectedHeader: PROGRESS_FALLBACK_HEADER };
+      ? { header: list[idx], key: (keys && keys[idx]) || list[idx], index: idx, column: columnLetter(idx), expectedHeader: PROGRESS_FALLBACK_HEADER }
+      : { header: null, key: null, index: -1, column: '', expectedHeader: PROGRESS_FALLBACK_HEADER };
   }
   const isBlank = v => v === null || v === undefined || String(v).trim() === '';
   // Lit l'avancement d'UNE ligne. source : 'primary' (BC), 'fallback' (État du dossier) ou 'none'.
@@ -357,25 +357,28 @@
     const full = (options && Array.isArray(options.fullHeaders) && options.fullHeaders.length) ? options.fullHeaders.map(h => String(h ?? '').trim()) : (headers || []);
     const target = headerKey(PROGRESS_SOURCE_HEADER);
     const named = full.map((h, i) => ({ h, i })).filter(x => x.h && headerKey(x.h) === target);
+    const keys = (options && Array.isArray(options.keys) && options.keys.length) ? options.keys : null;
+    const keyOf = (i, h) => (keys && keys[i]) || h;
     const checked = [];
     const finish = (header, index, origin) => {
-      const st = Object.assign(columnProgressStats(rows, header), { origin });
+      const key = keyOf(index, header);
+      const st = Object.assign(columnProgressStats(rows, key), { origin });
       checked.push(st);
       const column = index >= 0 ? columnLetter(index) : '';
       const lowRatio = st.nonEmpty > 0 && st.ratio < minRatio;
       const wrongPlace = column && column !== PROGRESS_COLUMN_LETTER;
       let message = `Avancement lu dans « ${header} »${column ? ` (colonne ${column})` : ''}.`;
-      if (named.length > 1) message += ` ⚠ ${named.length} colonnes portent ce nom : la première est utilisée.`;
+      if (named.length > 1) message += ` ⚠ ${named.length} colonnes portent ce nom (${named.map(x => columnLetter(x.i)).join(', ')}) : ${column} est utilisée.`;
       if (wrongPlace) message += ` ⚠ Attendu en colonne ${PROGRESS_COLUMN_LETTER} : une colonne a été insérée ou déplacée dans la Sheet.`;
       if (lowRatio) message += ` ⚠ Seulement ${Math.round(st.ratio * 100)} % des valeurs sont reconnues (seuil ${Math.round(minRatio * 100)} %) : voir Qualité & données.`;
       if (!st.nonEmpty) message += ' ⚠ La colonne est vide.';
-      return { header, found: true, origin, column, index, ratio: st.ratio, nonEmpty: st.nonEmpty, valid: st.valid, invalidValues: st.invalidValues,
+      return { header, key, found: true, origin, column, index, ratio: st.ratio, nonEmpty: st.nonEmpty, valid: st.valid, invalidValues: st.invalidValues,
         warning: !!(lowRatio || wrongPlace || named.length > 1 || !st.nonEmpty), duplicates: named.length, expectedHeader: PROGRESS_SOURCE_HEADER, expectedColumn: PROGRESS_COLUMN_LETTER, checked, minRatio, message };
     };
-    if (named.length) return finish(named[0].h, named[0].i, 'nom attendu');
+    if (named.length) { const pick = named.find(x => x.i === PROGRESS_COLUMN_INDEX) || named[0]; return finish(pick.h, pick.i, 'nom attendu'); }
     const atBC = full[PROGRESS_COLUMN_INDEX];
     if (atBC) {
-      const st = Object.assign(columnProgressStats(rows, atBC), { origin: 'position BC' });
+      const st = Object.assign(columnProgressStats(rows, keyOf(PROGRESS_COLUMN_INDEX, atBC)), { origin: 'position BC' });
       checked.push(st);
       if (st.nonEmpty > 0 && st.ratio >= minRatio) return finish(atBC, PROGRESS_COLUMN_INDEX, `position ${PROGRESS_COLUMN_LETTER} (intitulé différent : « ${atBC} »)`);
     }

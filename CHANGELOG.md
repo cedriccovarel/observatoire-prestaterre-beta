@@ -1,5 +1,14 @@
 # Historique
 
+## V6.13.7
+
+**Avancement : chiffres de la colonne BC et lecture renforcée**
+- Page Certification, carte Avancement : nouvelle case **« Inclure annulés / abandonnés »**. Décochée (par défaut), le tunnel compte les projets actifs, comme avant. Cochée, les cartes reprennent les chiffres bruts de la colonne BC (annulés, abandonnés et perdus compris). Sur l'export du 30/09/26 : Non démarrée 745 → 1 264, Dossier incomplet 303 → 346, Analyse réalisée 1 227 → 1 351. Une note sous le tunnel indique combien d'affaires sont hors tunnel.
+- En-têtes en double : si deux colonnes portent le même nom, la dernière écrasait silencieusement les autres. La colonne d'avancement est maintenant lue **par sa position (BC)**, même si son nom est dupliqué ; le doublon est signalé dans Qualité & données et dans le diagnostic.
+- Diagnostic copiable : ajoute le nombre de lignes annoncées par la Sheet, le nombre de colonnes et les en-têtes en double.
+
+**Tests** : 68 tests unitaires, 62 vérifications navigateur.
+
 ## V6.13.6
 
 **Avancement : restauration du repli sur « État du dossier »**

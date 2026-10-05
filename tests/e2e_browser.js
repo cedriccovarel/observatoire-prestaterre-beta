@@ -147,6 +147,15 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.click('button[data-page="certification"]'); await page.waitForTimeout(300);
       const steps = await page.$$eval('.obs-tunnel-step span', els => els.map(e => e.textContent));
       check(steps.join('|') === 'Proposition commerciale en cours|Non démarrée|Dossier incomplet|Dossier complet|Analyse planifiée|Analyse réalisée|Visite réalisée|Évaluation conforme', 'tunnel affiché avec les 8 étapes dans l’ordre');
+      const cardNumbers = () => page.$$eval('.obs-tunnel-oneline .obs-tunnel-step strong', els => els.map(e => parseInt(e.textContent.replace(/\s/g, ''), 10)));
+      const offNumbers = await cardNumbers();
+      await page.check('[data-tunnel-excluded-toggle]', { force: true }); await page.waitForTimeout(400);
+      const onNumbers = await cardNumbers();
+      check(onNumbers.reduce((a, b) => a + b, 0) > offNumbers.reduce((a, b) => a + b, 0) && onNumbers.every((n, i) => n >= offNumbers[i]), `« Inclure annulés / abandonnés » : cartes ${offNumbers.join('/')} → ${onNumbers.join('/')} (chiffres bruts de la colonne BC)`);
+      check((await page.textContent('#obsPage')).includes('elles reprennent les chiffres de la colonne BC'), 'note explicative affichée quand l’option est cochée');
+      await page.uncheck('[data-tunnel-excluded-toggle]', { force: true }); await page.waitForTimeout(300);
+      check((await cardNumbers()).join('/') === offNumbers.join('/'), 'option décochée : retour aux chiffres du tunnel actif');
+      check(/ne sont pas comptées dans le tunnel|n’est pas comptée dans le tunnel|ne est pas|sont pas comptées/.test(await page.textContent('#obsPage')), 'note : nombre d’affaires annulées hors tunnel indiqué');
       const pageText = await page.textContent('#obsPage');
       check(!/TUNNEL INTERACTIF/i.test(pageText) && /AVANCEMENT/.test(pageText), 'carte « Tunnel interactif » renommée « Avancement »');
       for (const w of [1440, 1100, 900]) {
@@ -184,6 +193,16 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const msg = await page.textContent('#dataFeedback');
       check(!rt.connected || rt.mode !== 'appsScript', 'aucune donnée chargée');
       check(/NEWOSB_ALLOWED_ORIGINS/.test(msg), 'message explicite : configurer NEWOSB_ALLOWED_ORIGINS');
+      await context.close(); }
+
+    console.log('\nE. Colonne d’avancement dont le nom est dupliqué dans la Sheet');
+    { const dup = MATRIX.map((r, i) => (i === 1 ? [...r, 'Opération: Évaluation: Statut'] : [...r, i >= 3 && /^(Visite|Évaluation)/.test(r[54]) ? r[54] : '']));
+      const { page, context } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: dup });
+      const st = Object.fromEntries(await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => [o.code, o.status])));
+      check(st['OP-1'] === 'notStarted' && st['OP-3'] === 'complete' && st['OP-6'] === 'visit', 'deux colonnes « Opération: Évaluation: Statut » : BC reste lue (Non démarrée, Dossier complet, Visite réalisée)');
+      await page.click('button[data-page="quality"]'); await page.waitForTimeout(400);
+      const qd = await page.textContent('#obsPage');
+      check(qd.includes('nom de colonne en double') && qd.includes('Opération: Évaluation: Statut') && qd.includes('lue par sa position'), 'Qualité : le doublon de nom est signalé');
       await context.close(); }
 
     console.log('\nD. Performance : 6 000 lignes chargées en moins de 40 s');

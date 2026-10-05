@@ -87,6 +87,13 @@ test('colonne de repli retrouvée par son intitulé (accents et casse ignorés),
   assert.strictEqual(R.resolveProgressFallback(['a', 'Autre']).header, null);
   const r = R.resolveProgressFallback(HEADERS); assert.strictEqual(r.header, 'État du dossier');
 });
+test('nom de colonne dupliqué : la colonne en position BC est lue (clé unique), pas la dernière', () => {
+  const full = Array.from({ length: 70 }, (_, i) => 'C' + i); full[54] = 'Opération: Évaluation: Statut'; full[65] = 'Opération: Évaluation: Statut';
+  const keys = full.slice(); keys[54] = 'Opération: Évaluation: Statut [1]';
+  const rows = Array.from({ length: 10 }, () => ({ 'Opération: Évaluation: Statut [1]': 'Non démarrée', 'Opération: Évaluation: Statut': '' }));
+  const r = R.resolveProgressColumn(full, rows, { fullHeaders: full, keys });
+  assert.strictEqual(r.column, 'BC'); assert.strictEqual(r.key, 'Opération: Évaluation: Statut [1]'); assert.strictEqual(r.ratio, 1); assert(/2 colonnes portent ce nom \(BC, BN\)/.test(r.message));
+});
 test('moteur : la lecture ligne à ligne utilise BC puis le repli', () => { const a = read('app.js'); assert(a.includes('DATA_RULES.readProgress(r,fields.status,fields.progressFallback)') && a.includes('resolveProgressFallback')); });
 test('le statut commercial (Gagnée/Perdue) n’est jamais pris pour l’avancement', () => {
   const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows, { fullHeaders: ['Statut'] }).found, false);
