@@ -1,0 +1,3 @@
+Code opération	Nom opération	Département	Référentiel	MOA	Statut tunnel	Total logements	Total bâtiments	Année	Nature	Chauffage avant	Chauffage après	ECS avant	ECS après
+OPE-003011	ICF Baisieux	59	BEE Logement Rénovation	ICF Habitat	Conforme	54	3	2026	Rénovation	Gaz	Électricité	Gaz	Électricité
+OPE-004070	Exemple Lille	59	BEE Logement Neuf	Vilogia	Analyse + visite	36	2	2026	Neuf	Électricité	RCU	Électricité	Électricité

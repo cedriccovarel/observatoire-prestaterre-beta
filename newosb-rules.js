@@ -279,9 +279,63 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Dates → année (V6.13.1)
+  // ---------------------------------------------------------------------------
+  // Accepte : 15/03/2024, 15/03/24, 15-03-2024, 2024-03-15, 15 mars 2024,
+  // mars 2024, 2024, objet Date, numéro de série Google Sheets / Excel (45366).
+  const MONTHS = /(janv|fevr|fev|mars|avr|mai|juin|juil|aout|sept|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug|sep)/;
+  function parseDateYear(raw) {
+    if (raw === null || raw === undefined) return result(null, 'empty', '', raw);
+    if (raw instanceof Date) return isNaN(raw) ? result(null, 'doubtful', 'date invalide', raw) : result(raw.getFullYear(), 'ok', '', raw);
+    const fromSerial = n => { const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000); return d.getUTCFullYear(); };
+    if (typeof raw === 'number') {
+      if (raw >= 1900 && raw <= 2100) return result(Math.round(raw), 'ok', '', raw);
+      if (raw > 20000 && raw < 80000) return result(fromSerial(raw), 'ok', 'numéro de série de date', raw);
+      return result(null, 'doubtful', 'nombre qui n’est pas une date', raw);
+    }
+    if (isPlaceholder(raw)) return result(null, 'empty', '', raw);
+    const s = String(raw).trim();
+    let m;
+    if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/))) return result(Number(m[1]), 'ok', '', raw);
+    if ((m = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})(?!\d)/))) {
+      let y = Number(m[3]);
+      if (m[3].length === 2) y += y <= 69 ? 2000 : 1900;
+      return result(y, 'ok', '', raw);
+    }
+    if (/^\d{5}(?:[.,]\d+)?$/.test(s)) { const n = Number(s.replace(',', '.')); if (n > 20000 && n < 80000) return result(fromSerial(n), 'ok', 'numéro de série de date', raw); }
+    const years = s.match(/(?<!\d)(19\d{2}|20\d{2})(?!\d)/g) || [];
+    if (years.length === 1 && (/^\s*(19|20)\d{2}\s*$/.test(s) || MONTHS.test(looseNorm(s)) || /\d{1,2}[/.-]\d{1,2}/.test(s))) return result(Number(years[0]), 'ok', '', raw);
+    if (years.length > 1) return result(null, 'doubtful', 'plusieurs années dans la cellule', raw);
+    return result(null, 'doubtful', 'date illisible', raw);
+  }
+
+  // Colonne désignée par son intitulé exact (accents, casse et ponctuation ignorés).
+  // À défaut, une seule colonne dont l'intitulé se termine par ce libellé
+  // (ex. « Certification: Date de décision de certification »).
+  function resolveExactHeader(headers, label) {
+    const target = headerKey(label), list = (headers || []).filter(h => String(h || '').trim() !== '');
+    const exact = list.find(h => headerKey(h) === target);
+    if (exact) return { header: exact, match: 'exact' };
+    const ends = list.filter(h => headerKey(h).endsWith(' ' + target));
+    if (ends.length === 1) return { header: ends[0], match: 'suffixe' };
+    return { header: null, match: ends.length > 1 ? 'ambigu' : 'absent', candidates: ends };
+  }
+  const CERTIFICATION_DATE_HEADER = 'Date de décision de certification';
+  const CREATION_DATE_HEADER = 'Date de création';
+
+  // Lettre de colonne Google Sheets à partir d'un index (0 → A, 54 → BC).
+  function columnLetter(index) {
+    let n = Number(index), out = '';
+    if (!Number.isInteger(n) || n < 0) return '';
+    n += 1;
+    while (n > 0) { const r = (n - 1) % 26; out = String.fromCharCode(65 + r) + out; n = Math.floor((n - 1) / 26); }
+    return out;
+  }
+
   const api = {
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
-    parseNumber, parseMeasure, MEASURES,
+    parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
     progressMatch, progressStatus, columnProgressStats, resolveProgressColumn
   };

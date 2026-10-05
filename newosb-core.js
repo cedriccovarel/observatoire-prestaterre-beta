@@ -12,6 +12,7 @@
   const R_KEYS=new Set(['roofR','wallR','floorR']);
   const measureKind = key => THICKNESS_KEYS.has(key)?'thickness':(R_KEYS.has(key)?'resistance':'');
   function parseValue(value,key){
+    if(key==='certificationDecisionDate'||key==='createdDate')return RULES.parseDateYear(value);
     const kind=measureKind(key);
     return kind?RULES.parseMeasure(value,kind):RULES.parseNumber(value);
   }
@@ -59,7 +60,8 @@
     {key:'moaType',label:'Famille de maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Secteur/famille du maître d’ouvrage.',method:"Colonne Nom de la société: Secteur d'activité."},
     {key:'department',label:'Département',unit:'',source:'OPERATIONS',type:'normalized',definition:'Code département de l’opération.',method:"Colonne Département de l'opération ; repli sur CP/adresse si nécessaire."},
     {key:'region',label:'Région',unit:'',source:'OPERATIONS',type:'normalized',definition:'Région administrative de l’opération.',method:"Colonne Région de l'opération ; repli sur la correspondance département → région si absente."},
-    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année utilisée par les filtres et chronologies de certification.',method:"Priorité à Certification: Date de décision CD, puis Date de décision de certification, puis AP, puis Opération: Évaluation: Date de première réception du dossier. L'année de construction n'est jamais utilisée pour ce filtre."},
+    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année de la décision de certification. Utilisée par le filtre « Année certification » et la courbe d’évolution.',method:"Année de la colonne Date de décision de certification (date : 15/03/2024, 15/03/24, 2024-03-15 ou numéro de série). Aucun repli sur une autre date : un projet sans décision n’a pas d’année de certification. Dates illisibles signalées en Qualité."},
+    {key:'createdYear',label:'Année de création',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année de création du dossier. Utilisée par le filtre « Année de création » et la chronologie de l’avancement.',method:'Année de la colonne Date de création (mêmes formats de date acceptés). Dates illisibles signalées en Qualité.'},
     {key:'constructionYear',label:'Année de construction',unit:'',source:'OPERATIONS',type:'source',definition:'Année de construction du bâtiment en particulier pour les opérations de rénovation.',method:"Colonne Année de construction (alias Année conservé pour compatibilité). Donnée descriptive du bâtiment, distincte de l'année de certification."},
     {key:'referential',label:'Référentiel',unit:'',source:'OPERATIONS',type:'normalized',definition:'Référentiel de certification.',method:'Colonne Référentiel.'},
     {key:'nature',label:'Nature',unit:'',source:'OPERATIONS',type:'normalized',definition:'Neuf / rénovation / autre nature renseignée.',method:'Valeur source normalisée.'},
@@ -93,6 +95,8 @@
   const dictByKey = Object.fromEntries(DICTIONARY.map(x=>[x.key,x]));
   // Clés lues comme des nombres (contrôle de lisibilité en Qualité & données).
   const NUMERIC_KEYS = [...DICTIONARY.filter(d=>d.unit&&d.unit!=='classe'&&!/^icConstruction20/.test(d.key)).map(d=>d.key),'roofThickness','wallThickness','floorThickness'];
+  // Colonnes de dates lues pour les années (contrôle de lisibilité en Qualité).
+  const DATE_KEYS = {certificationDecisionDate:'Date de décision de certification',createdDate:'Date de création'};
   function provenance(op,key){
     const d=dictByKey[key]||{key,label:key,source:'NEWOSB',type:'unknown',definition:'',method:''};
     const header=op?.fields?.[key]||'';
@@ -180,5 +184,5 @@
     return (ops||[]).filter(op=>{const cp=String(op?.postalCode||'').replace(/\D/g,'');const d=String(op?.department||'').toUpperCase();if(cp.length<2||!d)return false;if(d==='2A'||d==='2B')return cp.startsWith('20')===false;return cp.slice(0,2)!==d.slice(0,2);}).length;
   }
 
-  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:NUMERIC_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
+  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
 })();

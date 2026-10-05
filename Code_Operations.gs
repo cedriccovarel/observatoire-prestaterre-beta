@@ -1,5 +1,15 @@
 /**
- * PRESTATERRE OBSERVATOIRE - NEWOSB V05.22
+ * PRESTATERRE OBSERVATOIRE - V6.13 (script OPERATIONS, version API 06.13)
+ *
+ * Securite V6.13 (proprietes du script : Parametres du projet > Proprietes du script) :
+ * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a recevoir les donnees par le pont,
+ *   separees par des virgules, ex. https://prestaterre.github.io  (OBLIGATOIRE pour le pont)
+ * - NEWOSB_ACCESS_KEY      : cle d'acces optionnelle ; si renseignee, l'URL doit finir par ?key=LA_CLE
+ * - NEWOSB_ANONYMIZED_ONLY : 1 pour un deploiement qui ne renvoie que des donnees pseudonymisees
+ * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
+ * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration.
+ *
+ * Historique NEWOSB V05.22
  * Source OPERATIONS robuste pour Google Apps Script.
  *
  * Nouveautes V05.22 :
@@ -16,7 +26,11 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '05.22',
+  VERSION: '06.13',
+  ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
+  ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
+  ANONYMIZED_PROPERTY: 'NEWOSB_ANONYMIZED_ONLY',
+  PSEUDO_SECRET_PROPERTY: 'NEWOSB_PSEUDO_SECRET',
   SPREADSHEET_PROPERTY: 'NEWOSB_SPREADSHEET_ID',
   ZONE123_URLS: [
     'https://gitlab.com/pidila/sp-simulateurs-data/-/raw/master/donnees-de-reference/Zone123.json',
@@ -28,6 +42,12 @@ const OBSERVATOIRE_CONFIG = {
 function doGet(e) {
   const request = e || { parameter: {} };
   const params = request.parameter || {};
+
+  const access = newosbCheckAccess_(params);
+  if (!access.ok) {
+    if (String(params.bridge || '') === '1') return buildBridgeErrorHtml_(access.error);
+    return outputPayload_({ ok: false, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: access.error }, request);
+  }
 
   if (String(params.bridge || '') === '1') {
     return buildBridgeHtml_(params);
@@ -74,7 +94,8 @@ function newosbApiRequest_(params) {
       version: OBSERVATOIRE_CONFIG.VERSION,
       generatedAt: new Date().toISOString(),
       durationMs: Date.now() - started,
-      transport: 'popup-bridge-ready'
+      transport: 'popup-bridge-ready',
+      anonymizedOnly: newosbAnonymizedOnly_()
     };
   }
 
@@ -82,7 +103,10 @@ function newosbApiRequest_(params) {
   if (endpoint === 'zone123') return handleZone123Proxy_();
   if (endpoint === 'communes') return handleCommunesProxy_(params);
 
-  if (mode === 'createslides') return newosbCreateGoogleSlides_(params.presentation || {});
+  if (mode === 'createslides') {
+    if (newosbAnonymizedOnly_()) throw new Error('Creation Google Slides desactivee sur un deploiement anonymise.');
+    return newosbCreateGoogleSlides_(params.presentation || {});
+  }
 
   if (mode === 'meta') {
     const meta = getSheetMeta_();
@@ -127,6 +151,7 @@ function newosbApiRequest_(params) {
     const requestedLimit = clampInteger_(params.limit, 1, OBSERVATOIRE_CONFIG.MAX_CHUNK_SIZE, OBSERVATOIRE_CONFIG.DEFAULT_CHUNK_SIZE);
     const meta = { sheet: sheet, lastColumn: lastColumn, totalRows: totalRows, firstDataRow: firstDataRow };
     const chunk = getRowsChunk_(sheet, meta, offset, requestedLimit);
+    if (newosbAnonymizedOnly_()) chunk.rows = newosbScrubMatrix_(fallbackMeta.headers, chunk.rows);
     return {
       ok: true,
       service: 'NEWOSB OPERATIONS',
@@ -146,6 +171,7 @@ function newosbApiRequest_(params) {
   const meta = getSheetMeta_();
   const safeLimit = Math.min(meta.totalRows, 50);
   const first = getRowsChunk_(meta.sheet, meta, 0, safeLimit);
+  if (newosbAnonymizedOnly_()) first.rows = newosbScrubMatrix_(meta.headers, first.rows);
   return {
     ok: true,
     service: 'NEWOSB OPERATIONS',
@@ -166,6 +192,8 @@ function newosbApiRequest_(params) {
 function buildBridgeHtml_(params) {
   const interactive = String(params && params.interactive || '') === '1';
   const token = String(params && params.bridgeToken || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120);
+  // V6.13 : le pont ne repond qu'aux sites declares dans NEWOSB_ALLOWED_ORIGINS.
+  const allowedJson = JSON.stringify(newosbAllowedOrigins_()).replace(/</g, '\\u003c');
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -175,14 +203,15 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
 .brand{font-size:12px;font-weight:800;letter-spacing:.11em;color:#0b6b4a;text-transform:uppercase}.title{font-size:22px;font-weight:800;margin:8px 0 10px}.status{font-size:14px;line-height:1.5;color:#52666b}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#0b8f61;margin-right:8px;box-shadow:0 0 0 5px rgba(11,143,97,.1)}
 .small{margin-top:18px;font-size:12px;color:#7a8a8d}
 </style></head>
-<body><div class="wrap"><div class="card"><div class="brand">NEWOSB V05.22</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
+<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.13</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
 <script>
 (function(){
   var TOKEN = '${token}';
+  var ALLOWED = ${allowedJson};
   var statusEl = document.getElementById('status');
   function setStatus(text){ if(statusEl) statusEl.textContent = text; }
-  function send(target, payload){ try { if(target && target !== window) target.postMessage(payload, '*'); } catch(e) {} }
-  function ready(target){ send(target, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}); }
+  function send(target, payload, origin){ try { if(target && target !== window && origin) target.postMessage(payload, origin); } catch(e) {} }
+  function ready(target){ for (var i = 0; i < ALLOWED.length; i++) send(target, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}, ALLOWED[i]); }
   function broadcastReady(){
     try { ready(window.opener); } catch(e) {}
     try { ready(window.parent && window.parent.opener); } catch(e) {}
@@ -192,7 +221,18 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
   window.addEventListener('message', function(event){
     var msg = event.data || {};
     if (TOKEN && msg.token !== TOKEN) return;
-    if (msg.type === 'NEWOSB_BRIDGE_HELLO') { ready(event.source); return; }
+    if (ALLOWED.indexOf(event.origin) < 0) {
+      // Reponse sans donnees, uniquement pour expliquer le refus.
+      if (msg.type === 'NEWOSB_BRIDGE_REQUEST' && msg.id) {
+        var refusal = ALLOWED.length ? 'Site non autorise par le script : ' + event.origin + '. Ajoute cette adresse dans la propriete NEWOSB_ALLOWED_ORIGINS.' : 'Propriete NEWOSB_ALLOWED_ORIGINS non configuree dans Apps Script : le pont refuse de transmettre les donnees.';
+        setStatus(refusal);
+        try { event.source.postMessage({type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:refusal, token:TOKEN}, '*'); } catch(e) {}
+      } else if (msg.type === 'NEWOSB_BRIDGE_HELLO') {
+        try { event.source.postMessage({type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN, refused:true}, '*'); } catch(e) {}
+      }
+      return;
+    }
+    if (msg.type === 'NEWOSB_BRIDGE_HELLO') { send(event.source, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}, event.origin); return; }
     if (msg.type === 'NEWOSB_BRIDGE_CLOSE') { try { window.close(); } catch(e) {} return; }
     if (msg.type !== 'NEWOSB_BRIDGE_REQUEST' || !msg.id) return;
     var mode = String((msg.params||{}).mode || (msg.params||{}).endpoint || 'requete');
@@ -200,12 +240,12 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
     google.script.run
       .withSuccessHandler(function(payload){
         setStatus(mode === 'chunk' ? 'Bloc recu. Chargement suivant...' : 'Connexion etablie.');
-        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, payload:payload, token:TOKEN});
+        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, payload:payload, token:TOKEN}, event.origin);
       })
       .withFailureHandler(function(error){
         var text = String(error && error.message ? error.message : error);
         setStatus('Erreur : ' + text);
-        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:text, token:TOKEN});
+        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:text, token:TOKEN}, event.origin);
       })
       .newosbBridgeRequest(msg.params || {});
   });
@@ -230,6 +270,100 @@ function outputPayload_(payload, request) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// -----------------------------------------------------------------------------
+// V6.13 - Securite : origines autorisees, cle d'acces, mode anonymise
+// -----------------------------------------------------------------------------
+function newosbProp_(name) {
+  try { return String(PropertiesService.getScriptProperties().getProperty(name) || '').trim(); } catch (e) { return ''; }
+}
+
+function newosbAllowedOrigins_() {
+  return newosbProp_(OBSERVATOIRE_CONFIG.ALLOWED_ORIGINS_PROPERTY)
+    .split(/[\s,;]+/)
+    .map(function(v) { return v.replace(/\/+$/, ''); })
+    .filter(function(v) { return /^https?:\/\/[^\/\s]+$/i.test(v); });
+}
+
+function newosbSafeEqual_(a, b) {
+  a = String(a || ''); b = String(b || '');
+  if (a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function newosbCheckAccess_(params) {
+  const expected = newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY);
+  if (!expected) return { ok: true };
+  if (newosbSafeEqual_(params && params.key, expected)) return { ok: true };
+  return { ok: false, error: "Cle d'acces absente ou invalide : l'URL de la source doit se terminer par ?key=... (propriete NEWOSB_ACCESS_KEY)." };
+}
+
+function newosbAnonymizedOnly_() {
+  return /^(1|true|oui|yes)$/i.test(newosbProp_(OBSERVATOIRE_CONFIG.ANONYMIZED_PROPERTY));
+}
+
+function newosbPseudoSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = String(props.getProperty(OBSERVATOIRE_CONFIG.PSEUDO_SECRET_PROPERTY) || '');
+  if (!secret) { secret = Utilities.getUuid() + Utilities.getUuid(); props.setProperty(OBSERVATOIRE_CONFIG.PSEUDO_SECRET_PROPERTY, secret); }
+  return secret;
+}
+
+function newosbPseudonym_(prefix, value, secret) {
+  const v = normalizeHeader_(value);
+  if (!v) return '';
+  const bytes = Utilities.computeHmacSha256Signature(prefix + '|' + v, secret);
+  const hex = bytes.slice(0, 4).map(function(b) { return ((b + 256) % 256).toString(16); }).map(function(h) { return h.length < 2 ? '0' + h : h; }).join('');
+  return prefix + ' ' + hex.toUpperCase();
+}
+
+// Regle de traitement d'une colonne en mode anonymise : 'keep', 'drop' ou un prefixe de pseudonyme.
+function newosbColumnRule_(header) {
+  const h = normalizeHeader_(header);
+  if (/secteur d activite|hierarchie/.test(h)) return 'keep';
+  if (/montant|chiffre d affaires|honoraires|\bprix\b/.test(h)) return 'drop';
+  if (/adresse|code postal|postal code|\binsee\b|longitude|latitude|contact|courriel|e mail|email|telephone|\btel\b|numero du contrat|contrat numero/.test(h)) return 'drop';
+  if (/groupe principal/.test(h)) return 'Groupe';
+  if (/maitre d ouvrage|maitre ouvrage|\bmoa\b|nom de la societe|societe principale|raison sociale/.test(h)) return 'MOA';
+  if (/nom de l operation|nom operation|nom du programme|nom programme|nom de l affaire|affaire nom/.test(h)) return 'Operation';
+  if (/code interne/.test(h)) return 'OP';
+  return 'keep';
+}
+
+function newosbScrubMatrix_(headers, rows) {
+  const secret = newosbPseudoSecret_();
+  const rules = (headers || []).map(newosbColumnRule_);
+  return (rows || []).map(function(row) {
+    return (row || []).map(function(cell, i) {
+      const rule = rules[i] || 'keep';
+      if (rule === 'keep') return cell;
+      if (rule === 'drop') return '';
+      return newosbPseudonym_(rule, cell, secret);
+    });
+  });
+}
+
+function buildBridgeErrorHtml_(message) {
+  const safe = String(message || '').replace(/[&<>"']/g, function(c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; });
+  return HtmlService.createHtmlOutput('<!doctype html><meta charset="utf-8"><body style="font-family:Arial;padding:24px;color:#7d2219">' + safe + '</body>')
+    .setTitle('Observatoire - acces refuse');
+}
+
+/**
+ * A lancer une fois depuis l'editeur Apps Script apres avoir renseigne les proprietes.
+ * Affiche la configuration de securite dans le journal d'execution.
+ */
+function configurerSecuriteObservatoire() {
+  const origins = newosbAllowedOrigins_();
+  Logger.log('Version : ' + OBSERVATOIRE_CONFIG.VERSION);
+  Logger.log('Sites autorises (NEWOSB_ALLOWED_ORIGINS) : ' + (origins.length ? origins.join(', ') : 'AUCUN - le pont refusera de transmettre les donnees'));
+  Logger.log('Cle d acces (NEWOSB_ACCESS_KEY) : ' + (newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY) ? 'configuree' : 'non configuree (acces gere uniquement par le deploiement)'));
+  Logger.log('Mode anonymise (NEWOSB_ANONYMIZED_ONLY) : ' + (newosbAnonymizedOnly_() ? 'ACTIF' : 'inactif'));
+  if (newosbAnonymizedOnly_()) newosbPseudoSecret_();
+  return { origins: origins, accessKey: !!newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY), anonymizedOnly: newosbAnonymizedOnly_() };
 }
 
 function getSpreadsheet_() {

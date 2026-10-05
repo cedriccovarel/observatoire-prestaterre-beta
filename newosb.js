@@ -62,7 +62,7 @@
   const state = {
     page:'overview',
     search:'',
-    filters:{year:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[]},
+    filters:{year:[],createdYear:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[]},
     crossFilters:[],
     activeOperation:null,
     drawerTab:'summary',
@@ -225,7 +225,7 @@
     return ['Arial, sans-serif','Helvetica, Arial, sans-serif','Georgia, serif','Times New Roman, serif','Trebuchet MS, sans-serif','Verdana, sans-serif'];
   }
   function activeFilterScopeText(){
-    const defs=[['year','Année certification'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
+    const defs=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
     const parts=defs.map(([key,label])=>{
       const vals=globalFilterValues(key);
       if(!vals.length)return '';
@@ -249,6 +249,7 @@
       search:String(state.search||''),
       filters:{
         year:globalFilterValues('year'),
+        createdYear:globalFilterValues('createdYear'),
         referential:globalFilterValues('referential'),
         moaGroup:globalFilterValues('moaGroup'),
         status:globalFilterValues('status'),
@@ -773,7 +774,7 @@
     }
     if(f.key==='statusYear'){
       const [year,status]=String(value).split('\u0001');
-      return String(op.year)===String(year) && chronologyStatus(op)===status;
+      return String(op.createdYear)===String(year) && chronologyStatus(op)===status;
     }
     if(f.key.startsWith('transition:')){
       const [,beforeKey,afterKey]=f.key.split(':');
@@ -995,6 +996,7 @@
     const q=norm(state.search), ignoreCrossKey=options.ignoreCrossKey||'', ignoreCrossKeys=new Set([...(options.ignoreCrossKeys||[]),...(ignoreCrossKey?[ignoreCrossKey]:[])]);
     return (source||[]).filter(o=>{
       if(!globalFilterMatch('year',String(o.year))) return false;
+      if(!globalFilterMatch('createdYear',String(o.createdYear))) return false;
       if(!globalFilterMatch('referential',o.referential)) return false;
       if(!globalFilterMatch('moaGroup',o.moaGroup||'Non précisé')) return false;
       if(!globalFilterMatch('status',o.status)) return false;
@@ -1165,7 +1167,7 @@
   function tunnel(ops,{analytic=false}={}){
     const a=engine.aggregateTunnel(ops), order=PROGRESS_ORDER;
     const icons={notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
-    return `<div class="obs-tunnel obs-tunnel-visual">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div>`;
+    return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>`;
   }
 
   function tags(ops,kind,max=12){
@@ -1203,7 +1205,7 @@
     if(!excluded.length)return '';
     const nonStarted=excluded.filter(o=>o.status==='notStarted').length;
     const byStage=countBy(excluded,o=>operationAffairStage(o)||'Perdu / abandonné').slice(0,4);
-    const byYear=countBy(excluded,o=>String(o.year||'Année non renseignée')).sort((a,b)=>{const an=Number(a.name),bn=Number(b.name);if(Number.isFinite(an)&&Number.isFinite(bn))return an-bn;return String(a.name).localeCompare(String(b.name),'fr');}).slice(0,8);
+    const byYear=countBy(excluded,o=>String(o.createdYear||'Année de création non renseignée')).sort((a,b)=>{const an=Number(a.name),bn=Number(b.name);if(Number.isFinite(an)&&Number.isFinite(bn))return an-bn;return String(a.name).localeCompare(String(b.name),'fr');}).slice(0,8);
     const stageText=byStage.map(x=>`${x.name} : ${fmt(x.value)}`).join(' · ');
     const yearText=byYear.map(x=>`${x.name} : ${fmt(x.value)}`).join(' · ');
     return `<div class="obs-excluded-projects"><div><i>!</i><strong>${fmt(excluded.length)} projet${excluded.length>1?'s':''} perdu${excluded.length>1?'s':''} / abandonné${excluded.length>1?'s':''} exclu${excluded.length>1?'s':''} des statistiques</strong><span>Détection via <b>Statut</b>${nonStarted?` · dont ${fmt(nonStarted)} classé${nonStarted>1?'s':''} « Non démarré » côté évaluation`:''}.</span></div><small>${esc(stageText)}${yearText?` · ${esc(yearText)}`:''}</small></div>`;
@@ -1308,17 +1310,18 @@
       {label:'Soldés',value:fmt(a.sold),note:'dossiers marqués soldés',crossKey:'sold',crossValue:'true',crossLabel:'Dossiers soldés'},
       {label:'Perdus / abandonnés / annulés',value:fmt(inactive.length),note:'hors tunnel actif'}
     ])}
-    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>TUNNEL INTERACTIF</span><h2>Avancement des projets</h2></div><small>Chaque étape filtre l’ensemble du dashboard</small></div>${tunnel(statusUniverse,{analytic:true})}</article>
-    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>`;
+    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><small>Chaque étape filtre l’ensemble du dashboard</small></div>${tunnel(statusUniverse,{analytic:true})}</article>
+    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année de création</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>`;
   }
 
   function statusYearMatrix(ops){
-    const years=uniq(ops.map(o=>o.year)).filter(v=>/^\d{4}$/.test(String(v))).sort((a,b)=>Number(a)-Number(b));
+    // V6.13.1 : la chronologie de l'avancement suit l'année de création (un dossier en cours n'a pas encore d'année de certification).
+    const years=uniq(ops.map(o=>o.createdYear)).filter(v=>/^\d{4}$/.test(String(v))).sort((a,b)=>Number(a)-Number(b));
     const activeStatuses=[...PROGRESS_ORDER,'unknown'];
     const excludedStatuses=['lostAffair','abandonedAffair','cancelledAffair'];
     const statuses=state.statusYearShowExcluded?[...activeStatuses,...excludedStatuses]:activeStatuses;
     if(!years.length) return '<div class="obs-empty">Aucune année disponible.</div>';
-    const count=(year,status)=>ops.filter(o=>String(o.year)===String(year)&&chronologyStatus(o)===status).length;
+    const count=(year,status)=>ops.filter(o=>String(o.createdYear)===String(year)&&chronologyStatus(o)===status).length;
     if(state.statusYearView==='histogram'){
       const totals=years.map(y=>({year:y,total:statuses.reduce((n,s)=>n+count(y,s),0)})),mx=Math.max(1,...totals.map(x=>x.total));
       return `<div class="obs-status-year-chart">${totals.map(({year,total})=>`<div class="obs-status-year-col"><div class="obs-status-year-stack" style="height:${Math.max(10,100*total/mx)}%">${statuses.map(s=>{const v=count(year,s),share=total?100*v/total:0,value=`${year}\u0001${s}`,excluded=excludedStatuses.includes(s);return v?`<button type="button" class="${excluded?'is-excluded-status':''}" style="height:${share}% ;--status-color:${CHRONOLOGY_STATUS_COLORS[s]||'#8b9892'}" ${excluded?'':crossAttrs('statusYear',value,`${year} · ${CHRONOLOGY_STATUS_LABELS[s]||s}`)} title="${attr(CHRONOLOGY_STATUS_LABELS[s]||s)} : ${fmt(v)}${excluded?' · hors statistiques actives':''}"></button>`:''}).join('')}</div><strong>${fmt(total)}</strong><span>${esc(year)}</span></div>`).join('')}</div><div class="obs-status-year-legend">${statuses.map(s=>`<span class="${excludedStatuses.includes(s)?'is-excluded-status':''}"><i style="background:${CHRONOLOGY_STATUS_COLORS[s]||'#8b9892'}"></i>${esc(CHRONOLOGY_STATUS_LABELS[s]||s)}${excludedStatuses.includes(s)?' · hors stats':''}</span>`).join('')}</div>`;
@@ -1764,17 +1767,19 @@
     const counts=PROGRESS_ORDER.map(k=>({k,v:ops.filter(o=>o.status===k).length}));
     const head=`<div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Colonne « ${esc(RULES?.PROGRESS_SOURCE_HEADER||'Opération: Évaluation: Statut')} »</h2></div><small>valeurs admises : ${esc(PROGRESS_ORDER.map(k=>STATUS_LABELS[k]).join(' · '))}</small></div>`;
     if(!d) return `<article class="obs-card">${head}<div class="obs-empty">Aucun diagnostic disponible (source non connectée).</div></article>`;
-    const status=d.found?`<p class="obs-progress-diag is-ok"><b>Colonne utilisée : « ${esc(d.header)} »</b>${d.ratio!==undefined?` · ${pct1(d.ratio)} % des valeurs conformes`:''}${d.origin&&d.origin!=='nom attendu'?` · détectée par ${esc(d.origin)}`:''}</p>`:`<p class="obs-progress-diag is-error"><b>${esc(d.message||'Colonne d’avancement non trouvée.')}</b><br>L’avancement est affiché « Non renseigné » tant que la colonne n’est pas corrigée dans la Google Sheet.</p>`;
+    const status=d.found?`<p class="obs-progress-diag is-ok"><b>Colonne utilisée : « ${esc(d.header)} »${d.column?` · colonne ${esc(d.column)} de la Sheet`:''}</b>${d.ratio!==undefined?` · ${pct1(d.ratio)} % des valeurs conformes`:''}${d.origin&&d.origin!=='nom attendu'?` · détectée par ${esc(d.origin)}`:''}</p>`:`<p class="obs-progress-diag is-error"><b>${esc(d.message||'Colonne d’avancement non trouvée.')}</b><br>L’avancement est affiché « Non renseigné » tant que la colonne n’est pas corrigée dans la Google Sheet.</p>`;
     const rejected=(d.checked||[]).filter(c=>c.header!==d.header);
     const rejectedHtml=rejected.length?`<p class="obs-progress-diag is-warn">Colonne${rejected.length>1?'s':''} écartée${rejected.length>1?'s':''} : ${rejected.map(c=>`« ${esc(c.header)} » (${pct1(c.ratio)} % conformes${c.invalidValues?.length?`, ex. ${esc(c.invalidValues.slice(0,3).map(x=>x.value).join(', '))}`:''})`).join(' ; ')}</p>`:'';
     const invalidByValue=countBy(invalidOps,o=>o.rawStatus||'(vide)').slice(0,8);
     const invalidHtml=invalidOps.length?`<p class="obs-progress-diag is-warn"><b>${fmt(invalidOps.length)} projet${invalidOps.length>1?'s':''} avec une valeur hors liste</b> : ${invalidByValue.map(x=>`« ${esc(x.name)} » ×${fmt(x.value)}`).join(' · ')}</p>`:'';
-    return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
+    const y=runtime().years||null, yearLine=(diag,label,expected)=>diag?.header?`<b>${label}</b> : colonne « ${esc(diag.header)} »${diag.column?` (${esc(diag.column)})`:''}`:`<b>${label}</b> : colonne « ${esc(expected)} » ${diag?.match==='ambigu'?'ambiguë (plusieurs colonnes possibles)':'introuvable'}`;
+    const yearsHtml=y?`<p class="obs-progress-diag ${y.certification?.header&&y.created?.header?'':'is-warn'}">${yearLine(y.certification,'Année de certification',RULES?.CERTIFICATION_DATE_HEADER||'Date de décision de certification')}<br>${yearLine(y.created,'Année de création',RULES?.CREATION_DATE_HEADER||'Date de création')}</p>`:'';
+    return `<article class="obs-card obs-progress-card">${head}${status}${rejectedHtml}${invalidHtml}${yearsHtml}<div class="obs-progress-counts">${counts.map(c=>`<span><i style="background:${STATUS_COLORS[c.k]}"></i>${esc(STATUS_LABELS[c.k])}<b>${fmt(c.v)}</b></span>`).join('')}<span><i style="background:${STATUS_COLORS.unknown}"></i>Non renseigné<b>${fmt(empty)}</b></span></div></article>`;
   }
   // V6.13 : valeurs numériques présentes mais illisibles (jamais converties en chiffre).
   function unreadableValuesCard(ops){
     const list=[];
-    if(core?.unreadableValues&&core?.numericKeys)ops.forEach(o=>core.numericKeys.forEach(k=>core.unreadableValues(o,k).forEach(u=>list.push({...u,code:o.code,label:core.dictByKey?.[k]?.label||k}))));
+    if(core?.unreadableValues&&core?.numericKeys)ops.forEach(o=>core.numericKeys.forEach(k=>core.unreadableValues(o,k).forEach(u=>list.push({...u,code:o.code,label:core.dictByKey?.[k]?.label||core.dateKeys?.[k]||k}))));
     const byField=countBy(list,u=>u.label).slice(0,10);
     const head=`<div class="obs-card-head"><div><span>LECTURE DES NOMBRES</span><h2>Valeurs non interprétées</h2></div><small>${fmt(list.length)} cellule${list.length>1?'s':''} exclue${list.length>1?'s':''} des moyennes</small></div>`;
     if(!list.length) return `<article class="obs-card">${head}<div class="obs-empty">Toutes les valeurs numériques renseignées sont lisibles.</div></article>`;
@@ -1811,7 +1816,7 @@
     const ops=baseOperations(), selectedRegions=globalFilterValues('region');
     const depOps=selectedRegions.length?ops.filter(o=>selectedRegions.some(r=>norm(operationRegion(o))===norm(r))):ops;
     return {
-      year:uniq(ops.map(o=>o.year)).sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
+      year:uniq(ops.map(o=>o.year)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), createdYear:uniq(ops.map(o=>o.createdYear)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
       status:PROGRESS_ORDER.filter(k=>ops.some(o=>o.status===k)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>operationRegion(o))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
       profile:uniq(ops.map(o=>o.profile||'Non précisé')), socialZone:uniq(ops.map(o=>o.socialZone||'Non précisé'))
     };
@@ -1842,7 +1847,7 @@
   function renderFilters(){
     const scrollSnapshot=captureUiScroll();
     const options=filterOptions();
-    const defs=[['year','Année certification',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
+    const defs=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
     filtersEl.innerHTML=defs.map(([key,label,labeller])=>{
       const values=options[key]||[],selected=globalFilterValues(key),query=norm(state.filterSearch?.[key]||'');
       const placeholder=`Rechercher dans ${String(label).toLowerCase()}…`;
@@ -1859,7 +1864,7 @@
     const help=modal.querySelector('.data-connected-help'); if(help)help.innerHTML='<b>Les filtres globaux et analytiques se combinent.</b><br>Un clic dans un graphique applique un filtre analytique persistant, visible sous forme de pastille dans chaque dashboard.';
     const title=modal.querySelector('.data-filter-title b'); if(title)title.textContent='Filtres globaux de l’Observatoire';
     const modalCount=document.getElementById('dataFilteredCount'); if(modalCount)modalCount.textContent=`${runtime().connected?runtime().count:0} opération${runtime().count>1?'s':''}`;
-    if(runtime().connected){const feedback=document.getElementById('dataFeedback');if(feedback)feedback.textContent=`${runtime().count} projets chargés. L’Observatoire Prestaterre et le générateur utilisent cette source.`;}
+    if(runtime().connected){const feedback=document.getElementById('dataFeedback');if(feedback){const rt=runtime(),pd=rt.progress,y=rt.years;const parts=[];if(pd)parts.push(pd.found?`Avancement : « ${pd.header} »${pd.column?` (colonne ${pd.column})`:''}`:`⚠ ${pd.message}`);if(y&&rt.mode!=='demo'){[[y.certification,'Date de décision de certification'],[y.created,'Date de création']].forEach(([d,l])=>{if(!d?.header)parts.push(`⚠ colonne « ${l} » ${d?.match==='ambigu'?'ambiguë':'introuvable'}`);});}feedback.textContent=`${rt.count} projets chargés. L’Observatoire Prestaterre et le générateur utilisent cette source.${parts.length?' '+parts.join(' · ')+'.':''}`;feedback.classList.toggle('is-error',!!(pd&&!pd.found&&rt.mode!=='demo'));}}
   }
 
   function updateSourceStatus(){
@@ -2197,7 +2202,7 @@
     if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
     const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
     try{
-      const css=await Promise.all(['newosb.css?v=6.13.0','project-ux.css?v=6.13.0'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const css=await Promise.all(['newosb.css?v=6.13.1','project-ux.css?v=6.13.1'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
       const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
       const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
       const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');

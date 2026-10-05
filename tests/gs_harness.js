@@ -48,6 +48,28 @@ const ROWS = [
   ['OP-9', 'La Source', 'Gagnée', '', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '6', '48', '', '', ''],
   ['OP-10', 'Le Bourg', 'Gagnée', 'Analyse réalisée', 'Promoteur D', 'Promoteur', '24', '24000', 'BEE Logement Neuf', '9', '47', '', '', '']
 ];
+// Colonnes de dates (V6.13.1) : deux colonnes « leurres » vérifient qu'aucune autre date n'est utilisée.
+const DATE_HEADERS = ['Certification: Date de décision CD', 'Date de décision de certification', 'Affaire: Date de création', 'Date de création'];
+const DATES = {
+  'OP-1': ['01/01/2019', '', '01/01/2015', '12/02/2023'],
+  'OP-2': ['01/01/2019', '', '01/01/2015', '2023-06-30'],
+  'OP-3': ['01/01/2019', '', '01/01/2015', '45366'],
+  'OP-4': ['01/01/2019', '', '01/01/2015', '15 mars 2024'],
+  'OP-5': ['01/01/2019', '', '01/01/2015', '03/04/2024'],
+  'OP-6': ['01/01/2019', '', '01/01/2015', '03/04/24'],
+  'OP-7': ['01/01/2019', '15/03/24', '01/01/2015', '10/01/2022'],
+  'OP-8': ['01/01/2019', '', '01/01/2015', '10/01/2022'],
+  'OP-9': ['01/01/2019', '2025-02-01', '01/01/2015', 'bientôt'],
+  'OP-10': ['01/01/2019', '20/12/2024', '01/01/2015', '01/09/2023']
+};
+// L'avancement est placé en colonne BC, comme dans la Google Sheet réelle :
+// on insère des colonnes libres entre « Statut » (C) et « Opération: Évaluation: Statut ».
+const FILLERS = Array.from({ length: 51 }, (_, i) => `Colonne libre ${i + 1}`);
+HEADERS.splice(3, 0, ...FILLERS);
+ROWS.forEach(r => r.splice(3, 0, ...FILLERS.map(() => '')));
+const BASE_LEN = HEADERS.length;
+ROWS.forEach(r => { while (r.length < BASE_LEN) r.push(''); r.push(...DATES[r[0]]); });
+HEADERS.push(...DATE_HEADERS);
 const MATRIX = [['OBSERVATOIRE'], HEADERS, [], ...ROWS];
 const asObjects = (headers, rows) => rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 

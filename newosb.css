@@ -1102,3 +1102,13 @@ body.obs-project-window-open{overflow:hidden!important}.obs-project-window{posit
 .obs-progress-counts span{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid var(--obs-line);border-radius:999px;font-size:11px;background:#fff}
 .obs-progress-counts i{width:9px;height:9px;border-radius:50%;display:inline-block}
 .obs-progress-counts b{color:var(--obs-green)}
+
+/* V6.13.1 — Avancement : toutes les étapes sur une seule ligne */
+.obs-tunnel-scroll{overflow-x:auto;overflow-y:hidden;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+.obs-tunnel.obs-tunnel-visual.obs-tunnel-oneline{display:grid;grid-template-columns:repeat(var(--obs-tunnel-steps,7),minmax(84px,1fr));gap:7px;min-width:calc(var(--obs-tunnel-steps,7) * 91px)}
+.obs-tunnel-oneline .obs-tunnel-step{min-height:118px;padding:11px 6px 9px}
+.obs-tunnel-oneline .obs-tunnel-icon{width:34px;height:34px;font-size:16px;margin:2px auto 6px}
+.obs-tunnel-oneline.obs-tunnel-visual .obs-tunnel-step span{font-size:9px;min-height:22px;line-height:1.15;hyphens:auto}
+.obs-tunnel-oneline.obs-tunnel-visual .obs-tunnel-step strong{font-size:21px;margin-top:3px}
+.obs-tunnel-oneline.obs-tunnel-visual .obs-tunnel-step small{font-size:8.5px;padding:3px 6px}
+.obs-tunnel-oneline.obs-tunnel-visual .obs-tunnel-step>em{right:5px;top:7px;width:16px;height:16px;line-height:16px}

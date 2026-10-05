@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="newosb.css?v=5.0.3"></head><body><div id="app"></div><pre id="qa"></pre>
+<script>
+window.NEWOSB_PRIVACY={enabled:()=>false,moa:v=>v,operationCode:v=>v,evaluationCode:v=>v};
+const rows=[
+{evaluationCode:'E1',operationCode:'O1',region:'Île-de-France',department:'Paris',referential:'BEE Logement Neuf',referentialVersion:'2026',mentions:'BEE+',profile:'Profil DRIHL',performance:'IC 2028',status:'Conforme',moaSector:'Bailleur',requirement:'3.3.14 - Niveau IC Énergie 2028',theme:'3.3'},
+{evaluationCode:'E2',operationCode:'O2',region:'Île-de-France',department:'Hauts-de-Seine',referential:'BEE Logement Neuf',referentialVersion:'2026',mentions:'Option TFPB',profile:'Profil DRIHL',performance:'IC 2028',status:'Conforme',moaSector:'Bailleur',requirement:'3.3.14 - Niveau IC Énergie 2028',theme:'3.3'},
+{evaluationCode:'E3',operationCode:'O3',region:'Nouvelle-Aquitaine',department:'Gironde',referential:'BEE Logement Neuf',referentialVersion:'2026',mentions:'BEE+',profile:'Profil Ville',performance:'IC 2028',status:'En cours',moaSector:'Promoteur',requirement:'3.3.14 - Niveau IC Énergie 2028',theme:'3.3'},
+{evaluationCode:'E4',operationCode:'O4',region:'Nouvelle-Aquitaine',department:'Gironde',referential:'BEE Logement Rénovation',referentialVersion:'2026',mentions:'BEE+',profile:'Profil Ville',performance:'BBC',status:'Conforme',moaSector:'Bailleur',requirement:'1.1.1 - Analyse de site',theme:'1.1'},
+{evaluationCode:'E5',operationCode:'O5',region:'Île-de-France',department:'Paris',referential:'BEE Logement Neuf',referentialVersion:'2026',mentions:'BEE+',profile:'Profil Paris',performance:'IC 2028',status:'Conforme',moaSector:'Bailleur',requirement:'3.3.14 - Niveau IC Énergie 2028',theme:'3.3'}
+];
+window.fetch=async()=>({ok:true,json:async()=>({rows})});
+</script>
+<script src="requirements_catalog.js?v=5.0.3"></script><script src="requirements.js?v=5.0.3"></script>
+<script>
+const app=document.getElementById('app');
+function redraw(){app.innerHTML=NEWOSB_REQUIREMENTS.render();NEWOSB_REQUIREMENTS.afterRender();}
+window.addEventListener('newosb:requirementschange',redraw);
+app.addEventListener('click',e=>NEWOSB_REQUIREMENTS.handleClick(e));
+app.addEventListener('change',e=>NEWOSB_REQUIREMENTS.handleChange(e));
+app.addEventListener('input',e=>NEWOSB_REQUIREMENTS.handleInput(e));
+NEWOSB_REQUIREMENTS.load('mock');
+function check(key,value){const el=[...document.querySelectorAll(`[data-req-filter-check="${key}"]`)].find(x=>x.value===value);if(!el)throw new Error('missing '+key+' '+value);el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}));}
+setTimeout(()=>{check('region','Île-de-France');check('region','Nouvelle-Aquitaine');check('status','Conforme');const q=document.querySelector('[data-req-search]');q.value='IC Énergie 2028';q.dispatchEvent(new Event('input',{bubbles:true}));setTimeout(()=>{
+ const regionChecked=[...document.querySelectorAll('[data-req-filter-check="region"]:checked')].map(x=>x.value);
+ const statusChecked=[...document.querySelectorAll('[data-req-filter-check="status"]:checked')].map(x=>x.value);
+ const result=document.querySelector('.req-search-result-rich');
+ const dims=[...document.querySelectorAll('.req-search-dim')].map(x=>x.innerText.trim().replace(/\n+/g,' | '));
+ const counts=[...document.querySelectorAll('.req-search-count b')].map(x=>x.textContent.trim());
+ document.getElementById('qa').textContent=JSON.stringify({regionChecked,statusChecked,result:!!result,dims,counts,filterGroups:document.querySelectorAll('.req-check-filter').length,statusFilter:!!document.querySelector('[data-req-filter-check="status"]')},null,2);
+},50);},100);
+</script></body></html>

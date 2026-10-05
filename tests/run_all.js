@@ -37,6 +37,7 @@ test('tolère accents, majuscules et pluriels', () => { assert.strictEqual(R.pro
 test('valeur hors liste → unknown + invalid', () => { const p = R.progressStatus('Gagnée'); assert.strictEqual(p.key, 'unknown'); assert.strictEqual(p.state, 'invalid'); });
 test('cellule vide → unknown + empty (plus « Non démarrée » par défaut)', () => { const p = R.progressStatus(''); assert.strictEqual(p.key, 'unknown'); assert.strictEqual(p.state, 'empty'); });
 const objs = asObjects(HEADERS, ROWS);
+test('colonne BC = index 54 ; l’avancement de la feuille de test est bien en BC', () => { assert.strictEqual(R.columnLetter(54), 'BC'); assert.strictEqual(R.columnLetter(0), 'A'); assert.strictEqual(R.columnLetter(26), 'AA'); assert.strictEqual(R.columnLetter(HEADERS.indexOf('Opération: Évaluation: Statut')), 'BC'); });
 test('colonne « Opération: Évaluation: Statut » retenue', () => { const r = R.resolveProgressColumn(HEADERS, objs); assert.strictEqual(r.header, 'Opération: Évaluation: Statut'); assert.strictEqual(r.origin, 'nom attendu'); });
 test('une faute de frappe sur 40 lignes n’invalide pas la colonne (seuil 95 %)', () => {
   const rows = Array.from({ length: 40 }, (_, i) => ({ 'Opération: Évaluation: Statut': i === 0 ? 'Analyse réalisé' : 'Analyse réalisée' }));
@@ -54,6 +55,15 @@ test('le statut commercial (Gagnée/Perdue) n’est jamais pris pour l’avancem
   const rows = objs.map(o => ({ Statut: o.Statut })); assert.strictEqual(R.resolveProgressColumn(['Statut'], rows).found, false);
 });
 
+section('3 bis. Années de certification et de création');
+const yr = v => R.parseDateYear(v).value;
+test('formats de date acceptés', () => { assert.strictEqual(yr('15/03/2024'), 2024); assert.strictEqual(yr('15/03/24'), 2024); assert.strictEqual(yr('2024-03-15'), 2024); assert.strictEqual(yr('15 mars 2024'), 2024); assert.strictEqual(yr(45366), 2024); assert.strictEqual(yr('45366'), 2024); assert.strictEqual(yr(new Date(2023, 5, 1)), 2023); });
+test('date vide → aucune année ; date illisible → signalée', () => { assert.strictEqual(yr(''), null); assert.strictEqual(R.parseDateYear('bientôt').status, 'doubtful'); assert.strictEqual(R.parseDateYear('2023 / 2024').status, 'doubtful'); });
+test('« Date de décision de certification » choisie, jamais « Date de décision CD »', () => assert.strictEqual(R.resolveExactHeader(HEADERS, R.CERTIFICATION_DATE_HEADER).header, 'Date de décision de certification'));
+test('« Date de création » choisie, jamais « Affaire: Date de création »', () => assert.strictEqual(R.resolveExactHeader(HEADERS, R.CREATION_DATE_HEADER).header, 'Date de création'));
+test('intitulé préfixé accepté s’il est unique', () => assert.strictEqual(R.resolveExactHeader(['Certification: Date de décision de certification'], R.CERTIFICATION_DATE_HEADER).header, 'Certification: Date de décision de certification'));
+test('plusieurs colonnes possibles → aucune n’est devinée', () => assert.strictEqual(R.resolveExactHeader(['Affaire: Date de création', 'Contrat: Date de création'], R.CREATION_DATE_HEADER).header, null));
+
 section('4. Moteur Observatoire (newosb-core.js)');
 const coreCtx = { window: { NEWOSB_RULES: R }, console }; vm.createContext(coreCtx); vm.runInContext(read('newosb-core.js'), coreCtx);
 const C = coreCtx.window.NEWOSB_CORE;
@@ -63,6 +73,8 @@ test('une cellule « n.c. » ne masque pas la valeur de la ligne suivante', () =
 test('valeurs illisibles listées pour la page Qualité', () => { const u = C.unreadableValues(op('bbio', '12,3 / 15'), 'bbio'); assert.strictEqual(u.length, 1); assert(u[0].reason); });
 test('Qualité : avancement hors liste signalé', () => { const q = C.qualityForOperation({ code: 'A', name: 'A', moa: 'M', department: '33', referential: 'R', progressState: 'invalid', rawStatus: 'Gagnée', fields: {}, rawRows: [{}] }); assert(q.issues.some(i => i.code === 'progress:invalid')); });
 test('dictionnaire : avancement documenté avec la liste fermée', () => assert(/Visite réalisée/.test(C.dictByKey.status.definition) && /95 %/.test(C.dictByKey.status.method)));
+test('dictionnaire : années documentées (décision de certification / création)', () => assert(/Date de décision de certification/.test(C.dictByKey.year.method) && /Date de création/.test(C.dictByKey.createdYear.method)));
+test('date illisible listée pour la page Qualité', () => assert.strictEqual(C.unreadableValues({ fields: { createdDate: 'D' }, rawRows: [{ D: 'bientôt' }] }, 'createdDate').length, 1));
 
 section('5. Anonymisation côté navigateur (privacy.js)');
 const store = {};

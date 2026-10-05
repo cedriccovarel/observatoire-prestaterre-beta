@@ -193,8 +193,22 @@ const NEWOSB_EXIGENCES_ALIASES = {
   ]
 };
 
+// V6.13 : cle d'acces optionnelle (propriete du script NEWOSB_ACCESS_KEY).
+// Si elle est renseignee, l'URL de la source Exigences doit finir par ?key=LA_CLE.
+function newosbExigencesAccessOk_(e) {
+  let expected = '';
+  try { expected = String(PropertiesService.getScriptProperties().getProperty('NEWOSB_ACCESS_KEY') || '').trim(); } catch (err) {}
+  if (!expected) return true;
+  const given = String((e && e.parameter && e.parameter.key) || '');
+  if (given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
 function doGet(e) {
   try {
+    if (!newosbExigencesAccessOk_(e)) return newosbExigencesJson_({ ok: false, error: "Cle d'acces absente ou invalide (?key=...)." });
     const mode = String((e && e.parameter && e.parameter.mode) || 'data').toLowerCase();
     const result = getNewosbExigences_();
 
