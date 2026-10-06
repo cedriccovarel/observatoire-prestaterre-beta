@@ -2,16 +2,34 @@
   'use strict';
 
   const STORAGE_KEY='newosb_requirements_source_v1';
+  const VERSION='6.14';
+  const MENTIONS=()=>window.NEWOSB_MENTIONS;
+  const MENTION_CATALOG=()=>window.NEWOSB_MENTION_CATALOG||null;
+  // V6.14 : client du pont sécurisé propre à la source Exigences (clé distincte de celle d'OPERATIONS, gardée en mémoire seulement).
+  const bridge=window.NEWOSB_BRIDGE?window.NEWOSB_BRIDGE.create('exigences'):null;
   const THEME_COLORS={'1':'#7da7d9','2':'#76b65c','3':'#ed9a42','4':'#8f77bd'};
   const TARGET_NAMES={'1':'Éco-Conception & Management du projet','2':'Le bâtiment dans son environnement','3':'Sobriété et Efficacité du bâtiment','4':'Usages & qualité de vie'};
   const state={
-    url:localStorage.getItem(STORAGE_KEY)||'', rows:[], connected:false, loading:false, error:'', loadedUrl:'',
+    url:'', rows:[], connected:false, loading:false, error:'', errorKind:'', loadProgress:'', warnings:[],
     filters:{year:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[],period:[],nature:[],mention:[],moaSector:[],theme:[]},
     filterSearch:{}, requirement:'', mentionFocus:'', search:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
     loadedAt:'',
     views:{chronology:'list',topGlobal:'list',target1:'list',target2:'list',target3:'list',target4:'list',evolution:'list',mentions:'list',mentionReqs:'list'},
-    pages:{}
+    pages:{},
+    // Encart « Compatibilité des exigences sélectionnées avec les mentions » (V6.14).
+    compat:{context:'',manualMention:'',values:{},openBouquet:false,openDiag:false,openFields:false},
+    focusSelector:''
   };
+  // URL mémorisée sans aucune clé. Une ancienne URL « …?key=… » (V6.13) est nettoyée et la clé
+  // est seulement reprise en mémoire pour cette session.
+  (function restoreSourceUrl(){
+    let stored='';try{stored=localStorage.getItem(STORAGE_KEY)||'';}catch{}
+    if(!stored)return;
+    const split=window.NEWOSB_BRIDGE?window.NEWOSB_BRIDGE.splitUrl(stored):{url:stored,key:''};
+    state.url=split.url;
+    if(split.key){bridge?.setKey(split.key);state.migratedKey=true;}
+    if(split.url!==stored){try{localStorage.setItem(STORAGE_KEY,split.url);}catch{}}
+  })();
 
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const attr=esc;
@@ -57,7 +75,7 @@
     const associatedRequirementReferenceTitle=pick(r.associatedRequirementReferenceTitle,alias(r,['Exigence associée: Exigence de référence: Intitulé','Exigence associee: Exigence de reference: Intitule']));
     return {
       evaluationCode:String(pick(r.evaluationCode,r.codeEvaluation,alias(r,['Code EVA interne','Évaluation: Code interne']))),
-      operationCode:String(pick(r.operationCode,alias(r,['Évaluation: Opération: Code interne','Code opération']))),
+      operationCode:String(pick(r.operationCode,alias(r,['Évaluation: Opération: Code interne','Evaluation: Operation: Code interne','Code opération']))),
       region:String(pick(r.region,alias(r,['Évaluation: Opération: Région','Région']))),
       department:String(pick(r.department,alias(r,['Évaluation: Opération: Département','Département']))),
       referential:String(referential), referentialVersion:String(pick(r.referentialVersion,alias(r,['Évaluation: Opération: Version du référentiel applicable: Version']))),
@@ -71,6 +89,9 @@
       socialZone:String(pick(r.socialZone,alias(r,['Évaluation: Opération: Zonage logement social 1/2/3','Evaluation: Operation: Zonage logement social 1/2/3','Zonage logement social 1/2/3','Zonage']))),
       requirementReference:String(requirementReference), requirementLabel:String(requirementLabel), requirementCode:String(requirementCode), requirementNumber:String(requirementNumber),
       associatedRequirementReferenceTitle:String(associatedRequirementReferenceTitle), target:String(pick(r.target,'')),
+      referentialVersionDate:String(pick(r.referentialVersionDate,alias(r,['Version du ref ( date )','Version du ref (date)']))),
+      requirementValidated:String(pick(r.requirementValidated,alias(r,['Exigence validée','Exigence validee']))),
+      sourceRow:Number(r.sourceRow)||0,
       theme:String(theme), requirement:String(requirement), nature:String(pick(r.nature,natureFromRef(referential))), sector:String(pick(r.sector,sectorFromRef(referential)))
     };
   }
@@ -80,21 +101,54 @@
     const detail={scroll:{top:Number(page?.scrollTop)||0,left:Number(page?.scrollLeft)||0,winX:Number(window.scrollX)||0,winY:Number(window.scrollY)||0}};
     window.dispatchEvent(new CustomEvent('newosb:requirementschange',{detail}));
   }
-  function sourceUrl(url,mode='data'){const sep=url.includes('?')?'&':'?';return `${url}${sep}mode=${encodeURIComponent(mode)}&_=${Date.now()}`;}
-  async function load(url){
-    url=String(url||'').trim(); if(!url){state.error='Colle l’URL /exec du déploiement Apps Script.';emit();return;}
-    state.loading=true;state.error='';state.loadedUrl=url;emit();
+  // ---------------------------------------------------------------- chargement (pont sécurisé, V6.14)
+  let opIndex=null,pseudoIndex=null,pseudoIndexPrivacy='';
+  function resetIndexes(){opIndex=null;pseudoIndex=null;pseudoIndexPrivacy='';}
+  function clearPrivateData(){state.rows=[];state.connected=false;state.loadedAt='';state.warnings=[];resetIndexes();}
+  async function load(rawUrl){
+    const split=window.NEWOSB_BRIDGE?window.NEWOSB_BRIDGE.splitUrl(rawUrl):{url:String(rawUrl||'').trim(),key:''};
+    const url=split.url;if(split.key)bridge?.setKey(split.key);
+    if(!url){state.error='Colle l’URL /exec du déploiement Apps Script Exigences.';state.errorKind='config';emit();return;}
+    if(!bridge){state.error='Module de pont indisponible (newosb-bridge.js).';state.errorKind='config';emit();return;}
+    if(!bridge.hasKey()){clearPrivateData();state.url=url;state.error='Saisis la clé d’accès de la source Exigences (propriété NEWOSB_ACCESS_KEY de son projet Apps Script).';state.errorKind='auth';emit();return;}
+    const token=++loadToken;
+    state.url=url;try{localStorage.setItem(STORAGE_KEY,url);}catch{}
+    state.loading=true;state.error='';state.errorKind='';state.loadProgress='Connexion…';emit();
     try{
-      const res=await fetch(sourceUrl(url),{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);
-      const payload=await res.json();if(payload&&payload.ok===false)throw new Error(payload.error||'Source indisponible');
-      const rows=Array.isArray(payload)?payload:(payload.rows||payload.data||[]);if(!Array.isArray(rows)||!rows.length)throw new Error('Aucune ligne reçue depuis l’onglet RAPPORT.');
-      state.rows=rows.map(normalizeRow).filter(r=>r.evaluationCode&&r.requirement);state.connected=true;state.loadedAt=new Date().toISOString();state.loadedUrl=url;state.url=url;state.error='';
-      localStorage.setItem(STORAGE_KEY,url);
+      const ping=await bridge.request(url,{mode:'ping'},120000);
+      if(ping?.service&&ping.service!=='NEWOSB EXIGENCES')throw new Error('Cette URL n’est pas celle du script Exigences (service « '+ping.service+' »).');
+      const meta=await bridge.request(url,{mode:'meta'},120000);
+      const total=Math.max(0,Number(meta?.rowCount)||0),limit=Math.max(200,Math.min(3000,Number(meta?.chunkSize)||1500)),out=[];
+      if(!total)throw new Error('L’onglet RAPPORT ne contient aucune ligne de données.');
+      const offsets=[];for(let o=0;o<total;o+=limit)offsets.push(o);
+      for(let i=0;i<offsets.length;i+=2){
+        if(token!==loadToken)return;
+        state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
+        const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>bridge.request(url,{mode:'chunk',offset,limit},120000)));
+        chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
+      }
+      if(token!==loadToken)return;
+      const rows=out.map(normalizeRow).filter(r=>r.evaluationCode&&r.requirement);
+      if(!rows.length)throw new Error('Aucune ligne exploitable reçue depuis l’onglet RAPPORT.');
+      resetIndexes();state.rows=rows;state.connected=true;state.loadedAt=new Date().toISOString();state.error='';state.errorKind='';state.warnings=Array.isArray(meta?.warnings)?meta.warnings.slice(0,12).map(String):[];
       if(!state.mentionFocus)state.mentionFocus=topMentions(state.rows,1)[0]?.name||'';
-    }catch(e){state.connected=false;state.error=String(e?.message||e);}
-    finally{state.loading=false;emit();}
+      bridge.closePopupSoon(600);
+    }catch(e){
+      if(token!==loadToken)return;
+      // Une erreur ne laisse jamais un ancien jeu de données affiché comme s'il était à jour ou autorisé.
+      clearPrivateData();
+      state.errorKind=e?.authError?'auth':'error';
+      state.error=e?.authError?`Accès refusé : ${String(e.message||e)}`:String(e?.message||e);
+      if(e?.authError)bridge.clearKey();
+    }finally{if(token===loadToken){state.loading=false;state.loadProgress='';emit();}}
   }
-  function disconnect(){state.url='';state.loadedUrl='';state.rows=[];state.connected=false;state.error='';state.search='';state.infoRequirement='';localStorage.removeItem(STORAGE_KEY);emit();}
+  let loadToken=0;
+  function disconnect(){
+    loadToken++;bridge?.clearKey();bridge?.destroy('Source Exigences déconnectée.');
+    clearPrivateData();state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
+    emit();
+  }
+  function forgetSource(){disconnect();state.url='';try{localStorage.removeItem(STORAGE_KEY);}catch{}emit();}
 
   function periodMatch(y,p){if(!p)return true;if(p==='pre2024')return y&&y<2024;if(p==='2024')return y===2024;if(p==='2025plus')return y>=2025;return String(y)===String(p);}
   function rowHasMention(r,m){return !m||splitMulti(r.mentions).some(x=>norm(x)===norm(m));}
@@ -237,10 +291,20 @@
       nature:uniq(evs.map(r=>r.nature)), mention:uniq(evs.flatMap(r=>splitMulti(r.mentions))), moaSector:uniq(evs.map(r=>r.moaSector)), theme:['1','2','3','4']
     };
   }
+  // V6.14 : en mode anonymisé, les filtres MOA et Groupe MOA n'exposent que des pseudonymes,
+  // y compris dans la valeur des cases (le nom réel n'est jamais écrit dans la page).
+  const PRIVATE_FILTERS={moa:v=>displayMoa(v),moaGroup:v=>(privacy()?.enabled?.()&&v&&v!=='Non précisé')?`Groupe ${privacy().id(v,'GRP').slice(4)}`:v};
+  let privateFilterMap=new Map();
+  function filterOut(key,v){return privacy()?.enabled?.()&&PRIVATE_FILTERS[key]?PRIVATE_FILTERS[key](v):v;}
+  function filterIn(key,v){if(!(privacy()?.enabled?.()&&PRIVATE_FILTERS[key]))return v;return privateFilterMap.get(`${key}\u0001${v}`)??v;}
   function checkFilter(key,label,values,lab=v=>v){
-    const selected=filterValues(key),count=selected.length,summary=count?`${count} sélectionné${count>1?'s':''}`:'Tous',query=norm(state.filterSearch?.[key]||'');
+    if(privacy()?.enabled?.()&&PRIVATE_FILTERS[key]){values.forEach(v=>privateFilterMap.set(`${key}\u0001${filterOut(key,v)}`,v));const raw=values;values=raw.map(v=>filterOut(key,v));lab=v=>v;const sel=new Set(filterValues(key).map(v=>norm(filterOut(key,v))));return checkFilterHtml(key,label,values,lab,v=>sel.has(norm(v)),sel.size);}
+    return checkFilterHtml(key,label,values,lab,v=>filterHas(key,v),filterValues(key).length);
+  }
+  function checkFilterHtml(key,label,values,lab,isChecked,count){
+    const summary=count?`${count} sélectionné${count>1?'s':''}`:'Tous',query=norm(state.filterSearch?.[key]||'');
     const search=`<label class="req-check-search"><span>⌕</span><input type="search" data-req-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(`Rechercher dans ${String(label).toLowerCase()}…`)}" autocomplete="off"></label>`;
-    return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu">${search}<div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=lab(v),hidden=query&&!norm(text).includes(query);return `<label data-req-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${filterHas(key,v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
+    return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu">${search}<div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=lab(v),hidden=query&&!norm(text).includes(query);return `<label data-req-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${isChecked(v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
   }
   function filtersHtml(){
     const o=filterOptions();
@@ -248,9 +312,16 @@
     return `<div class="req-filterbar req-filterbar-checks">${checkFilter('year','Année',o.year)}${checkFilter('referential','Référentiel',o.referential)}${checkFilter('moaGroup','Groupe MOA',o.moaGroup)}${checkFilter('status','Avancement',o.status)}${checkFilter('moa','Maître d’ouvrage',o.moa)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('profile','Profil',o.profile)}${checkFilter('socialZone','Zonage',o.socialZone)}${checkFilter('nature','Nature',o.nature)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}${checkFilter('period','Période réf.',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
   }
 
+  function sourceStatusText(){
+    if(state.loading)return state.loadProgress||'Connexion…';
+    if(state.connected)return `${fmt(evaluations(state.rows).length)} évaluations · ${fmt(occurrenceRows(state.rows).length)} occurrences chargées${state.loadedAt?` · actualisé le ${new Date(state.loadedAt).toLocaleString('fr-FR')}`:''}`;
+    if(state.errorKind==='auth')return 'Source Exigences privée : accès non autorisé ou clé non saisie';
+    if(state.error)return 'Source Exigences indisponible';
+    return state.url?'Source Exigences configurée · clé d’accès à saisir pour cette session':'Source Exigences non connectée';
+  }
   function sourceCard(){
-    const status=state.loading?'Connexion…':state.connected?`${fmt(evaluations(state.rows).length)} évaluations · ${fmt(occurrenceRows(state.rows).length)} occurrences chargées`:'Source Exigences non connectée';
-    return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>SOURCE EXIGENCES</span><h2>Google Sheet · onglet RAPPORT</h2><p>${esc(status)}</p></div><div class="req-source-controls"><input id="reqSourceUrl" type="url" value="${attr(state.url)}" placeholder="https://script.google.com/macros/s/…/exec"><button type="button" data-req-connect="1">${state.connected?'Actualiser':'Connecter'}</button>${state.connected?'<button class="soft" type="button" data-req-disconnect="1">Déconnecter</button>':''}<a class="req-code-link" href="Code_Exigences.gs" download>Code.gs ↓</a></div>${state.error?`<div class="req-source-error">${esc(state.error)}</div>`:''}<small>Le script lit uniquement <b>RAPPORT</b>. Référentiel, profil, région, département, mention et statut d’évaluation sont croisés en multi-sélection avec toutes les occurrences.</small></article>`;
+    const keyOk=bridge?.hasKey?.();
+    return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>SOURCE EXIGENCES · PRIVÉE</span><h2>Google Sheet · onglet RAPPORT</h2><p role="status" aria-live="polite">${esc(sourceStatusText())}</p></div><div class="req-source-controls"><input id="reqSourceUrl" type="url" value="${attr(state.url)}" placeholder="https://script.google.com/macros/s/…/exec" aria-label="URL /exec du script Exigences" autocomplete="off"><input id="reqSourceKey" type="password" value="" placeholder="${keyOk?'Clé d’accès en mémoire · ressaisir pour changer':'Clé d’accès Exigences'}" aria-label="Clé d’accès de la source Exigences (gardée en mémoire pendant la session)" autocomplete="off" spellcheck="false"><button type="button" data-req-connect="1">${state.connected?'Actualiser':'Connecter'}</button>${(state.connected||keyOk||state.loading)?'<button class="soft" type="button" data-req-disconnect="1">Déconnecter</button>':''}${state.url&&!state.connected&&!state.loading?'<button class="soft" type="button" data-req-forget="1">Oublier l’URL</button>':''}<a class="req-code-link" href="Code_Exigences.gs" download>Code_Exigences.gs ↓</a></div>${state.error?`<div class="req-source-error" role="alert">${esc(state.error)}</div>`:''}${state.migratedKey?'<div class="req-source-note">La clé figurant dans l’ancienne URL mémorisée a été retirée du stockage du navigateur ; elle n’est conservée qu’en mémoire pour cette session.</div>':''}${state.connected&&state.warnings.length?`<details class="req-source-warnings"><summary>${fmt(state.warnings.length)} remarque${state.warnings.length>1?'s':''} du script</summary><ul>${state.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<small>La clé est demandée à chaque session : elle n’est enregistrée ni dans l’URL, ni dans le navigateur. Le script vérifie la clé avant toute lecture de RAPPORT. Le mode anonymisé masque l’affichage mais ne protège pas la source.</small></article>`;
   }
 
   function panelChronology(rows){
@@ -352,9 +423,192 @@
     return `<div class="req-info-overlay" data-req-info-close="1"><article class="req-info-modal" data-req-info-panel><button class="req-info-close" type="button" data-req-info-close="1">×</button><div class="req-info-title"><span>FICHE EXIGENCE · RÉFÉRENTIEL 04/05/2026</span><h2>${esc(current.code)} · ${esc(current.title)}</h2><small>${esc(current.referential)}</small></div>${tabs.length>1?`<div class="req-info-tabs">${tabs.map(t=>`<button type="button" data-req-info-kind="${attr(t)}" class="${t===current.kind?'is-active':''}">${esc(t)}</button>`).join('')}</div>`:''}<div class="req-info-stats"><div><b>${fmt(allRows.length)}</b><span>occurrences RAPPORT</span></div><div><b>${fmt(selRows.length)}</b><span>dans la sélection</span></div></div><div class="req-info-grid"><section><span>Cible</span><b>${esc(current.cibleCode)} · ${esc(current.cible)}</b></section><section><span>Thème</span><b>${esc(current.themeCode)} · ${esc(current.theme)}</b></section></div><section class="req-info-section"><h3>Description / objectif</h3>${descParts.length?descParts.map(p=>`<p>${esc(p)}</p>`).join(''):'<p>Non précisé dans la fiche extraite.</p>'}</section><section class="req-info-section"><h3>Pièces justificatives</h3>${current.pieces?.length?`<ul>${current.pieces.map(p=>`<li>${esc(p)}</li>`).join('')}</ul>`:'<p>Aucune pièce justificative explicitement listée dans cette section du référentiel.</p>'}</section></article></div>`;
   }
 
+  // ---------------------------------------------------------------- V6.14 · exigences d'une opération (API des fiches projets)
+  const normId=v=>MENTIONS()?.normalizeId?MENTIONS().normalizeId(v):String(v??'').trim().toUpperCase();
+  const SYNTHETIC_EVALUATION=/^(OP|ROW|LIGNE):/;
+  function operationIndex(){
+    if(opIndex)return opIndex;
+    opIndex=new Map();
+    state.rows.forEach(r=>{const k=normId(r.operationCode);if(!k)return;if(!opIndex.has(k))opIndex.set(k,[]);opIndex.get(k).push(r);});
+    return opIndex;
+  }
+  // En mode anonymisé, la fiche ne connaît que le pseudonyme « OP-123456 » : on le retrouve par le même calcul.
+  function pseudoOperationIndex(){
+    const p=privacy();const tag=p?.enabled?.()?'on':'off';
+    if(pseudoIndex&&pseudoIndexPrivacy===tag)return pseudoIndex;
+    pseudoIndex=new Map();pseudoIndexPrivacy=tag;
+    if(tag==='on'){const seen=new Set();state.rows.forEach(r=>{const raw=String(r.operationCode||'').trim();if(!raw||seen.has(raw))return;seen.add(raw);const k=normId(raw);const ps=p.operationCode(raw);if(!pseudoIndex.has(ps))pseudoIndex.set(ps,new Set());pseudoIndex.get(ps).add(k);});}
+    return pseudoIndex;
+  }
+  const deepFreeze=o=>{if(o&&typeof o==='object'&&!Object.isFrozen(o)){Object.freeze(o);Object.values(o).forEach(deepFreeze);}return o;};
+  function sourceState(){
+    if(state.loading)return 'loading';
+    if(state.connected)return 'ready';
+    if(state.errorKind==='auth')return 'unauthorized';
+    if(state.error)return 'error';
+    return 'disconnected';
+  }
+  function targetLabelFor(r,ctx){
+    if(ctx.family==='BEE_TN'||ctx.family==='BEE_TE')return '';
+    const t=rowTarget(r);return /^[1-4]$/.test(t)?t:'';
+  }
+  // Instantané immuable : les fiches ne lisent jamais l'état interne du module.
+  function getOperationRequirements(code,options={}){
+    const st=sourceState();
+    const base={state:st,error:state.error,loadedAt:state.loadedAt,version:VERSION};
+    if(st!=='ready')return deepFreeze({...base,evaluations:[],matched:false});
+    let keys=[];const raw=String(code??'').trim();
+    if(options.pseudonymized&&/^OP-\d{6}$/.test(raw))keys=[...(pseudoOperationIndex().get(raw)||[])];
+    else if(raw)keys=[normId(raw)];
+    const rows=keys.flatMap(k=>operationIndex().get(k)||[]);
+    if(!rows.length)return deepFreeze({...base,matched:false,evaluations:[],partial:[]});
+    const exactRaw=rows.every(r=>String(r.operationCode)===raw);
+    const M=MENTIONS(),cat=MENTION_CATALOG();
+    const groups=new Map();
+    rows.forEach(r=>{
+      const ctx=M?M.rowContext(r):{key:'',family:'',version:''};
+      const evalKey=`${r.evaluationCode}\u0001${ctx.key||norm(r.referential)+'|'+norm(r.referentialVersion)}`;
+      if(!groups.has(evalKey))groups.set(evalKey,{evaluationCode:r.evaluationCode,synthetic:SYNTHETIC_EVALUATION.test(r.evaluationCode),referential:r.referential,referentialVersion:r.referentialVersion||r.referentialVersionDate,contextKey:ctx.key,family:ctx.family,versionDate:ctx.version,status:r.status,rows:0,items:new Map(),unresolved:0});
+      const g=groups.get(evalKey);g.rows++;
+      const res=M?M.resolveRequirement(r,cat,ctx):{code:reqCode(r.requirement),label:reqLabel(r.requirement),status:'uncatalogued'};
+      const code=res.code||'';const label=res.label||reqLabel(r.requirement)||r.requirement;
+      const k=code?`c:${code}`:`l:${norm(label)}`;
+      if(!code)g.unresolved++;
+      if(!g.items.has(k))g.items.set(k,{code,label,target:targetLabelFor(r,ctx),validated:String(r.requirementValidated||'').trim(),resolution:res.status,reason:res.reason||'',sourceRows:[]});
+      const it=g.items.get(k);if(r.sourceRow)it.sourceRows.push(r.sourceRow);if(!it.validated&&r.requirementValidated)it.validated=String(r.requirementValidated).trim();
+    });
+    const evaluationsOut=[...groups.values()].map(g=>({
+      evaluationCode:g.synthetic?'':displayEvaluation(g.evaluationCode),synthetic:g.synthetic,referential:g.referential,referentialVersion:g.referentialVersion,contextKey:g.contextKey,versionDate:g.versionDate,status:g.status,rows:g.rows,
+      duplicatesRemoved:Math.max(0,g.rows-g.items.size),unresolved:g.unresolved,
+      requirements:[...g.items.values()].map(x=>({...x,sourceRows:x.sourceRows.slice(0,20)})).sort((a,b)=>(a.code&&b.code?String(a.code).localeCompare(String(b.code),'fr',{numeric:true}):(a.code?-1:b.code?1:0))||String(a.label).localeCompare(String(b.label),'fr'))
+    })).sort((a,b)=>String(b.versionDate||'').localeCompare(String(a.versionDate||''))||String(a.evaluationCode).localeCompare(String(b.evaluationCode),'fr',{numeric:true}));
+    const partial=[];
+    if(!exactRaw)partial.push('Rapprochement après normalisation de l’écriture du code (espaces, casse ou caractères invisibles).');
+    const unres=evaluationsOut.reduce((n,e)=>n+e.unresolved,0);if(unres)partial.push(`${unres} exigence${unres>1?'s':''} sans code d’exigence fiable : affichée${unres>1?'s':''} par son intitulé, sans rattachement normatif.`);
+    if(evaluationsOut.some(e=>e.synthetic))partial.push('Certaines lignes RAPPORT n’ont pas de code d’évaluation : elles sont regroupées à part.');
+    if(evaluationsOut.some(e=>!e.contextKey))partial.push('Référentiel ou version non reconnu sur certaines lignes.');
+    return deepFreeze({...base,matched:true,evaluations:evaluationsOut,partial,multiple:evaluationsOut.length>1,contexts:new Set(evaluationsOut.map(e=>e.contextKey||e.referential)).size});
+  }
+
+  // ---------------------------------------------------------------- V6.14 · compatibilité avec les mentions
+  function compatScopeRows(){
+    // Périmètre = filtres généraux de l'onglet. Le focus local sur une exigence, la fiche « i », la recherche et le filtre Thème
+    // (qui retire des exigences et non des opérations) ne réduisent pas le bouquet.
+    return filteredRows({ignoreRequirement:true,ignoreTheme:true});
+  }
+  let compatCache=null;
+  function compatModel(){
+    const M=MENTIONS(),cat=MENTION_CATALOG();
+    if(!M||!cat)return {error:'Moteur ou catalogue des mentions indisponible (newosb-mentions.js / mentions_catalog.js).'};
+    const rows=compatScopeRows();
+    const sig=`${rows.length}|${state.rows.length}|${state.loadedAt}|${JSON.stringify(state.filters)}`;
+    let bouquets;
+    if(compatCache&&compatCache.sig===sig)bouquets=compatCache.bouquets;else{bouquets=M.buildBouquets(rows,cat,{size:M.BOUQUET_SIZE});compatCache={sig,bouquets};}
+    const contexts=bouquets.contexts;
+    let ctx=contexts.find(c=>c.key===state.compat.context);
+    if(!ctx){const covered=contexts.find(c=>c.source&&c.source.status==='available');ctx=contexts[0]||null;state.compat.autoContext=ctx?.key||'';if(state.compat.context&&!contexts.some(c=>c.key===state.compat.context))state.compat.context='';void covered;}
+    const values=state.compat.values[ctx?.key||'']||{};
+    const analysis=ctx?M.analyseContext(ctx,cat,values):null;
+    return {M,cat,rows,bouquets,ctx,values,analysis};
+  }
+  const STATE_ICONS={covered:['✓','is-covered','Présente dans le bouquet comparé'],absent:['○','is-absent','Absente du bouquet comparé'],unknown:['?','is-unknown','Condition inconnue'],unresolved:['?','is-unknown','Correspondance non résolue (à vérifier)'],na:['—','is-na','Non applicable'],partial:['◐','is-unknown','Partiellement couvert']};
+  function reqTitle(cat,ctxKey,code){const s=MENTIONS()?.sourceFor?.(cat,ctxKey);return s?.requirements?.find(r=>r.code===code)?.title||'';}
+  function unitHtml(u,cat,ctxKey){
+    const [icon,cls,title]=STATE_ICONS[u.state]||STATE_ICONS.unknown;
+    const codeLabel=c=>{const t=reqTitle(cat,ctxKey,c);return `<b>${esc(c)}</b>${t?` ${esc(t)}`:''}`;};
+    let main='';
+    if(u.kind==='req'){
+      main=u.label?esc(u.label):codeLabel(u.code);
+      const via=u.label?(u.via||[]):(u.via||[]).filter(c=>c!==u.code);
+      if(u.state==='covered'&&via.length)main+=`<em>couvert par ${via.map(esc).join(', ')}</em>`;
+      if(u.state==='unresolved')main+=`<em>${esc(u.note)} (${(u.via||[]).map(esc).join(', ')})</em>`;
+      if(u.state==='unknown'||u.state==='na')main+=`<em>${esc(u.note||'')}</em>`;
+    }else if(u.kind==='mention'){main=`Mention « ${esc(u.label)} »<em>${esc(u.note||'')}</em>`;}
+    else if(u.kind==='atLeast'){main=`${esc(u.label||'Au moins '+u.k)} · ${fmt(u.coveredUnits)}/${fmt(u.units)}`;}
+    else if(u.kind==='any'||u.kind==='all'){main=`${esc(u.label||(u.kind==='any'?'Une alternative parmi':'Groupe'))}${u.via?.length?`<em>couvert par ${u.via.map(esc).join(', ')}</em>`:''}`;}
+    else main=`${esc(u.label||'Critère indéterminé')}<em>${esc(u.note||'')}</em>`;
+    return `<li class="req-compat-unit ${cls}"><span class="req-compat-icon" aria-hidden="true">${icon}</span><span class="sr-only">${esc(title)} : </span><span class="req-compat-unit-text">${main}</span></li>`;
+  }
+  function mentionCardHtml(result,slot,model,extra=''){
+    const {cat,ctx}=model;const m=result?.mention;
+    const slotLabel=slot===1?'Mention la plus compatible':slot===2?'2e mention la plus compatible':(state.compat.manualMention?'Comparaison libre':'3e mention la plus compatible');
+    if(!result)return `<article class="req-compat-mention is-empty"><header><span>${esc(slotLabel)}</span><h3>Aucun résultat calculable</h3></header><p class="req-compat-empty">Moins de ${slot} mention${slot>1?'s':''} calculable${slot>1?'s':''} de façon fiable dans ce périmètre et ce contexte.</p>${extra}</article>`;
+    const src=MENTIONS().sourceFor(cat,m.context);
+    let score;
+    if(result.status==='ok')score=`<div class="req-compat-score"><strong>${fmt(result.pct,0)} %</strong><span>${fmt(result.covered)} / ${fmt(result.required)} critère${result.required>1?'s':''} couvert${result.covered>1?'s':''}</span><i role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(result.pct)}" aria-label="Couverture"><b style="width:${Math.max(0,Math.min(100,result.pct)).toFixed(1)}%"></b></i></div>`;
+    else if(result.status==='provisional')score=`<div class="req-compat-score is-provisional"><strong>${result.pct===null?'—':fmt(result.pct,0)+' %'}</strong><span>Provisoire · ${fmt(result.covered)} / ${fmt(result.required)} critères déterminés couverts · ${fmt(result.unknownUnits||0)} indéterminé${(result.unknownUnits||0)>1?'s':''}</span><small>${esc(result.reason)}</small></div>`;
+    else if(result.status==='not_applicable')score=`<div class="req-compat-score is-na"><strong>Non applicable</strong><small>${esc(result.reason)}</small></div>`;
+    else score=`<div class="req-compat-score is-na"><strong>Non calculable</strong><small>${esc(result.reason)}</small></div>`;
+    const units=(result.units||[]).length?`<ul class="req-compat-units">${result.units.map(u=>unitHtml(u,cat,m.context)).join('')}</ul>`:'';
+    const present=model.analysis?.present||new Set();
+    const listCodes=(codes,label)=>codes?.length?`<div class="req-compat-extra"><span>${esc(label)}</span>${codes.map(c=>`<b class="${present.has(c)?'is-present':''}" title="${attr(reqTitle(cat,m.context,c))}">${esc(c)}${present.has(c)?' ✓':''}</b>`).join('')}</div>`:'';
+    const notes=[m.points?.text&&`Seuil de points : ${m.points.text}`,m.cumulation?.text&&`Cumul : ${m.cumulation.text}`,...(m.prerequisites||[]).map(p=>`Prérequis : ${p.text}`),...(m.applicability||[]).map(a=>`Application : ${a.text}`)].filter(Boolean);
+    const sources=(m.sources||[]).map(s=>`${s.doc} (${s.version}) p. ${s.pages}`).join(' · ');
+    return `<article class="req-compat-mention ${slot===3&&state.compat.manualMention?'is-manual':''}" aria-label="${attr(slotLabel+' : '+m.name)}"><header><span>${esc(slotLabel)}</span><h3>${esc(m.name)}</h3><small>${esc(src?`${src.title} · ${src.versionLabel}`:m.context)} · mention ${esc(m.kind||'')}</small></header>${score}${extra}${units}${listCodes(m.optional,'Optionnelles (sans effet sur le score)')}${listCodes(m.recommended,'Recommandées (sans effet sur le score)')}${notes.length?`<details class="req-compat-notes"><summary>Prérequis, seuils et cumul (${fmt(notes.length)})</summary><ul>${notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul></details>`:''}<footer>Source : ${esc(sources||'—')}</footer></article>`;
+  }
+  function compatSection(){
+    const head=`<div class="obs-section-title req-compat-title"><div><span>04</span><h2>Compatibilité des exigences sélectionnées avec les mentions</h2></div><p>Mentions dont les critères nécessaires sont les mieux couverts par les exigences les plus sélectionnées du périmètre filtré.</p></div>`;
+    const disclaimer=`<p class="req-compat-disclaimer">Compatibilité des sélections ; l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils applicables.</p>`;
+    const model=compatModel();
+    if(model.error)return `${head}<article class="obs-card req-compat-card"><div class="obs-empty">${esc(model.error)}</div>${disclaimer}</article>`;
+    const {M,cat,bouquets,ctx}=model;
+    if(!ctx)return `${head}<article class="obs-card req-compat-card"><div class="obs-empty">Aucune opération documentée (avec un code opération et un référentiel BEE reconnu) dans ce périmètre.</div>${diagHtml(model)}${disclaimer}</article>`;
+    const ctxSelect=bouquets.contexts.length>1?`<label class="req-inline-select req-compat-context"><span>Périmètre normatif</span><select data-req-compat-context="1">${bouquets.contexts.map(c=>`<option value="${attr(c.key)}" ${c.key===ctx.key?'selected':''}>${esc(`${c.familyLabel} · ${c.versionLabel} — ${fmt(c.operations)} opération${c.operations>1?'s':''}`)}${c.key===state.compat.autoContext?' (le plus documenté)':''}</option>`).join('')}</select></label>`:'';
+    const fields=M.contextFieldsFor(cat,ctx.key);
+    const values=model.values;
+    const fieldsHtml=fields.length?`<details class="req-compat-fields" ${state.compat.openFields?'open':''} data-req-compat-toggle="openFields"><summary>Conditions d’application du contexte (${fmt(fields.filter(f=>values[f.id]).length)} / ${fmt(fields.length)} renseignées)</summary><p>Une condition laissée « Inconnu » rend les mentions concernées provisoires : elles sont alors exclues du classement automatique.</p><div class="req-compat-field-grid">${fields.map(f=>`<label><span>${esc(f.label)}</span><select data-req-compat-field="${attr(f.id)}"><option value="">Inconnu</option>${f.values.map(([v,l])=>`<option value="${attr(v)}" ${values[f.id]===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`).join('')}</div></details>`:'';
+    const source=ctx.source;
+    const analysis=model.analysis;
+    const meta=`<div class="req-compat-meta"><div><span>Contexte comparé</span><b>${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}</b></div><div><span>Opérations documentées</span><b>${fmt(ctx.operations)}</b></div><div><span>Bouquet comparé</span><b>${fmt(ctx.top.length)} exigence${ctx.top.length>1?'s':''}</b><small>${ctx.top.length<ctx.size?`moins de ${fmt(ctx.size)} exigences disponibles`:`Top ${fmt(ctx.size)} par opérations distinctes`}</small></div></div>`;
+    let cards='';
+    if(!source||source.status!=='available'){
+      cards=`<div class="req-compat-uncovered" role="note"><b>Version non couverte</b><span>${esc(source?.missing||`Aucune règle de mentions n’est disponible pour ${ctx.familyLabel} · ${ctx.versionLabel}. Les règles d’une autre version ne sont pas transposées.`)}</span></div>`;
+    }
+    const ranked=analysis?.ranked||[];
+    const menu=M.mentionMenu(cat);
+    const allMentions=menu.flatMap(g=>g.mentions);
+    const manual=state.compat.manualMention?allMentions.find(m=>m.id===state.compat.manualMention):null;
+    if(state.compat.manualMention&&!manual)state.compat.manualMention='';
+    const third=ranked[2]||null;
+    const selectHtml=`<label class="req-compat-select"><span>Comparer une autre mention</span><select data-req-compat-mention="1" aria-label="Mention de la troisième carte"><option value="">3e résultat automatique${third?` (${third.name})`:''}</option>${menu.map(g=>`<optgroup label="${attr(g.label+(g.status==='source_missing'?' — règles non fournies':''))}">${g.mentions.map(m=>`<option value="${attr(m.id)}" ${state.compat.manualMention===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</optgroup>`).join('')}</select></label>${state.compat.manualMention?'<button type="button" class="req-compat-reset" data-req-compat-auto="1">Revenir au 3e résultat automatique</button>':''}`;
+    let thirdHtml;
+    if(manual){
+      let result=null,extra='';
+      if(manual.context!==ctx.key){
+        const target=bouquets.contexts.find(c=>c.key===manual.context);
+        const s=M.sourceFor(cat,manual.context);
+        extra=`<div class="req-compat-mismatch" role="note"><b>Contexte différent</b><span>Cette mention relève de ${esc(s?`${s.title} · ${s.versionLabel}`:manual.context)} ; le bouquet comparé est celui de ${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}. Les codes de référentiels différents ne sont pas comparés.</span>${target?`<button type="button" data-req-compat-context-go="${attr(target.key)}">Comparer sur ce périmètre (${fmt(target.operations)} opération${target.operations>1?'s':''})</button>`:'<small>Aucune opération documentée de ce périmètre dans les filtres actuels.</small>'}</div>`;
+        result={mention:manual,status:'not_computable',reason:'Contexte normatif différent du bouquet comparé.',units:[],covered:0,required:0,pct:null};
+      }else{
+        result=analysis.results.find(r=>r.id===manual.id);
+        const dup=ranked.slice(0,2).findIndex(r=>r.id===manual.id);
+        if(dup>=0)extra=`<div class="req-compat-dup" role="note">Même mention que la carte ${dup+1} : comparaison libre affichée à l’identique.</div>`;
+      }
+      thirdHtml=mentionCardHtml(result,3,model,selectHtml+extra);
+    }else thirdHtml=mentionCardHtml(third,3,model,selectHtml);
+    const lessThan3=ranked.length<3?`<p class="req-compat-few" role="note">${ranked.length?`Seulement ${fmt(ranked.length)} mention${ranked.length>1?'s':''} calculable${ranked.length>1?'s':''} de façon fiable dans ce contexte.`:'Aucune mention calculable de façon fiable dans ce contexte.'} Les mentions provisoires ou non calculables sont listées ci-dessous.</p>`:'';
+    const others=(analysis?.results||[]).filter(r=>r.status!=='ok');
+    const othersHtml=others.length?`<details class="req-compat-others"><summary>Mentions non classées dans ce contexte (${fmt(others.length)})</summary><ul>${others.map(r=>`<li><b>${esc(r.name)}</b> · ${esc(r.status==='provisional'?'provisoire':r.status==='not_applicable'?'non applicable':'non calculable')}${r.status==='provisional'&&r.pct!==null?` (${fmt(r.pct,0)} % sur les critères déterminés)`:''} — ${esc(r.reason)}</li>`).join('')}</ul></details>`:'';
+    const legend=`<div class="req-compat-legend" aria-label="Légende"><span class="is-covered"><i aria-hidden="true">✓</i>Présente dans le bouquet comparé</span><span class="is-absent"><i aria-hidden="true">○</i>Absente du bouquet comparé</span><span class="is-unknown"><i aria-hidden="true">?</i>Condition inconnue ou correspondance non résolue</span><span class="is-na"><i aria-hidden="true">—</i>Non applicable</span></div>`;
+    const grid=(source&&source.status==='available')?`<div class="req-compat-grid">${mentionCardHtml(ranked[0]||null,1,model)}${mentionCardHtml(ranked[1]||null,2,model)}${thirdHtml}</div>`:`<div class="req-compat-grid req-compat-grid-single">${thirdHtml}</div>`;
+    return `${head}<article class="obs-card req-compat-card" aria-labelledby="reqCompatTitle"><div class="obs-card-head"><div><span>MENTIONS × BOUQUET D’EXIGENCES</span><h2 id="reqCompatTitle">Couverture des critères par le bouquet</h2></div><div class="req-head-actions">${ctxSelect}</div></div>${meta}${cards}${fieldsHtml}${legend}${lessThan3}${grid}${othersHtml}${bouquetHtml(ctx)}${diagHtml(model)}${disclaimer}</article>`;
+  }
+  function bouquetHtml(ctx){
+    const rows=ctx.top.map((it,i)=>`<tr><td>${i+1}</td><td><b>${esc(it.code)}</b></td><td>${esc(it.label)}</td><td>${fmt(it.operations)}</td><td>${fmt(100*it.frequency,1)} %</td></tr>`).join('');
+    return `<details class="req-compat-bouquet" ${state.compat.openBouquet?'open':''} data-req-compat-toggle="openBouquet"><summary>Consulter le bouquet comparé (${fmt(ctx.top.length)} exigence${ctx.top.length>1?'s':''} · ${fmt(ctx.operations)} opération${ctx.operations>1?'s':''} documentée${ctx.operations>1?'s':''})</summary><p>Fréquence = opérations distinctes ayant sélectionné l’exigence / opérations distinctes disposant de lignes RAPPORT dans ce contexte. Une opération ne compte qu’une fois par exigence, quel que soit le nombre de lignes ou d’évaluations. Une exigence hors de ce Top peut avoir été sélectionnée sur certains projets.</p><div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>#</th><th>Code</th><th>Intitulé</th><th>Opérations</th><th>Fréquence</th></tr></thead><tbody>${rows||'<tr><td colspan="5">Aucune exigence.</td></tr>'}</tbody></table></div></details>`;
+  }
+  function diagHtml(model){
+    const ctx=model.ctx,d=model.bouquets?.diagnostics||{},list=[];
+    (ctx?.unresolved||[]).forEach(u=>list.push(`<tr><td>${esc(u.code||'—')}</td><td>${esc(u.label)}</td><td>${esc(u.reason)}</td><td>${fmt(u.operations)}</td></tr>`));
+    (d.withoutContext||[]).forEach(w=>list.push(`<tr><td>—</td><td>Lignes hors contexte normatif</td><td>${esc(w.reason)}</td><td>${fmt(w.operations)}</td></tr>`));
+    if(d.rowsWithoutOperation)list.push(`<tr><td>—</td><td>Lignes sans code opération</td><td>Impossible de compter une opération distincte : lignes exclues du calcul</td><td>${fmt(d.rowsWithoutOperation)} ligne${d.rowsWithoutOperation>1?'s':''}</td></tr>`);
+    const others=(model.bouquets?.contexts||[]).filter(c=>c.key!==ctx?.key).map(c=>`${c.familyLabel} · ${c.versionLabel} (${fmt(c.operations)})`);
+    return `<details class="req-compat-diag" ${state.compat.openDiag?'open':''} data-req-compat-toggle="openDiag"><summary>Diagnostic : exigences sans correspondance fiable (${fmt(list.length)})</summary>${others.length?`<p>Autres périmètres présents dans les filtres, non mélangés : ${esc(others.join(' · '))}.</p>`:''}${list.length?`<div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Code</th><th>Exigence</th><th>Raison de l’exclusion</th><th>Opérations</th></tr></thead><tbody>${list.join('')}</tbody></table></div>`:'<p>Toutes les exigences du contexte ont une correspondance fiable.</p>'}</details>`;
+  }
+
   function render(){
     const source=sourceCard();
-    if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Connecter le Google Sheet des exigences</h2><p>Cette rubrique repart exclusivement de l’onglet <b>RAPPORT</b>. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger le Code.gs</a></div>${infoModal()}`;
+    if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Connecter le Google Sheet des exigences</h2><p>Cette rubrique repart exclusivement de l’onglet <b>RAPPORT</b>. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger Code_Exigences.gs</a></div>${infoModal()}`;
     const rows=filteredRows(), occ=occurrenceRows(rows), evs=evaluations(rows), refs=uniq(evs.map(r=>r.referential)), years=uniq(evs.map(r=>r.year).filter(Boolean)).sort((a,b)=>a-b), neuf=evs.filter(r=>r.nature==='Neuf').length,reno=evs.filter(r=>r.nature==='Rénovation').length;
     return `${source}${filtersHtml()}<div class="req-page-title"><div><span>ANALYSE DES EXIGENCES</span><h1>${filterValues('profile').length===1?`Profil ${esc(filterValues('profile')[0].replace(/^Profil\s+/i,''))}`:filterValues('profile').length>1?`${filterValues('profile').length} profils sélectionnés`:'Toutes évaluations'}</h1><p>Retraitement dynamique de RAPPORT · filtres par profil, région et département · fiches référentiel 2026 accessibles avec le bouton <b>i</b>.</p></div><div class="req-page-meta">${years.length?`${years[0]}–${years[years.length-1]}`:'—'}<small>${refs.length} référentiel${refs.length>1?'s':''}</small></div></div>
     <div class="obs-grid-kpi req-kpis"><article class="obs-kpi"><span>Dossiers analysés</span><strong>${fmt(evs.length)}</strong><small>évaluations uniques</small></article><article class="obs-kpi"><span>Exigences sélectionnées</span><strong>${fmt(occ.length)}</strong><small>occurrences distinctes</small></article><article class="obs-kpi"><span>Neuf</span><strong>${fmt(neuf)}</strong><small>${fmt(pct(neuf,evs.length),1)} % du panel</small></article><article class="obs-kpi"><span>Rénovation</span><strong>${fmt(reno)}</strong><small>${fmt(pct(reno,evs.length),1)} % du panel</small></article></div>
@@ -363,16 +617,30 @@
     <article class="obs-card req-top-card"><div class="obs-card-head"><div><span>VOLUME GLOBAL</span><h2>Exigences les plus récurrentes</h2></div><div class="req-head-actions"><small>Liste = 15 / page · Tuiles = importance + cible</small>${reqViewToggle('topGlobal',['list','tiles'])}</div></div>${(state.views.topGlobal||'list')==='tiles'?requirementTiles(requirementCounts(rows),rows,occ.length):requirementList(requirementCounts(rows),'topGlobal')}</article>
     <div class="obs-section-title"><div><span>01</span><h2>Management, environnement, sobriété & usages</h2></div><p>Lecture par cible avec comparaison Neuf / Rénovation.</p></div>${themePanels(rows)}
     <div class="obs-section-title"><div><span>02</span><h2>Évolution des exigences</h2></div><p>Les autres filtres restent actifs ; la période est volontairement dépliée par année.</p></div><article class="obs-card"><div class="obs-card-head"><div><span>ÉVOLUTION</span><h2>Exigences par année</h2></div><div class="req-head-actions"><small>Liste = 15 / page · Barres = Top 5</small>${reqViewToggle('evolution')}</div></div>${evolutionTable()}</article>
-    <div class="obs-section-title"><div><span>03</span><h2>Mentions & exigences associées</h2></div><p>Mentions les plus demandées et Top 5 des exigences associées.</p></div>${mentionsSection(rows)}${infoModal()}`;
+    <div class="obs-section-title"><div><span>03</span><h2>Mentions & exigences associées</h2></div><p>Mentions les plus demandées et Top 5 des exigences associées.</p></div>${mentionsSection(rows)}${compatSection()}${infoModal()}`;
   }
 
-  function afterRender(){if(state.url&&!state.connected&&!state.loading&&state.loadedUrl!==state.url)load(state.url);if(state.searchEditing){setTimeout(()=>{const input=document.querySelector('[data-req-search]');if(input){const p=input.value.length;try{input.focus({preventScroll:true});input.setSelectionRange(p,p);}catch{try{input.focus();}catch{}}}state.searchEditing=false;},0);}}
+  function afterRender(){
+    if(state.searchEditing){setTimeout(()=>{const input=document.querySelector('[data-req-search]');if(input){const p=input.value.length;try{input.focus({preventScroll:true});input.setSelectionRange(p,p);}catch{try{input.focus();}catch{}}}state.searchEditing=false;},0);}
+    if(state.focusSelector){const sel=state.focusSelector;state.focusSelector='';const el=document.querySelector(sel);if(el){try{el.focus({preventScroll:true});}catch{}}}
+  }
   function handleClick(e){
     const view=e.target.closest('[data-req-view][data-view]');if(view){const mode=['list','bar','tiles'].includes(view.dataset.view)?view.dataset.view:'list';state.views[view.dataset.reqView]=mode;state.pages[view.dataset.reqView]=1;emit();return true;}
     const pager=e.target.closest('[data-req-page][data-page]');if(pager){state.pages[pager.dataset.reqPage]=Math.max(1,Number(pager.dataset.page)||1);emit();return true;}
     const mentionBtn=e.target.closest('[data-req-mention-focus-button]');if(mentionBtn){state.mentionFocus=mentionBtn.dataset.reqMentionFocusButton||'';emit();return true;}
-    const connect=e.target.closest('[data-req-connect]');if(connect){const input=document.getElementById('reqSourceUrl');load(input?.value||state.url);return true;}
-    if(e.target.closest('[data-req-disconnect]')){disconnect();return true;}
+    const connect=e.target.closest('[data-req-connect]');if(connect){
+      const input=document.getElementById('reqSourceUrl'),keyInput=document.getElementById('reqSourceKey');
+      const typed=String(keyInput?.value||'').trim();if(typed)bridge?.setKey(typed);if(keyInput)keyInput.value='';
+      const split=window.NEWOSB_BRIDGE?window.NEWOSB_BRIDGE.splitUrl(input?.value||state.url):{url:input?.value||state.url,key:''};
+      if(split.key)bridge?.setKey(split.key);const url=split.url;
+      // Fenêtre Google ouverte pendant le clic (sinon bloquée) : elle permet l'autorisation du compte si nécessaire.
+      if(bridge&&bridge.hasKey()&&url)bridge.preparePopup(url);
+      state.focusSelector='[data-req-connect]';load(url);return true;}
+    if(e.target.closest('[data-req-disconnect]')){state.focusSelector='[data-req-connect]';disconnect();return true;}
+    if(e.target.closest('[data-req-forget]')){forgetSource();return true;}
+    if(e.target.closest('[data-req-compat-auto]')){state.compat.manualMention='';state.focusSelector='[data-req-compat-mention]';emit();return true;}
+    const go=e.target.closest('[data-req-compat-context-go]');if(go){state.compat.context=go.dataset.reqCompatContextGo||'';state.focusSelector='[data-req-compat-mention]';emit();return true;}
+    const tg=e.target.closest('details[data-req-compat-toggle]>summary');if(tg){const d=tg.parentElement,k=d.dataset.reqCompatToggle;setTimeout(()=>{if(k in state.compat)state.compat[k]=!!d.open;},0);return false;}
     const info=e.target.closest('[data-req-info]');if(info){state.infoRequirement=dec(info.dataset.reqInfo);state.infoKind='';emit();return true;}
     const kind=e.target.closest('[data-req-info-kind]');if(kind){state.infoKind=kind.dataset.reqInfoKind||'';emit();return true;}
     const close=e.target.closest('[data-req-info-close]');if(close&&!e.target.closest('[data-req-info-panel]')){state.infoRequirement='';state.infoKind='';emit();return true;}
@@ -380,15 +648,19 @@
     const req=e.target.closest('[data-req-requirement]');if(req){const v=dec(req.dataset.reqRequirement);state.requirement=norm(state.requirement)===norm(v)?'':v;emit();return true;}
     if(e.target.closest('[data-req-clear-requirement]')){state.requirement='';emit();return true;}
     const clear=e.target.closest('[data-req-filter-clear]');if(clear){state.openFilter=clear.dataset.reqFilterClear;state.filters[clear.dataset.reqFilterClear]=[];if(clear.dataset.reqFilterClear==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
-    const all=e.target.closest('[data-req-filter-all]');if(all){const key=all.dataset.reqFilterAll;state.openFilter=key;const visible=[...document.querySelectorAll(`[data-req-filter-check="${key}"]`)].filter(i=>!i.closest('[data-req-filter-option]')?.hidden).map(i=>i.value);state.filters[key]=uniq([...filterValues(key),...visible]);if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
+    const all=e.target.closest('[data-req-filter-all]');if(all){const key=all.dataset.reqFilterAll;state.openFilter=key;const visible=[...document.querySelectorAll(`[data-req-filter-check="${key}"]`)].filter(i=>!i.closest('[data-req-filter-option]')?.hidden).map(i=>filterIn(key,i.value));state.filters[key]=uniq([...filterValues(key),...visible]);if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}
     if(e.target.closest('[data-req-reset-filters]')){Object.keys(state.filters).forEach(k=>state.filters[k]=[]);state.filterSearch={};state.openFilter='';emit();return true;}
     const filterSearch=e.target.closest('[data-req-filter-search]');if(filterSearch){e.stopPropagation();try{filterSearch.focus({preventScroll:true});}catch{filterSearch.focus();}return true;}
     const summary=e.target.closest('.req-check-filter>summary');if(summary){const details=summary.parentElement;setTimeout(()=>{if(details?.open){const input=details.querySelector('[data-req-filter-search]');try{input?.focus({preventScroll:true});}catch{input?.focus();}}},0);}
     return false;
   }
   function handleChange(e){
-    const f=e.target.closest('[data-req-filter-check]');if(f){const key=f.dataset.reqFilterCheck,value=f.value||'';state.openFilter=key;const values=filterValues(key).filter(v=>norm(v)!==norm(value));if(f.checked)values.push(value);state.filters[key]=values;if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}if(key==='mention'&&f.checked)state.mentionFocus=value;emit();return true;}
+    const f=e.target.closest('[data-req-filter-check]');if(f){const key=f.dataset.reqFilterCheck,value=filterIn(f.dataset.reqFilterCheck,f.value||'');state.openFilter=key;const values=filterValues(key).filter(v=>norm(v)!==norm(value));if(f.checked)values.push(value);state.filters[key]=values;if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}if(key==='mention'&&f.checked)state.mentionFocus=value;emit();return true;}
     const mf=e.target.closest('[data-req-mention-focus]');if(mf){state.mentionFocus=mf.value||'';emit();return true;}
+    // Encart compatibilité : ces choix ne modifient ni les filtres généraux ni les deux premières cartes.
+    const cm=e.target.closest('[data-req-compat-mention]');if(cm){state.compat.manualMention=cm.value||'';state.focusSelector='[data-req-compat-mention]';emit();return true;}
+    const cc=e.target.closest('[data-req-compat-context]');if(cc){state.compat.context=cc.value||'';state.focusSelector='[data-req-compat-context]';emit();return true;}
+    const cf=e.target.closest('[data-req-compat-field]');if(cf){const ctxKey=compatModel().ctx?.key||'';const f=cf.dataset.reqCompatField;state.compat.values[ctxKey]={...(state.compat.values[ctxKey]||{}),[f]:cf.value||''};state.compat.openFields=true;state.focusSelector=`[data-req-compat-field="${typeof CSS!=="undefined"&&CSS.escape?CSS.escape(f):f}"]`;emit();return true;}
     return false;
   }
   function applyRequirementFilterSearch(fs){
@@ -399,9 +671,14 @@
     const fs=e.target.closest('[data-req-filter-search]');if(fs)return applyRequirementFilterSearch(fs);
     const s=e.target.closest('[data-req-search]');if(s){state.search=s.value||'';state.searchEditing=true;emit();return true;}return false;
   }
-  function handleKeyup(e){const fs=e.target.closest('[data-req-filter-search]');return fs?applyRequirementFilterSearch(fs):false;}
-  function status(){return {connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,loadedAt:state.loadedAt};}
+  function handleKeyup(e){
+    if(e.key==='Enter'&&e.target.matches?.('#reqSourceKey,#reqSourceUrl')){document.querySelector('[data-req-connect]')?.click();return true;}
+    const fs=e.target.closest('[data-req-filter-search]');return fs?applyRequirementFilterSearch(fs):false;}
+  function status(){return {connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,errorKind:state.errorKind,loadedAt:state.loadedAt,hasKey:!!bridge?.hasKey?.()};}
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
   window.addEventListener('newosb:privacychange',emit);
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,status,auditInfo};
+  // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,disconnect,status,auditInfo,getOperationRequirements,
+    // Accès de test / diagnostic, sans exposer l'état mutable.
+    _compatSnapshot(){const m=compatModel();return m.error?{error:m.error}:{context:m.ctx?.key||'',contexts:m.bouquets.contexts.map(c=>({key:c.key,operations:c.operations,top:c.top.map(i=>({code:i.code,operations:i.operations,frequency:i.frequency}))})),ranked:(m.analysis?.ranked||[]).map(r=>({id:r.id,pct:r.pct,covered:r.covered,required:r.required})),results:(m.analysis?.results||[]).map(r=>({id:r.id,status:r.status,pct:r.pct,covered:r.covered,required:r.required})),manual:state.compat.manualMention};}};
 })();

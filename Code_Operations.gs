@@ -1,13 +1,24 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.13 (script OPERATIONS, version API 06.13)
+ * PRESTATERRE OBSERVATOIRE - V6.14 (script OPERATIONS, version API 06.14)
  *
- * Securite V6.13 (proprietes du script : Parametres du projet > Proprietes du script) :
- * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a recevoir les donnees par le pont,
- *   separees par des virgules, ex. https://prestaterre.github.io  (OBLIGATOIRE pour le pont)
- * - NEWOSB_ACCESS_KEY      : cle d'acces optionnelle ; si renseignee, l'URL doit finir par ?key=LA_CLE
+ * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
+ * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
+ *   separees par des virgules, ex. https://prestaterre.github.io  (OBLIGATOIRE)
+ * - NEWOSB_ACCESS_KEY      : cle d'acces (OBLIGATOIRE, 16 caracteres minimum). Elle est saisie dans
+ *   l'Observatoire, gardee en memoire du navigateur et transmise uniquement par le pont ; elle n'est
+ *   jamais placee dans une URL. Sans cle configuree, le script refuse toute lecture.
+ *   Changer la valeur revoque immediatement l'ancienne cle pour toutes les nouvelles requetes.
  * - NEWOSB_ANONYMIZED_ONLY : 1 pour un deploiement qui ne renvoie que des donnees pseudonymisees
  * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
- * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration.
+ * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration
+ * (genererCleAccesObservatoire() peut creer une cle aleatoire, lisible ensuite dans les proprietes).
+ *
+ * Changements V6.14 :
+ * - plus aucune donnee du classeur par GET direct, JSON ou JSONP : seul un ping minimal est public ;
+ * - chaque requete du pont (google.script.run) verifie la cle cote serveur avant toute lecture ;
+ * - le pont ne parle qu'a une seule fenetre, d'une origine autorisee, avec le jeton de session ;
+ *   aucun message n'est envoye vers « * » ;
+ * - les fonctions Google Slides, zonage et communes sont conservees.
  *
  * Historique NEWOSB V05.22
  * Source OPERATIONS robuste pour Google Apps Script.
@@ -26,7 +37,8 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.13',
+  VERSION: '06.14',
+  MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
   ANONYMIZED_PROPERTY: 'NEWOSB_ANONYMIZED_ONLY',
@@ -43,35 +55,44 @@ function doGet(e) {
   const request = e || { parameter: {} };
   const params = request.parameter || {};
 
-  const access = newosbCheckAccess_(params);
-  if (!access.ok) {
-    if (String(params.bridge || '') === '1') return buildBridgeErrorHtml_(access.error);
-    return outputPayload_({ ok: false, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: access.error }, request);
+  // Page du pont : elle ne contient aucune donnee ; chaque lecture passe ensuite par newosbBridgeRequest (cle verifiee).
+  if (String(params.bridge || '') === '1') return buildBridgeHtml_(params);
+
+  const mode = String(params.mode || '').toLowerCase();
+  const endpoint = String(params.endpoint || '').toLowerCase();
+
+  // Proxys de donnees publiques (zonage 1/2/3, communes) : aucune donnee du classeur.
+  if (endpoint === 'zone123' || endpoint === 'communes') {
+    try { return jsonOutput_(endpoint === 'zone123' ? handleZone123Proxy_() : handleCommunesProxy_(params)); }
+    catch (error) { return jsonOutput_({ ok: false, error: String(error && error.message ? error.message : error) }); }
   }
 
-  if (String(params.bridge || '') === '1') {
-    return buildBridgeHtml_(params);
-  }
+  // Ping public minimal : aucune donnee metier, aucun en-tete, aucun volume.
+  if (mode === 'ping') return jsonOutput_({ ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, protected: true });
 
-  try {
-    return outputPayload_(newosbApiRequest_(params), request);
-  } catch (error) {
-    return outputPayload_({
-      ok: false,
-      service: 'NEWOSB OPERATIONS',
-      version: OBSERVATOIRE_CONFIG.VERSION,
-      error: String(error && error.message ? error.message : error)
-    }, request);
-  }
+  return jsonOutput_({
+    ok: false,
+    service: 'NEWOSB OPERATIONS',
+    version: OBSERVATOIRE_CONFIG.VERSION,
+    protected: true,
+    error: "Lecture directe desactivee : les donnees ne sont transmises qu'a l'Observatoire, par le pont securise et avec la cle d'acces."
+  });
 }
 
 /**
  * Fonction appelee par google.script.run depuis le pont HtmlService.
- * Elle renvoie directement un objet JS, sans ContentService ni redirection JSON.
+ * La cle d'acces est verifiee ici, cote serveur, avant toute lecture du classeur.
  */
 function newosbBridgeRequest(params) {
   try {
-    return newosbApiRequest_(params || {});
+    const input = params || {};
+    const access = newosbCheckAccess_(input);
+    if (!access.ok) {
+      return { ok: false, authError: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: access.error };
+    }
+    const clean = {};
+    Object.keys(input).forEach(function(k) { if (k !== 'key') clean[k] = input[k]; });
+    return newosbApiRequest_(clean);
   } catch (error) {
     return {
       ok: false,
@@ -203,55 +224,60 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
 .brand{font-size:12px;font-weight:800;letter-spacing:.11em;color:#0b6b4a;text-transform:uppercase}.title{font-size:22px;font-weight:800;margin:8px 0 10px}.status{font-size:14px;line-height:1.5;color:#52666b}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#0b8f61;margin-right:8px;box-shadow:0 0 0 5px rgba(11,143,97,.1)}
 .small{margin-top:18px;font-size:12px;color:#7a8a8d}
 </style></head>
-<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.13</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
+<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.14</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
 <script>
 (function(){
   var TOKEN = '${token}';
   var ALLOWED = ${allowedJson};
+  var PEER = null, PEER_ORIGIN = '';
   var statusEl = document.getElementById('status');
   function setStatus(text){ if(statusEl) statusEl.textContent = text; }
+  // Envoi toujours cible sur une origine precise, jamais vers « * ».
   function send(target, payload, origin){ try { if(target && target !== window && origin) target.postMessage(payload, origin); } catch(e) {} }
   function ready(target){ for (var i = 0; i < ALLOWED.length; i++) send(target, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}, ALLOWED[i]); }
   function broadcastReady(){
+    if (PEER) return;
     try { ready(window.opener); } catch(e) {}
     try { ready(window.parent && window.parent.opener); } catch(e) {}
     try { ready(window.top && window.top.opener); } catch(e) {}
+    try { if (window.top !== window) ready(window.top); } catch(e) {}
     try { ready(parent); } catch(e) {}
   }
   window.addEventListener('message', function(event){
     var msg = event.data || {};
-    if (TOKEN && msg.token !== TOKEN) return;
+    if (!TOKEN || !msg || msg.token !== TOKEN) return;
     if (ALLOWED.indexOf(event.origin) < 0) {
-      // Reponse sans donnees, uniquement pour expliquer le refus.
-      if (msg.type === 'NEWOSB_BRIDGE_REQUEST' && msg.id) {
-        var refusal = ALLOWED.length ? 'Site non autorise par le script : ' + event.origin + '. Ajoute cette adresse dans la propriete NEWOSB_ALLOWED_ORIGINS.' : 'Propriete NEWOSB_ALLOWED_ORIGINS non configuree dans Apps Script : le pont refuse de transmettre les donnees.';
-        setStatus(refusal);
-        try { event.source.postMessage({type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:refusal, token:TOKEN}, '*'); } catch(e) {}
-      } else if (msg.type === 'NEWOSB_BRIDGE_HELLO') {
-        try { event.source.postMessage({type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN, refused:true}, '*'); } catch(e) {}
-      }
+      // Reponse sans donnees, uniquement pour expliquer le refus, adressee a l'origine qui a ecrit.
+      var refusal = ALLOWED.length ? 'Site non autorise par le script : ' + event.origin + '. Ajoute cette adresse dans la propriete NEWOSB_ALLOWED_ORIGINS.' : 'Propriete NEWOSB_ALLOWED_ORIGINS non configuree dans Apps Script : le pont refuse de transmettre les donnees.';
+      setStatus(refusal);
+      if (msg.type === 'NEWOSB_BRIDGE_REQUEST' && msg.id) send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:refusal, token:TOKEN}, event.origin);
+      else if (msg.type === 'NEWOSB_BRIDGE_HELLO') send(event.source, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN, refused:true, error:refusal}, event.origin);
       return;
     }
-    if (msg.type === 'NEWOSB_BRIDGE_HELLO') { send(event.source, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}, event.origin); return; }
+    // Une seule fenetre interlocutrice par pont : la premiere fenetre autorisee qui se presente.
+    if (!PEER) { PEER = event.source; PEER_ORIGIN = event.origin; }
+    if (event.source !== PEER || event.origin !== PEER_ORIGIN) return;
+    if (msg.type === 'NEWOSB_BRIDGE_HELLO') { send(PEER, {type:'NEWOSB_BRIDGE_READY', version:'${OBSERVATOIRE_CONFIG.VERSION}', token:TOKEN}, PEER_ORIGIN); return; }
     if (msg.type === 'NEWOSB_BRIDGE_CLOSE') { try { window.close(); } catch(e) {} return; }
     if (msg.type !== 'NEWOSB_BRIDGE_REQUEST' || !msg.id) return;
-    var mode = String((msg.params||{}).mode || (msg.params||{}).endpoint || 'requete');
+    var params = msg.params || {};
+    var mode = String(params.mode || params.endpoint || 'requete');
     setStatus('Lecture ' + mode + ' en cours...');
     google.script.run
       .withSuccessHandler(function(payload){
-        setStatus(mode === 'chunk' ? 'Bloc recu. Chargement suivant...' : 'Connexion etablie.');
-        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, payload:payload, token:TOKEN}, event.origin);
+        setStatus(payload && payload.authError ? 'Acces refuse par le script.' : (mode === 'chunk' ? 'Bloc recu. Chargement suivant...' : 'Connexion etablie.'));
+        send(PEER, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, payload:payload, token:TOKEN}, PEER_ORIGIN);
       })
       .withFailureHandler(function(error){
         var text = String(error && error.message ? error.message : error);
         setStatus('Erreur : ' + text);
-        send(event.source, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:text, token:TOKEN}, event.origin);
+        send(PEER, {type:'NEWOSB_BRIDGE_RESPONSE', id:msg.id, error:text, token:TOKEN}, PEER_ORIGIN);
       })
-      .newosbBridgeRequest(msg.params || {});
+      .newosbBridgeRequest(params);
   });
   broadcastReady();
   var ticks = 0;
-  var timer = setInterval(function(){ ticks += 1; broadcastReady(); if(ticks > 240) clearInterval(timer); }, 500);
+  var timer = setInterval(function(){ ticks += 1; broadcastReady(); if(ticks > 240 || PEER) clearInterval(timer); }, 500);
 })();
 </script></body></html>`;
   return HtmlService
@@ -260,13 +286,8 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
-function outputPayload_(payload, request) {
-  const prefix = String(request && request.parameter && request.parameter.prefix || '').trim();
-  if (prefix && /^[A-Za-z_$][A-Za-z0-9_$\.]*$/.test(prefix)) {
-    return ContentService
-      .createTextOutput(prefix + '(' + JSON.stringify(payload) + ');')
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
+// V6.14 : plus de JSONP (aucun parametre « prefix ») ; JSON uniquement, sans donnee du classeur hors pont.
+function jsonOutput_(payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
@@ -294,11 +315,23 @@ function newosbSafeEqual_(a, b) {
   return diff === 0;
 }
 
+// V6.14 : cle OBLIGATOIRE et verifiee a chaque requete. Jamais journalisee.
 function newosbCheckAccess_(params) {
   const expected = newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY);
-  if (!expected) return { ok: true };
+  if (!expected) return { ok: false, error: "Propriete NEWOSB_ACCESS_KEY non configuree dans Apps Script : le script refuse toute lecture." };
+  if (expected.length < OBSERVATOIRE_CONFIG.MIN_KEY_LENGTH) return { ok: false, error: 'Propriete NEWOSB_ACCESS_KEY trop courte (' + OBSERVATOIRE_CONFIG.MIN_KEY_LENGTH + ' caracteres minimum) : le script refuse toute lecture.' };
+  if (newosbTooManyFailures_()) return { ok: false, error: "Trop de tentatives avec une cle invalide : reessaie dans quelques minutes." };
   if (newosbSafeEqual_(params && params.key, expected)) return { ok: true };
-  return { ok: false, error: "Cle d'acces absente ou invalide : l'URL de la source doit se terminer par ?key=... (propriete NEWOSB_ACCESS_KEY)." };
+  newosbRecordFailure_();
+  return { ok: false, error: "Cle d'acces absente ou invalide." };
+}
+
+// Limitation simple des essais de cle (10 minutes, 30 echecs), sans conserver aucune valeur saisie.
+function newosbTooManyFailures_() {
+  try { return Number(CacheService.getScriptCache().get('newosb_key_failures') || 0) >= 30; } catch (e) { return false; }
+}
+function newosbRecordFailure_() {
+  try { const c = CacheService.getScriptCache(); const n = Number(c.get('newosb_key_failures') || 0) + 1; c.put('newosb_key_failures', String(n), 600); } catch (e) {}
 }
 
 function newosbAnonymizedOnly_() {
@@ -358,12 +391,37 @@ function buildBridgeErrorHtml_(message) {
  */
 function configurerSecuriteObservatoire() {
   const origins = newosbAllowedOrigins_();
+  const key = newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY);
   Logger.log('Version : ' + OBSERVATOIRE_CONFIG.VERSION);
   Logger.log('Sites autorises (NEWOSB_ALLOWED_ORIGINS) : ' + (origins.length ? origins.join(', ') : 'AUCUN - le pont refusera de transmettre les donnees'));
-  Logger.log('Cle d acces (NEWOSB_ACCESS_KEY) : ' + (newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY) ? 'configuree' : 'non configuree (acces gere uniquement par le deploiement)'));
+  // La valeur de la cle n'est jamais ecrite dans le journal.
+  Logger.log('Cle d acces (NEWOSB_ACCESS_KEY) : ' + (!key ? 'NON CONFIGUREE - toute lecture est refusee' : (key.length < OBSERVATOIRE_CONFIG.MIN_KEY_LENGTH ? 'TROP COURTE - toute lecture est refusee' : 'configuree (' + key.length + ' caracteres)')));
   Logger.log('Mode anonymise (NEWOSB_ANONYMIZED_ONLY) : ' + (newosbAnonymizedOnly_() ? 'ACTIF' : 'inactif'));
   if (newosbAnonymizedOnly_()) newosbPseudoSecret_();
-  return { origins: origins, accessKey: !!newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY), anonymizedOnly: newosbAnonymizedOnly_() };
+  return { origins: origins, accessKey: !!key && key.length >= OBSERVATOIRE_CONFIG.MIN_KEY_LENGTH, anonymizedOnly: newosbAnonymizedOnly_() };
+}
+
+/**
+ * Cree la cle d'acces (si aucune n'existe) avec une valeur aleatoire de 40 caracteres.
+ * La valeur n'est pas journalisee : la lire dans Parametres du projet > Proprietes du script.
+ * Remplacer ensuite la valeur dans les proprietes revoque l'ancienne cle pour toutes les nouvelles requetes.
+ */
+function genererCleAccesObservatoire() {
+  // Les fonctions publiques d'un projet Apps Script sont appelables par google.script.run :
+  // pour qu'un tiers ne puisse pas remplacer une cle existante, cette fonction ne cree une cle que si aucune n'existe.
+  // Pour changer (revoquer) une cle, modifie directement la propriete NEWOSB_ACCESS_KEY.
+  if (newosbProp_(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY)) {
+    Logger.log('Une cle existe deja : modifie-la directement dans Parametres du projet > Proprietes du script pour la changer.');
+    return { ok: false, exists: true };
+  }
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  let out = '';
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now());
+  const more = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random());
+  bytes.concat(more).slice(0, 40).forEach(function(b) { out += alphabet.charAt(((b % 256) + 256) % alphabet.length); });
+  PropertiesService.getScriptProperties().setProperty(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY, out);
+  Logger.log('Nouvelle cle enregistree dans la propriete NEWOSB_ACCESS_KEY (40 caracteres). Consulte-la dans Parametres du projet > Proprietes du script.');
+  return { ok: true, length: out.length };
 }
 
 function getSpreadsheet_() {

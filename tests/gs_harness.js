@@ -3,8 +3,9 @@
 // sur une feuille OPERATIONS fictive (ligne 1 titre, ligne 2 en-têtes, données dès la ligne 4).
 const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = require('crypto');
 
-function loadGs(file, { matrix, properties = {} }) {
+function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache = true }) {
   const props = { ...properties };
+  const cacheStore = {};
   const sheet = {
     getLastRow: () => matrix.length,
     getLastColumn: () => Math.max(...matrix.map(r => r.length)),
@@ -13,7 +14,7 @@ function loadGs(file, { matrix, properties = {} }) {
       getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (matrix[r - 1 + i] || [])[c - 1 + j] ?? ''))
     })
   };
-  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => (n === 'OPERATIONS' ? sheet : null) };
+  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => (n === sheetName ? sheet : null), getSpreadsheetTimeZone: () => 'Europe/Paris' };
   const ctx = {
     console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
@@ -23,13 +24,24 @@ function loadGs(file, { matrix, properties = {} }) {
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       computeHmacSha256Signature: (v, k) => Array.from(crypto.createHmac('sha256', k).update(v).digest()).map(b => (b > 127 ? b - 256 : b)),
-      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: () => ({})
+      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: (bytes, type, name) => ({ bytes: bytes && bytes.length, type, name }),
+      DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (a, v) => Array.from(crypto.createHash('sha256').update(String(v)).digest()).map(b => (b > 127 ? b - 256 : b))
     },
-    Logger: { log: () => {} }
+    Logger: { log: (...a) => { logs.push(a.join(' ')); } },
+    Session: { getScriptTimeZone: () => 'Europe/Paris' }
   };
+  const logs = [];
+  // Doublure minimale de SlidesApp : enregistre les images insérées (rendu fidèle des slides).
+  const slidesLog = { presentations: [] };
+  const mkSlide = () => ({ images: [], getPageElements: () => [], insertImage(blob) { this.images.push(blob); return {}; }, insertShape: () => ({ getFill: () => ({ setSolidFill() {} }), getBorder: () => ({ setTransparent() {} }) }), insertTextBox: () => ({ getText: () => ({ getTextStyle: () => ({ setFontSize() { return this; }, setBold() { return this; }, setForegroundColor() { return this; }, setFontFamily() { return this; } }), getParagraphStyle: () => ({ setParagraphAlignment() {} }) }), setContentAlignment() {} }) });
+  ctx.SlidesApp = { ShapeType: { RECTANGLE: 'R', ROUND_RECTANGLE: 'RR' }, PredefinedLayout: { BLANK: 'B' }, ParagraphAlignment: {}, ContentAlignment: {},
+    create(title) { const slides = [mkSlide()]; const pres = { title, slides, getSlides: () => slides, appendSlide() { const sl = mkSlide(); slides.push(sl); return sl; }, getId: () => 'PRES' + slidesLog.presentations.length, getUrl: () => 'https://docs.google.com/presentation/d/PRES' + slidesLog.presentations.length + '/edit' }; slidesLog.presentations.push(pres); return pres; } };
+  if (cache) ctx.CacheService = { getScriptCache: () => ({ get: k => (k in cacheStore ? cacheStore[k] : null), put: (k, v) => { cacheStore[k] = String(v); } }) };
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\n;this.__exports={doGet,newosbApiRequest_,newosbBridgeRequest,buildBridgeHtml_,newosbScrubMatrix_,newosbColumnRule_,newosbAllowedOrigins_,configurerSecuriteObservatoire};', ctx);
-  return { ...ctx.__exports, props };
+  const names = ['doGet', 'newosbApiRequest_', 'newosbBridgeRequest', 'buildBridgeHtml_', 'newosbScrubMatrix_', 'newosbColumnRule_', 'newosbAllowedOrigins_', 'configurerSecuriteObservatoire', 'genererCleAccesObservatoire',
+    'newosbExigencesBridgeRequest', 'newosbExigencesBridgeHtml_', 'configurerSecuriteExigences', 'genererCleAccesExigences'];
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\n;this.__exports={' + names.map(n => `${n}:typeof ${n}==='function'?${n}:undefined`).join(',') + '};', ctx);
+  return { ...ctx.__exports, props, logs, slidesLog };
 }
 
 // Jeu de données de référence partagé par les tests.
@@ -87,4 +99,12 @@ ROWS.forEach((r, i) => {
 const MATRIX = [['OBSERVATOIRE'], HEADERS, [], ...ROWS];
 const asObjects = (headers, rows) => rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 
-module.exports = { loadGs, HEADERS, ROWS, MATRIX, asObjects };
+// Onglet RAPPORT fictif (source Exigences) : ligne 1 en-têtes, données dès la ligne 2.
+// Ordre des colonnes volontairement mélangé : il ne doit pas avoir d'importance.
+const RAPPORT_HEADERS = ['Exigence associée: Nom', 'Évaluation: Code interne', "Évaluation: Opération: Maître d'ouvrage: Nom de la société", 'Évaluation: Opération: Code interne',
+  'Évaluation: Opération: Référentiel: Nom du référentiel', 'Évaluation: Opération: Version du référentiel applicable: Version', 'Évaluation: Opération: Région', 'Évaluation: Opération: Département',
+  "Code d'exigence", 'Exigence validée', 'Évaluation: Statut', 'Évaluation: Opération: Mentions'];
+const LN = ['BEE Logement Neuf', '04/05/2026'], LR = ['BEE Logement Rénovation', '18/06/2025'];
+const RAPPORT_ROWS = [];
+const addR = (op, ev, moa, [ref, ver], codes, extra = {}) => codes.forEach(c => RAPPORT_ROWS.push([`${c} - Exigence ${c}`, ev, moa, op, ref, ver, extra.region || 'Nouvelle-Aquitaine', extra.dep || '33', c, extra.validated || '', extra.status || 'En cours', extra.mentions || '']));
+module.exports = { loadGs, HEADERS, ROWS, MATRIX, asObjects, RAPPORT_HEADERS, RAPPORT_ROWS, addR, LN, LR };
