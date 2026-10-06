@@ -207,6 +207,17 @@ test('versions : contexte = famille + date ; versions différentes jamais fusion
   assert.notStrictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: '01/02/2023' }).key, LN_CTX);
   assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: '18-06-2025' }).key, LR_CTX);
 });
+test('versions : formats de date variés reconnus (Sheets, ISO, 2 chiffres, en lettres, numéro de série)', () => {
+  for (const v of ['04/05/2026', '4/5/26', '04.05.2026', '2026-05-04T00:00:00', '4 mai 2026', 'Version du 04/05/2026', '46146']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: v }, CAT).key, LN_CTX, v);
+});
+test('famille reconnue avec ou sans « BEE » ; autres référentiels écartés', () => { assert.strictEqual(MEN.referentialFamily('Logement Neuf'), 'BEE_LN'); assert.strictEqual(MEN.referentialFamily('Logement - Rénovation'), 'BEE_LR'); assert.strictEqual(MEN.referentialFamily('NF Habitat Neuf'), ''); });
+test('version sans date complète : rattachée seulement si une seule version du catalogue correspond, et signalée', () => {
+  const y = MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: 'V2026' }, CAT); assert.strictEqual(y.key, LN_CTX); assert.strictEqual(y.match, 'year');
+  const m = MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: 'juin 2025' }, CAT); assert.strictEqual(m.key, LR_CTX); assert.strictEqual(m.match, 'month');
+  assert.notStrictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: '2024' }, CAT).key, LN_CTX);
+  assert(/non datée/.test(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: 'V5' }, CAT).reason));
+});
+test('diagnostic : valeurs brutes de référentiel et de version listées avec leur rattachement', () => { const b = MEN.buildBouquets([mkRow('A', '1.1.1'), mkRow('B', '1.1.1', ['BEE Logement Neuf', 'V5'])], CAT); const v = b.diagnostics.versions; assert.strictEqual(v.length, 2); assert(v.some(x => x.covered && x.version === '04/05/2026')); assert(v.some(x => !x.covered && /non datée/.test(x.reason))); });
 test('codes : Tertiaire / anciennes numérotations acceptés, pas seulement 1 à 4', () => { assert.strictEqual(MEN.codeFrom('4.B.2 - x'), '4.B.2'); assert.strictEqual(MEN.codeFrom('5.1.2 Exploitation'), '5.1.2'); assert.strictEqual(MEN.codeFrom('E1.2.3 - Suivi'), 'E1.2.3'); assert.strictEqual(MEN.codeFrom('4.10.2 - Localisation'), '4.10.2'); });
 test('codes contradictoires sur une ligne → non résolu', () => assert.strictEqual(MEN.canonicalCode({ requirementCode: '1.1.1', requirement: '1.1.2 - Diagnostic' }).code, ''));
 test('même numéro, référentiels différents : identités distinctes', () => { const a = MEN.resolveRequirement({ referential: 'BEE Logement Neuf', referentialVersion: '04/05/2026', requirementCode: '1.1.7' }, CAT); const b = MEN.resolveRequirement({ referential: 'BEE Logement Rénovation', referentialVersion: '18/06/2025', requirementCode: '1.1.7' }, CAT); assert.notStrictEqual(a.key, b.key); assert.notStrictEqual(a.label, b.label); });
@@ -384,7 +395,7 @@ atest('encart : moins de trois mentions calculables → résultats disponibles +
   assert(html.includes('Présente dans le bouquet comparé') && html.includes('Absente du bouquet comparé'));
   assert(html.includes('Compatibilité des sélections ; l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils applicables.'));
   assert(!/jamais sélectionnée/i.test(html)); assert(/Aucun résultat calculable|Seulement \d+ mention|Aucune mention calculable/.test(html) || (html.match(/req-compat-score">/g) || []).length >= 3);
-  assert(html.includes('Diagnostic : exigences sans correspondance fiable') && html.includes('9.9.9'));
+  assert(html.includes('Diagnostic : versions lues et exigences sans correspondance fiable') && html.includes('9.9.9'));
 });
 atest('échappement HTML des contenus du Sheet (MOA, intitulés)', async () => {
   const rows = R1.slice(); rows.push(['<img src=x onerror=alert(1)> - piège', 'EVA-H', '<script>alert(1)</script>', 'OP-<i>X</i>', 'BEE Logement Neuf', '04/05/2026', 'Bretagne', '35', '1.1.1', '', 'En cours', '']);

@@ -1,5 +1,14 @@
 # Historique
 
+## V6.14.1
+
+**Compatibilité des mentions : rattachement des lignes RAPPORT aux versions des référentiels**
+- La version est lue dans plus de formats : 04/05/2026, 4/5/26, 04.05.2026, 2026-05-04, « 4 mai 2026 », numéro de série Google Sheets, date contenue dans un texte (« Version du 04/05/2026 »), puis colonne « Version du ref ( date ) ».
+- Si RAPPORT ne porte que le mois et l’année (« mai 2026 ») ou l’année (« 2026 », « V2026 »), la ligne est rattachée à la version du catalogue **seulement si une seule version de ce référentiel correspond** ; l’encart le signale.
+- La famille de référentiel est reconnue avec ou sans le mot « BEE » (« Logement Neuf », « Logement Rénovation »).
+- Périmètre affiché par défaut : le plus documenté **parmi ceux dont les règles sont disponibles** (auparavant le plus documenté, même sans règles, d’où « Version non couverte »).
+- Diagnostic : tableau des valeurs « Référentiel » et « Version » réellement lues dans RAPPORT, avec le nombre d’opérations et le rattachement obtenu (ou la raison du refus).
+
 ## V6.14
 
 **Exigences dans la fiche opération**

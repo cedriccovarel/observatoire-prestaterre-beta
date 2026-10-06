@@ -33,34 +33,67 @@
   }
 
   // ---------------------------------------------------------------- contexte normatif
+  // V6.14.1 : la famille est reconnue par les mots du nom (avec ou sans « BEE »), comme dans le reste de l'onglet Exigences.
   function referentialFamily(name) {
-    const n = norm(name);
-    if (!n || !/\bbee\b/.test(n)) return '';
-    if (/tertiaire/.test(n)) {
+    const n = norm(name).replace(/[^a-z0-9+ ]+/g, ' ');
+    if (!n) return '';
+    if (/\b(nf habitat|hqe|breeam|leed|cerqual|cerway)\b/.test(n)) return '';
+    if (/tertiaire|bureau/.test(n)) {
       if (/exploitation/.test(n)) return 'BEE_TE';
       if (/neuf/.test(n)) return 'BEE_TN';
       return '';
     }
-    if (/renovation/.test(n)) return 'BEE_LR';
+    if (/renovation|\breno\b/.test(n)) return 'BEE_LR';
     if (/neuf/.test(n)) return 'BEE_LN';
     return '';
   }
+  const MONTHS = { janvier: 1, janv: 1, fevrier: 2, fevr: 2, fev: 2, mars: 3, avril: 4, avr: 4, mai: 5, juin: 6, juillet: 7, juil: 7, aout: 8, septembre: 9, sept: 9, octobre: 10, oct: 10, novembre: 11, nov: 11, decembre: 12, dec: 12 };
+  const pad = n => String(n).padStart(2, '0');
+  const validYmd = (y, m, d) => { const dt = new Date(Date.UTC(y, m - 1, d)); return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d; };
+  // Date complète d'une version : 04/05/2026, 4-5-2026, 04.05.26, 2026-05-04(T…), 4 mai 2026, numéro de série Google Sheets.
   function parseVersionDate(text) {
-    const s = String(text ?? '').trim();
-    if (!s) return '';
-    let m = s.match(/\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](20\d{2})\b/);
-    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-    m = s.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
-    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const raw = String(text ?? '').trim();
+    if (!raw) return '';
+    const s = strip(raw).toLowerCase();
+    let m = s.match(/(?<!\d)(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4}|\d{2})(?!\d)/);
+    if (m) { const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]); if (validYmd(y, +m[2], +m[1])) return `${y}-${pad(m[2])}-${pad(m[1])}`; }
+    m = s.match(/(?<!\d)(20\d{2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{1,2})(?!\d)/);
+    if (m && validYmd(+m[1], +m[2], +m[3])) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+    m = s.match(/\b(\d{1,2})(?:er)?\s+([a-z]+)\.?\s+(20\d{2})\b/);
+    if (m && MONTHS[m[2]] && validYmd(+m[3], MONTHS[m[2]], +m[1])) return `${m[3]}-${pad(MONTHS[m[2]])}-${pad(m[1])}`;
+    if (/^\d{5}(\.\d+)?$/.test(raw)) { const n = Math.floor(Number(raw)); if (n > 36500 && n < 60000) { const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000); return d.toISOString().slice(0, 10); } }
     return '';
   }
-  function rowContext(row) {
+  // Mois et année seuls (« mai 2026 », « 05/2026 ») ou année seule (« 2026 », « V2026 »).
+  function parsePartialVersion(text) {
+    const s = strip(String(text ?? '')).toLowerCase();
+    let m = s.match(/\b([a-z]+)\.?\s+(20\d{2})\b/);
+    if (m && MONTHS[m[1]]) return { year: +m[2], month: MONTHS[m[1]] };
+    m = s.match(/(?:^|[^\d\/.\-])(\d{1,2})\s*[\/.\-]\s*(20\d{2})(?![\/.\-]?\d)/);
+    if (m && +m[1] >= 1 && +m[1] <= 12) return { year: +m[2], month: +m[1] };
+    m = s.match(/(?:^|\D)(20\d{2})(?!\d)/);
+    return m ? { year: +m[1], month: 0 } : null;
+  }
+  // Rattachement d'une ligne à un contexte normatif (famille + version datée).
+  // Ordre : date complète ; sinon mois/année ou année seule, UNIQUEMENT si une seule version de cette famille
+  // du catalogue y correspond (le rattachement est alors signalé « par l'année » ou « par le mois ») ; sinon version non datée.
+  function rowContext(row, catalog = null) {
     const family = referentialFamily(row?.referential);
-    const version = parseVersionDate(row?.referentialVersion) || parseVersionDate(row?.referentialVersionDate);
+    const candidates = [row?.referentialVersion, row?.referentialVersionDate, row?.referential].map(v => String(v ?? '').trim()).filter(Boolean);
     const versionText = String(row?.referentialVersion || row?.referentialVersionDate || '').trim();
+    let version = '';
+    for (const c of candidates) { version = parseVersionDate(c); if (version) break; }
     if (!family) return { key: '', family: '', version, versionText, reason: row?.referential ? `Référentiel non reconnu : « ${row.referential} »` : 'Référentiel absent' };
-    if (!version) return { key: `${family}@?${versionText ? norm(versionText) : ''}`, family, version: '', versionText, reason: versionText ? `Version non datée : « ${versionText} »` : 'Version du référentiel absente' };
-    return { key: `${family}@${version}`, family, version, versionText, reason: '' };
+    if (version) return { key: `${family}@${version}`, family, version, versionText, match: 'date', reason: '' };
+    const sources = (Array.isArray(catalog?.sources) ? catalog.sources : []).filter(s => s.family === family && s.version);
+    for (const c of candidates) {
+      const p = parsePartialVersion(c);
+      if (!p) continue;
+      const hits = sources.filter(s => +s.version.slice(0, 4) === p.year && (!p.month || +s.version.slice(5, 7) === p.month));
+      if (hits.length === 1) return { key: hits[0].context, family, version: hits[0].version, versionText, match: p.month ? 'month' : 'year', reason: '' };
+      return { key: `${family}@?${p.month ? p.year + '-' + pad(p.month) : p.year}`, family, version: '', versionText, reason: hits.length ? `Plusieurs versions ${p.year} possibles : « ${versionText} »` : `Version ${p.month ? pad(p.month) + '/' : ''}${p.year} non fournie : « ${versionText} »` };
+    }
+    return { key: `${family}@?${versionText ? norm(versionText) : ''}`, family, version: '', versionText, reason: versionText ? `Version non datée : « ${versionText} »` : 'Version du référentiel absente' };
   }
 
   // ---------------------------------------------------------------- exigences
@@ -88,7 +121,7 @@
   function rowLabel(row) {
     return labelFrom(row?.requirementLabel) || labelFrom(row?.associatedRequirementReferenceTitle) || labelFrom(row?.requirement) || String(row?.requirement || '').trim();
   }
-  function resolveRequirement(row, catalog, ctx = rowContext(row)) {
+  function resolveRequirement(row, catalog, ctx = rowContext(row, catalog)) {
     const { code, reason } = canonicalCode(row);
     const label = rowLabel(row);
     const source = ctx.key ? sourceFor(catalog, ctx.key) : null;
@@ -116,14 +149,19 @@
   function buildBouquets(rows, catalog, options = {}) {
     const size = Math.max(1, Number(options.size) || BOUQUET_SIZE);
     const contexts = new Map(), noOperation = [], noContext = new Map();
+    const versionValues = new Map();
     for (const row of rows || []) {
       const op = normalizeId(row?.operationCode);
+      { const c = rowContext(row, catalog); const k = `${row?.referential || ''}\u0001${row?.referentialVersion || row?.referentialVersionDate || ''}`;
+        if (!versionValues.has(k)) versionValues.set(k, { referential: String(row?.referential || ''), version: String(row?.referentialVersion || row?.referentialVersionDate || ''), context: c.key, match: c.match || '', reason: c.reason, operations: new Set() });
+        if (op) versionValues.get(k).operations.add(op); }
       if (!op) { noOperation.push(row); continue; }
-      const ctx = rowContext(row);
+      const ctx = rowContext(row, catalog);
       if (!ctx.key) {
         const k = ctx.reason; if (!noContext.has(k)) noContext.set(k, new Set()); noContext.get(k).add(op); continue;
       }
-      if (!contexts.has(ctx.key)) contexts.set(ctx.key, { key: ctx.key, family: ctx.family, version: ctx.version, versionText: ctx.versionText, reason: ctx.reason, operations: new Set(), reqs: new Map(), unresolved: new Map(), rows: 0 });
+      if (!contexts.has(ctx.key)) contexts.set(ctx.key, { key: ctx.key, family: ctx.family, version: ctx.version, versionText: ctx.versionText, reason: ctx.reason, operations: new Set(), reqs: new Map(), unresolved: new Map(), rows: 0, matches: new Set() });
+      if (ctx.match && ctx.match !== 'date') contexts.get(ctx.key).matches.add(ctx.match);
       const c = contexts.get(ctx.key);
       c.rows++; c.operations.add(op);
       const r = resolveRequirement(row, catalog, ctx);
@@ -149,7 +187,7 @@
       return {
         key: c.key, family: c.family, familyLabel: families[c.family] || c.family, version: c.version, versionText: c.versionText,
         versionLabel: source?.versionLabel || (c.version ? c.version.split('-').reverse().join('/') : (c.versionText || 'version non datée')),
-        reason: c.reason, operations: opsCount, rows: c.rows, source: source ? { status: source.status, title: source.title, missing: source.missing || '' } : null,
+        reason: c.reason, operations: opsCount, rows: c.rows, source: source ? { status: source.status, title: source.title, missing: source.missing || '' } : null, partialMatch: [...c.matches],
         items, top: items.slice(0, size), size,
         unresolved: [...c.unresolved.values()].map(u => ({ label: u.label, code: u.code, reason: u.reason, operations: u.operations.size })).sort((a, b) => b.operations - a.operations || natural(a.label, b.label))
       };
@@ -157,6 +195,7 @@
     return {
       size, contexts: out,
       diagnostics: {
+        versions: [...versionValues.values()].map(v => { const s = v.context ? sourceFor(catalog, v.context) : null; return { referential: v.referential, version: v.version, context: v.context, match: v.match, reason: v.reason, operations: v.operations.size, covered: !!(s && s.status === 'available'), sourceLabel: s ? `${s.title} · ${s.versionLabel}` : '' }; }).sort((a, b) => b.operations - a.operations || natural(a.referential, b.referential)),
         rowsWithoutOperation: noOperation.length,
         withoutContext: [...noContext.entries()].map(([reason, ops]) => ({ reason, operations: ops.size })).sort((a, b) => b.operations - a.operations)
       }
@@ -315,7 +354,7 @@
   }
 
   const api = {
-    BOUQUET_SIZE, normalizeId, referentialFamily, parseVersionDate, rowContext, codeFrom, labelFrom, canonicalCode,
+    BOUQUET_SIZE, normalizeId, referentialFamily, parseVersionDate, parsePartialVersion, rowContext, codeFrom, labelFrom, canonicalCode,
     resolveRequirement, buildBouquets, evaluateMention, rankMentions, mentionsForContext, contextFieldsFor, mentionMenu, analyseContext, sourceFor
   };
   root.NEWOSB_MENTIONS = api;

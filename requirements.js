@@ -466,7 +466,7 @@
     const M=MENTIONS(),cat=MENTION_CATALOG();
     const groups=new Map();
     rows.forEach(r=>{
-      const ctx=M?M.rowContext(r):{key:'',family:'',version:''};
+      const ctx=M?M.rowContext(r,cat):{key:'',family:'',version:''};
       const evalKey=`${r.evaluationCode}\u0001${ctx.key||norm(r.referential)+'|'+norm(r.referentialVersion)}`;
       if(!groups.has(evalKey))groups.set(evalKey,{evaluationCode:r.evaluationCode,synthetic:SYNTHETIC_EVALUATION.test(r.evaluationCode),referential:r.referential,referentialVersion:r.referentialVersion||r.referentialVersionDate,contextKey:ctx.key,family:ctx.family,versionDate:ctx.version,status:r.status,rows:0,items:new Map(),unresolved:0});
       const g=groups.get(evalKey);g.rows++;
@@ -506,7 +506,8 @@
     if(compatCache&&compatCache.sig===sig)bouquets=compatCache.bouquets;else{bouquets=M.buildBouquets(rows,cat,{size:M.BOUQUET_SIZE});compatCache={sig,bouquets};}
     const contexts=bouquets.contexts;
     let ctx=contexts.find(c=>c.key===state.compat.context);
-    if(!ctx){const covered=contexts.find(c=>c.source&&c.source.status==='available');ctx=contexts[0]||null;state.compat.autoContext=ctx?.key||'';if(state.compat.context&&!contexts.some(c=>c.key===state.compat.context))state.compat.context='';void covered;}
+    // Périmètre initial : le plus documenté parmi ceux dont les règles sont disponibles (sinon le plus documenté).
+    if(!ctx){const covered=contexts.find(c=>c.source&&c.source.status==='available');ctx=covered||contexts[0]||null;state.compat.autoContext=ctx?.key||'';if(state.compat.context&&!contexts.some(c=>c.key===state.compat.context))state.compat.context='';}
     const values=state.compat.values[ctx?.key||'']||{};
     const analysis=ctx?M.analyseContext(ctx,cat,values):null;
     return {M,cat,rows,bouquets,ctx,values,analysis};
@@ -553,16 +554,16 @@
     if(model.error)return `${head}<article class="obs-card req-compat-card"><div class="obs-empty">${esc(model.error)}</div>${disclaimer}</article>`;
     const {M,cat,bouquets,ctx}=model;
     if(!ctx)return `${head}<article class="obs-card req-compat-card"><div class="obs-empty">Aucune opération documentée (avec un code opération et un référentiel BEE reconnu) dans ce périmètre.</div>${diagHtml(model)}${disclaimer}</article>`;
-    const ctxSelect=bouquets.contexts.length>1?`<label class="req-inline-select req-compat-context"><span>Périmètre normatif</span><select data-req-compat-context="1">${bouquets.contexts.map(c=>`<option value="${attr(c.key)}" ${c.key===ctx.key?'selected':''}>${esc(`${c.familyLabel} · ${c.versionLabel} — ${fmt(c.operations)} opération${c.operations>1?'s':''}`)}${c.key===state.compat.autoContext?' (le plus documenté)':''}</option>`).join('')}</select></label>`:'';
+    const ctxSelect=bouquets.contexts.length>1?`<label class="req-inline-select req-compat-context"><span>Périmètre normatif</span><select data-req-compat-context="1">${bouquets.contexts.map(c=>`<option value="${attr(c.key)}" ${c.key===ctx.key?'selected':''}>${esc(`${c.familyLabel} · ${c.versionLabel} — ${fmt(c.operations)} opération${c.operations>1?'s':''}${c.source?.status==='available'?'':' · règles non disponibles'}`)}${c.key===state.compat.autoContext?' (par défaut)':''}</option>`).join('')}</select></label>`:'';
     const fields=M.contextFieldsFor(cat,ctx.key);
     const values=model.values;
     const fieldsHtml=fields.length?`<details class="req-compat-fields" ${state.compat.openFields?'open':''} data-req-compat-toggle="openFields"><summary>Conditions d’application du contexte (${fmt(fields.filter(f=>values[f.id]).length)} / ${fmt(fields.length)} renseignées)</summary><p>Une condition laissée « Inconnu » rend les mentions concernées provisoires : elles sont alors exclues du classement automatique.</p><div class="req-compat-field-grid">${fields.map(f=>`<label><span>${esc(f.label)}</span><select data-req-compat-field="${attr(f.id)}"><option value="">Inconnu</option>${f.values.map(([v,l])=>`<option value="${attr(v)}" ${values[f.id]===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`).join('')}</div></details>`:'';
     const source=ctx.source;
     const analysis=model.analysis;
     const meta=`<div class="req-compat-meta"><div><span>Contexte comparé</span><b>${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}</b></div><div><span>Opérations documentées</span><b>${fmt(ctx.operations)}</b></div><div><span>Bouquet comparé</span><b>${fmt(ctx.top.length)} exigence${ctx.top.length>1?'s':''}</b><small>${ctx.top.length<ctx.size?`moins de ${fmt(ctx.size)} exigences disponibles`:`Top ${fmt(ctx.size)} par opérations distinctes`}</small></div></div>`;
-    let cards='';
+    let cards=ctx.partialMatch?.length?`<div class="req-compat-uncovered" role="note"><b>Version identifiée ${ctx.partialMatch.includes('year')?'par l’année seule':'par le mois et l’année'}</b><span>Les lignes RAPPORT ne portent pas la date complète de la version ; une seule version de ce référentiel correspond dans le catalogue (${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}). À confirmer.</span></div>`:'';
     if(!source||source.status!=='available'){
-      cards=`<div class="req-compat-uncovered" role="note"><b>Version non couverte</b><span>${esc(source?.missing||`Aucune règle de mentions n’est disponible pour ${ctx.familyLabel} · ${ctx.versionLabel}. Les règles d’une autre version ne sont pas transposées.`)}</span></div>`;
+      cards+=`<div class="req-compat-uncovered" role="note"><b>Version non couverte</b><span>${esc(source?.missing||`Aucune règle de mentions n’est disponible pour ${ctx.familyLabel} · ${ctx.versionLabel}. Les règles d’une autre version ne sont pas transposées.`)}</span></div>`;
     }
     const ranked=analysis?.ranked||[];
     const menu=M.mentionMenu(cat);
@@ -603,7 +604,10 @@
     (d.withoutContext||[]).forEach(w=>list.push(`<tr><td>—</td><td>Lignes hors contexte normatif</td><td>${esc(w.reason)}</td><td>${fmt(w.operations)}</td></tr>`));
     if(d.rowsWithoutOperation)list.push(`<tr><td>—</td><td>Lignes sans code opération</td><td>Impossible de compter une opération distincte : lignes exclues du calcul</td><td>${fmt(d.rowsWithoutOperation)} ligne${d.rowsWithoutOperation>1?'s':''}</td></tr>`);
     const others=(model.bouquets?.contexts||[]).filter(c=>c.key!==ctx?.key).map(c=>`${c.familyLabel} · ${c.versionLabel} (${fmt(c.operations)})`);
-    return `<details class="req-compat-diag" ${state.compat.openDiag?'open':''} data-req-compat-toggle="openDiag"><summary>Diagnostic : exigences sans correspondance fiable (${fmt(list.length)})</summary>${others.length?`<p>Autres périmètres présents dans les filtres, non mélangés : ${esc(others.join(' · '))}.</p>`:''}${list.length?`<div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Code</th><th>Exigence</th><th>Raison de l’exclusion</th><th>Opérations</th></tr></thead><tbody>${list.join('')}</tbody></table></div>`:'<p>Toutes les exigences du contexte ont une correspondance fiable.</p>'}</details>`;
+    const vers=(d.versions||[]);
+    const versHtml=vers.length?`<h4 class="req-compat-diag-title">Référentiels et versions lus dans RAPPORT (périmètre filtré)</h4><div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Référentiel (RAPPORT)</th><th>Version (RAPPORT)</th><th>Opérations</th><th>Rattachement</th></tr></thead><tbody>${vers.map(v=>`<tr><td>${esc(v.referential||'—')}</td><td>${esc(v.version||'—')}</td><td>${fmt(v.operations)}</td><td>${v.covered?`✓ ${esc(v.sourceLabel)}${v.match==='year'?' (par l’année)':v.match==='month'?' (par le mois)':''}`:esc(v.reason||(v.sourceLabel?`${v.sourceLabel} : règles non fournies`:'Version non couverte'))}</td></tr>`).join('')}</tbody></table></div>`:'';
+    const uncoveredOps=vers.filter(v=>!v.covered).reduce((n,v)=>n+v.operations,0);
+    return `<details class="req-compat-diag" ${state.compat.openDiag?'open':''} data-req-compat-toggle="openDiag"><summary>Diagnostic : versions lues et exigences sans correspondance fiable (${fmt(list.length)}${uncoveredOps?` · ${fmt(uncoveredOps)} opération${uncoveredOps>1?'s':''} sur une version non couverte`:''})</summary>${versHtml}${others.length?`<p>Autres périmètres présents dans les filtres, non mélangés : ${esc(others.join(' · '))}.</p>`:''}${list.length?`<div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Code</th><th>Exigence</th><th>Raison de l’exclusion</th><th>Opérations</th></tr></thead><tbody>${list.join('')}</tbody></table></div>`:'<p>Toutes les exigences du contexte ont une correspondance fiable.</p>'}</details>`;
   }
 
   function render(){
