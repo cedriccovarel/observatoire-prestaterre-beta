@@ -1,5 +1,31 @@
 # Historique
 
+## V6.14
+
+**Exigences dans la fiche opération**
+- Nouvel encart « Exigences sélectionnées pour cette opération » (onglet Vue d’ensemble de la fiche, repris dans l’export de la fiche) : rapprochement par **code interne d’opération** uniquement (espaces, casse et caractères invisibles normalisés ; zéros significatifs conservés ; jamais par nom, MOA, contrat ou code d’évaluation).
+- Nombre d’exigences distinctes, code, intitulé, référentiel et version, regroupement par cible quand il est fiable. Plusieurs évaluations ou versions restent séparées (aucune n’est désignée « actuelle »). Doublons retirés par évaluation. La colonne « Exigence validée » est affichée telle quelle : une sélection n’est pas une validation.
+- États explicites : source non connectée, chargement, accès refusé, source indisponible, aucune ligne associée (sans conclure à « aucune exigence »), correspondance partielle, plusieurs évaluations. Mise à jour d’une fiche déjà ouverte sans perte du défilement. Mode anonymisé respecté.
+- Données lues via une interface figée (`NEWOSB_REQUIREMENTS.getOperationRequirements`), indépendante des filtres de l’onglet Exigences.
+
+**Compatibilité des exigences sélectionnées avec les mentions** (bas de l’onglet Exigences, pleine largeur)
+- Bouquet des 20 exigences les plus sélectionnées (opérations distinctes, filtres généraux de l’onglet, jamais la pagination ni le focus local). Trois cartes : 1re, 2e mention la plus compatible, 3e au choix (menu de toutes les mentions, regroupées par référentiel et version). Bouquet consultable, diagnostic des exigences sans correspondance fiable.
+- Nouveau moteur `newosb-mentions.js` (ET, OU, au moins K parmi N, dépendances, conditions d’application, optionnelles/recommandées hors score, ambiguïtés) et catalogue `mentions_catalog.js` : BEE Logement Neuf 04/05/2026 (24 mentions) et BEE Logement Rénovation 18/06/2025 (7 mentions). Versions non fournies (LR 04/05/2026, Tertiaire Neuf, Tertiaire Exploitation) : « Version non couverte ».
+- Cas de contrôle BEE LN 04/05/2026, collectif RE 2020 : Biodiversité 9/10 (90 %), BEE+ 8/9 (89 %), Habitat Qualité 6/8 (75 %).
+
+**Sécurité des sources Google (les deux scripts changent)**
+- Clé d’accès obligatoire et vérifiée côté serveur à chaque requête du pont ; plus aucune donnée par GET, JSON ou JSONP ; ping public minimal ; limitation des essais.
+- `Code_Exigences.gs` : RAPPORT n’est plus exposé sans contrôle ; même pont sécurisé qu’OPERATIONS, chargement par blocs.
+- Navigateur : clé saisie dans un champ et gardée en mémoire seulement (jamais dans l’URL ni le stockage) ; envoi ciblé vers l’origine exacte du pont ; fenêtre source et jeton vérifiés ; refus = suppression des données privées en mémoire ; plus de repli JSON/JSONP. Nouveau module partagé `newosb-bridge.js`.
+- Mode anonymisé : les filtres MOA et Groupe MOA de l’onglet Exigences n’affichent plus de nom réel.
+
+**Présentation : exports rétablis**
+- PPTX (visuels de nouveau présents), PNG 4K / SVG (fichiers de nouveau produits) et Google Slides : le rendu passait par une image SVG en URL `blob:` qui bloquait le canvas dans Chrome ; la fenêtre Google était ouverte trop tard et bloquée comme pop-up. La présentation créée s’ouvre dans la fenêtre Google ouverte au clic.
+
+**Rangement** : les copies d’anciens README/QA/scripts présentes à la racine (identiques à celles de `docs/`) et l’ancien `Code.gs` sont supprimées ; les guides V6.13.x sont déplacés dans `docs/historique/`.
+
+**Tests** : 134 tests unitaires, 92 vérifications navigateur.
+
 ## V6.13.7
 
 **Avancement : chiffres de la colonne BC et lecture renforcée**

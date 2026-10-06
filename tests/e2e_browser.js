@@ -19,16 +19,34 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res);
 });
 
-const SHIM = `<script>window.google={script:{run:(function(){function R(ok,ko){this.ok=ok;this.ko=ko;}R.prototype.withSuccessHandler=function(f){return new R(f,this.ko);};R.prototype.withFailureHandler=function(f){return new R(this.ok,f);};R.prototype.newosbBridgeRequest=function(p){var s=this;fetch('/macros/s/TEST/__run',{method:'POST',body:JSON.stringify(p)}).then(function(r){return r.json();}).then(function(j){s.ok&&s.ok(j);}).catch(function(e){s.ko&&s.ko(e);});};return new R();})()}};</script>`;
+const RUN_FNS = ['newosbBridgeRequest', 'newosbExigencesBridgeRequest'];
+const SHIM = `<script>window.google={script:{run:(function(){function R(ok,ko){this.ok=ok;this.ko=ko;}R.prototype.withSuccessHandler=function(f){return new R(f,this.ko);};R.prototype.withFailureHandler=function(f){return new R(this.ok,f);};${RUN_FNS.map(fn => `R.prototype.${fn}=function(p){var s=this;fetch(location.pathname.replace(/\\/exec$/,'')+'/__run/${fn}',{method:'POST',body:JSON.stringify(p)}).then(function(r){return r.json();}).then(function(j){s.ok&&s.ok(j);}).catch(function(e){s.ko&&s.ko(e);});};`).join('')}return new R();})()}};</script>`;
+const KEY = 'cle-e2e-0123456789abcdef';
+const EXI = 'https://script.google.com/macros/s/EXI/exec';
+const { RAPPORT_HEADERS } = require('./gs_harness');
+// RAPPORT de test, rattaché aux codes OPERATIONS de la feuille de test (OP-1…OP-7).
+const BOUQUET = '1.1.1 1.1.4 1.2.1 1.2.2 1.2.3 2.1.1 2.1.2 2.1.3 2.2.2 2.3.1 2.4.1 2.4.2 2.4.3 2.4.7 3.3.2 4.1.1 4.1.2 4.3.7 4.3.8 4.6.1'.split(' ');
+const RAPPORT = [RAPPORT_HEADERS];
+const rr = (op, ev, moa, ref, ver, codes, validated = '') => codes.forEach(c => RAPPORT.push([`${c} - Exigence ${c}`, ev, moa, op, ref, ver, 'Nouvelle-Aquitaine', '33', c, validated, 'En cours', '']));
+['OP-1', 'OP-2', 'OP-7'].forEach((op, i) => rr(op, 'EVA-' + op, 'Promoteur A', 'BEE Logement Neuf', '04/05/2026', BOUQUET));
+rr('OP-3', 'EVA-OP-3', 'Bailleur B', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.4.6']);
+rr('OP-4', 'EVA-OP-4', 'Bailleur B', 'BEE Logement Rénovation', '18/06/2025', ['1.2.1', '1.2.2', '3.1.1'], 'Non');
+rr('OP-1', 'EVA-OP-1-ANC', 'Promoteur A', 'BEE Logement Neuf', '01/02/2023', ['1.1.1', '4.B.2']);
+for (let i = 0; i < 40; i++) rr('OP-X' + i, 'EVA-X' + i, 'Promoteur Z', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.1.1']);
 
-async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX } = {}) {
-  const gs = loadGs('Code_Operations.gs', { matrix, properties });
-  const context = await browser.newContext();
+async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport } = {}) {
+  const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
+  const gsReq = loadGs('Code_Exigences.gs', { matrix: RAPPORT, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
+  const context = await browser.newContext({ acceptDownloads: true, viewport: viewport || { width: 1280, height: 900 } });
+  const requests = [];
   await context.route('https://script.google.com/**', async route => {
     const url = new URL(route.request().url());
-    if (url.pathname.endsWith('/__run')) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(gs.newosbBridgeRequest(JSON.parse(route.request().postData() || '{}'))) });
+    requests.push(url.toString());
+    const target = url.pathname.includes('/EXI/') ? gsReq : gs;
+    const run = url.pathname.match(/\/__run\/(\w+)$/);
+    if (run) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(target[run[1]](JSON.parse(route.request().postData() || '{}'))) });
     const params = Object.fromEntries(url.searchParams.entries());
-    const out = gs.doGet({ parameter: params });
+    const out = target.doGet({ parameter: params });
     if (out.html !== undefined) return route.fulfill({ contentType: 'text/html', body: out.html.replace('<script>', SHIM + '<script>') });
     if (jsonFails) return route.fulfill({ status: 403, body: 'Forbidden' });
     return route.fulfill({ contentType: out.mime === 'js' ? 'text/javascript' : 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: out.text });
@@ -36,11 +54,12 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  page.on('dialog', d => { errors.push('DIALOG ' + d.message()); d.dismiss().catch(() => {}); });
   await page.addInitScript(() => { sessionStorage.setItem('prestaterre-observatoire-v21-auth', '1'); });
   await page.goto(origin + '/index.html');
   await page.waitForFunction(() => window.NEWOSB_ENGINE && window.NEWOSB_RULES);
-  await page.evaluate(url => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; return window.NEWOSB_ENGINE.connect(); }, EXEC);
-  return { page, context, errors };
+  await page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; return window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: noKey ? '' : KEY });
+  return { page, context, errors, gs, gsReq, requests };
 }
 
 (async () => {
@@ -213,10 +232,112 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(rt.connected && rt.count > 4000 && ms < 40000, `6 000 lignes : ${rt.count} projets en ${Math.round(ms / 1000)} s`);
       await context.close(); }
 
-    console.log('\nC. Clé d’accès : URL sans clé refusée, URL avec clé acceptée');
-    { const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: 'K3y', NEWOSB_ALLOWED_ORIGINS: origin } });
-      check(JSON.parse(gs.doGet({ parameter: { mode: 'meta' } }).text).ok === false, 'sans clé : refus');
-      check(JSON.parse(gs.doGet({ parameter: { mode: 'meta', key: 'K3y' } }).text).ok === true, 'avec clé : accès'); }
+    console.log('\nC. Clé d’accès : obligatoire, jamais dans l’URL ni dans le stockage');
+    { const { page, context, requests } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noKey: true });
+      check(!(await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected)), 'sans clé : aucune donnée chargée');
+      check(/clé d’accès/.test(await page.textContent('#dataFeedback')), 'sans clé : message demandant la clé');
+      await page.evaluate(() => { document.getElementById('dataKey').value = 'mauvaise-cle-123456789'; }); await page.evaluate(() => window.NEWOSB_ENGINE.connect());
+      check(!(await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected)) && /Accès refusé/.test(await page.textContent('#dataFeedback')), 'clé incorrecte : refus explicite, aucune donnée');
+      await page.evaluate(k => { document.getElementById('dataKey').value = k; }, KEY); await page.evaluate(() => window.NEWOSB_ENGINE.connect());
+      check(await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected), 'clé correcte : connexion');
+      const storage = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+      check(!storage.includes(KEY), 'clé absente de localStorage et sessionStorage');
+      check(requests.every(u => !u.includes(KEY)), `clé jamais présente dans une URL (${requests.length} requêtes vers Apps Script)`);
+      await page.reload(); await page.waitForFunction(() => window.NEWOSB_ENGINE);
+      await page.waitForTimeout(400);
+      check(!(await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected)), 'après rechargement : clé oubliée, pas de reconnexion silencieuse');
+      await context.close(); }
+    { const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, NEWOSB_ALLOWED_ORIGINS: origin } });
+      check(JSON.parse(gs.doGet({ parameter: { mode: 'meta', key: KEY } }).text).ok === false, 'GET direct avec ?key= : refusé (lecture uniquement par le pont)'); }
+
+    console.log('\nF. Exigences : fiche opération, encart de compatibilité, défilement, focus, largeurs d’écran');
+    { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
+      // Fiche ouverte AVANT la connexion Exigences : état « non connectée », puis mise à jour sans perte du défilement.
+      await page.click('button[data-page="operations"]'); await page.waitForTimeout(400);
+      await page.evaluate(() => document.querySelector('[data-op-code="OP-1"]').click()); await page.waitForTimeout(400);
+      let fiche = await page.evaluate(() => document.querySelector('[data-project-requirements]')?.textContent || '');
+      check(/non connectée/.test(fiche), 'fiche : « Source Exigences non connectée » tant que la source n’est pas chargée');
+      await page.evaluate(() => { const sc = document.querySelector('[data-project-scroll]'); sc.scrollTop = 400; });
+      const before = await page.evaluate(() => document.querySelector('[data-project-scroll]').scrollTop);
+      // Connexion de la source Exigences (champs URL + clé de l'encart Source, simulés ici car la fiche est au premier plan).
+      await page.evaluate(({ url, key }) => { const u = document.createElement('input'); u.id = 'reqSourceUrl'; u.value = url; const k = document.createElement('input'); k.id = 'reqSourceKey'; k.value = key; document.body.append(u, k); window.NEWOSB_REQUIREMENTS.handleClick({ target: { closest: s => s === '[data-req-connect]' ? {} : null, matches: () => false } }); u.remove(); k.remove(); }, { url: EXI, key: KEY });
+      await page.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected, null, { timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(300);
+      fiche = await page.evaluate(() => document.querySelector('[data-project-requirements]')?.textContent || '');
+      const after = await page.evaluate(() => document.querySelector('[data-project-scroll]').scrollTop);
+      check(/Exigences distinctes/.test(fiche) && /2 évaluations ou versions/.test(fiche), 'fiche déjà ouverte : mise à jour à l’arrivée des exigences (2 évaluations séparées pour OP-1)');
+      check(Math.abs(after - before) <= 2, `fiche : défilement conservé lors de la mise à jour (${before} → ${after})`);
+      check(/1\.1\.1/.test(fiche) && /sélection documentée/.test(fiche) && !/aucune exigence sélectionnée/i.test(fiche), 'fiche : codes et intitulés affichés ; sélection ≠ validation');
+      await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+      // Onglet Exigences : encart en bas de page, pleine largeur.
+      await page.click('button[data-page="requirements"]'); await page.waitForTimeout(500);
+      const pos = await page.evaluate(() => { const c = document.querySelector('.req-compat-card'), pg = document.getElementById('obsPage'); const cards = [...pg.querySelectorAll('.obs-card')]; return { exists: !!c, last: cards[cards.length - 1] === c || cards.indexOf(c) >= cards.length - 1, width: c && c.getBoundingClientRect().width, pageW: pg.clientWidth }; });
+      check(pos.exists && pos.last && pos.width > pos.pageW * 0.85, `encart présent en bas de page, pleine largeur (${Math.round(pos.width)} / ${pos.pageW} px)`);
+      const txt = await page.textContent('.req-compat-card');
+      check(/Contexte comparé/.test(txt) && /BEE Logement Neuf · 04\/05\/2026/.test(txt) && /Opérations documentées/.test(txt), 'périmètre par défaut : le plus documenté (BEE LN 04/05/2026), effectif affiché');
+      check(/Présente dans le bouquet comparé/.test(txt) && /Absente du bouquet comparé/.test(txt) && /l’obtention d’une mention reste soumise/.test(txt), 'légende et mention permanente affichées');
+      // Conditions de contexte : régime, type, permis → 3 cartes calculées
+      await page.click('.req-compat-fields > summary'); await page.waitForTimeout(150);
+      for (const [f, v] of [['ln2026.regime', 'RE2020'], ['ln2026.buildingType', 'collectif'], ['ln2026.permit', '2025_2027']]) { await page.selectOption(`[data-req-compat-field="${f}"]`, v); await page.waitForTimeout(250); }
+      check(await page.evaluate(() => document.activeElement && document.activeElement.matches('[data-req-compat-field="ln2026.permit"]')), 'focus conservé sur le menu de condition après recalcul');
+      const cards = await page.$$eval('.req-compat-mention', els => els.map(e => ({ h: e.querySelector('h3')?.textContent, s: e.querySelector('.req-compat-score strong')?.textContent })));
+      check(cards.length === 3, `trois cartes (${cards.map(c => c.h + ' ' + c.s).join(' | ')})`);
+      // Choix manuel 3e carte : défilement et focus conservés
+      await page.evaluate(() => { document.querySelector('.req-compat-card').scrollIntoView(); });
+      const sTop = await page.evaluate(() => document.getElementById('obsPage').scrollTop);
+      await page.selectOption('[data-req-compat-mention]', 'BEE_LR_2025_BEE_PLUS'); await page.waitForTimeout(400);
+      const sAfter = await page.evaluate(() => document.getElementById('obsPage').scrollTop);
+      check(Math.abs(sAfter - sTop) <= 4, `choix d’une mention : pas de retour en haut (${Math.round(sTop)} → ${Math.round(sAfter)})`);
+      check(await page.evaluate(() => document.activeElement && document.activeElement.matches('[data-req-compat-mention]')), 'focus conservé sur le menu de la 3e carte');
+      check(/Contexte différent/.test(await page.textContent('.req-compat-card')), 'mention d’un autre référentiel : incompatibilité de contexte affichée');
+      // Filtre MOA (multicoche) → recalcul du bouquet, défilement conservé
+      const nOps = async () => page.evaluate(() => window.NEWOSB_REQUIREMENTS._compatSnapshot().contexts.find(c => c.key === 'BEE_LN@2026-05-04')?.operations || 0);
+      const all = await nOps();
+      await page.evaluate(() => { const i = [...document.querySelectorAll('[data-req-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); }); await page.waitForTimeout(300);
+      const onlyA = await nOps();
+      check(all === 44 && onlyA === 3, `bouquet recalculé après filtre MOA (${all} → ${onlyA} opérations documentées)`);
+      // Responsive : aucune barre de défilement horizontale
+      for (const [w, cols] of [[1440, 3], [900, 2], [390, 1]]) {
+        await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(300);
+        const r = await page.evaluate(() => { const g = document.querySelector('.req-compat-grid'); const tops = new Set([...g.children].map(c => Math.round(c.getBoundingClientRect().top))); const pg = document.getElementById('obsPage'); return { rows: tops.size, overflow: document.documentElement.scrollWidth > window.innerWidth + 1 || g.scrollWidth > g.clientWidth + 1 }; });
+        check(!r.overflow && (w < 1100 ? r.rows >= 2 : r.rows === 1), `largeur ${w}px : cartes ${w < 1100 ? 'empilées' : 'côte à côte'} sans défilement horizontal`);
+      }
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.check('#obsPrivacyToggle', { force: true }).catch(() => {}); await page.waitForTimeout(300);
+      const anonHtml = await page.innerHTML('#obsPage');
+      check(!anonHtml.includes('Promoteur A'), 'mode anonymisé : aucun nom de MOA dans l’onglet Exigences');
+      check(errors.length === 0, 'aucune erreur JavaScript (Exigences, fiche, encart)' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close(); }
+
+    console.log('\nG. Présentation : exports PPTX, PNG et Google Slides');
+    { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
+      await page.click('button[data-page="overview"]'); await page.waitForTimeout(300);
+      await page.locator('[data-add-presentation]').first().click(); await page.waitForTimeout(300);
+      await page.click('button[data-page="presentation"]'); await page.waitForTimeout(500);
+      const dl = page.waitForEvent('download', { timeout: 60000 });
+      await page.click('[data-pres-export-pptx]');
+      const d = await dl; const fp = await d.path(); const buf = fs.readFileSync(fp);
+      const JSZip = require(path.join(ROOT, 'jszip.min.js'));
+      const zip = await JSZip.loadAsync(buf); const media = Object.keys(zip.files).filter(f => f.startsWith('ppt/media/'));
+      const slide2 = await zip.file('ppt/slides/slide2.xml').async('string');
+      check(/\.pptx$/.test(d.suggestedFilename()) && media.length >= 3 && !slide2.includes('Visuel indisponible'), `PPTX : fichier produit avec le visuel de la slide (${media.length} images, auparavant « Visuel indisponible »)`);
+      const dl2 = page.waitForEvent('download', { timeout: 60000 });
+      await page.click('[data-pres-export="png"]');
+      const d2 = await dl2; const png = fs.readFileSync(await d2.path());
+      check(/\.png$/.test(d2.suggestedFilename()) && png.length > 20000 && png.slice(1, 4).toString() === 'PNG', `PNG 4K : image produite (${Math.round(png.length / 1024)} Ko)`);
+      await context.route('https://docs.google.com/**', r => r.fulfill({ contentType: 'text/html', body: '<title>Slides</title>ok' }));
+      const popupP = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+      await page.click('[data-pres-google-slides]');
+      const popup = await popupP;
+      check(!!popup, 'Google Slides : la fenêtre Google s’ouvre pendant le clic (non bloquée)');
+      await page.waitForFunction(() => !document.querySelector('[data-pres-google-slides]')?.disabled, null, { timeout: 60000 }).catch(() => {});
+      await page.waitForTimeout(500);
+      const pres = gs.slidesLog.presentations;
+      check(pres.length === 1 && pres[0].slides.length === 2 && pres[0].slides.every(sl => sl.images.length === 1 && sl.images[0].type === 'image/jpeg' && sl.images[0].bytes > 5000), `Google Slides : présentation créée avec ${pres[0]?.slides.length || 0} slides rendues en image`);
+      if (popup) await popup.waitForURL(/docs\.google\.com/, { timeout: 10000 }).catch(() => {});
+      check(popup && /docs\.google\.com\/presentation/.test(popup.url()), 'Google Slides : la présentation s’ouvre dans la fenêtre du pont (' + (popup && popup.url()) + ')');
+      check(errors.length === 0, 'aucune erreur JavaScript pendant les exports' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
+      await context.close(); }
   } finally { await browser.close(); server.close(); }
   console.log(`\n${passed} vérifications navigateur réussies, ${failed} en échec.`);
   process.exit(failed ? 1 : 0);

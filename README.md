@@ -1,8 +1,9 @@
-# Observatoire Prestaterre — V6.13.7
+# Observatoire Prestaterre — V6.14
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 
-- **Mettre à jour depuis la V6.12 ou une V6.13.x** : voir `GUIDE_MISE_A_JOUR_V6_13_7.md`.
+- **Mettre à jour depuis une V6.13.x** : voir `GUIDE_MISE_A_JOUR_V6_14.md` (les deux scripts Apps Script changent ; clé d’accès obligatoire).
+- **Règles des mentions** : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 - **Historique des versions** : `CHANGELOG.md` (anciens README/QA par version dans `docs/historique/`).
 - **Tests** : `node tests/run_all.js` (non-régression, sans dépendance) et `node tests/e2e_browser.js` (navigateur, optionnel).
 
@@ -17,7 +18,9 @@ Observatoire du bâtiment durable de Prestaterre Certification : site statique (
 | `newosb-core.js` | Dictionnaire, contrôles qualité, provenance |
 | `newosb.js` | Interface de l'Observatoire |
 | `privacy.js` | Mode anonymisé |
-| `requirements.js`, `requirements_catalog.*` | Module Exigences |
+| `requirements.js`, `requirements_catalog.*` | Module Exigences (onglet, fiche opération, encart de compatibilité) |
+| `newosb-bridge.js` | Client du pont sécurisé Apps Script (clé en mémoire, origine et fenêtre vérifiées) |
+| `newosb-mentions.js`, `mentions_catalog.js` | Moteur et catalogue normatif des mentions (BEE LN 04/05/2026, BEE LR 18/06/2025) |
 | `auth.js` | Écran de mot de passe (barrière visuelle uniquement) |
 | `Code_Operations.gs` | Script Apps Script de la source OPERATIONS (à copier dans Apps Script) |
 | `Code_Exigences.gs` | Script Apps Script de la source Exigences |
@@ -28,7 +31,7 @@ Observatoire du bâtiment durable de Prestaterre Certification : site statique (
 
 | Propriété | Obligatoire | Effet |
 |---|---|---|
-| `NEWOSB_ALLOWED_ORIGINS` | oui | Adresse(s) du site autorisée(s) à recevoir les données par le pont |
-| `NEWOSB_ACCESS_KEY` | si déploiement « Tout le monde » | L'URL de la source doit finir par `?key=…` |
+| `NEWOSB_ALLOWED_ORIGINS` | oui | Adresse(s) du site autorisée(s) à dialoguer avec le pont (OPERATIONS et Exigences) |
+| `NEWOSB_ACCESS_KEY` | **oui** (16 caractères min.) | Clé saisie dans l’Observatoire, gardée en mémoire ; jamais dans l’URL. Une clé distincte par projet Apps Script |
 | `NEWOSB_ANONYMIZED_ONLY` | non | `1` : le déploiement ne renvoie que des données pseudonymisées |
 | `NEWOSB_PSEUDO_SECRET` | automatique | Clé des pseudonymes du mode anonymisé serveur |

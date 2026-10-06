@@ -480,22 +480,37 @@
   async function assetDataUrl(url){
     const res=await fetch(new URL(url,location.href).href,{cache:'force-cache'}); if(!res.ok)throw new Error(`Asset indisponible : ${url}`); return dataUrlFromBlob(await res.blob());
   }
-  function svgMarkupForNode(node,width,height){
+  // V6.14 : une image SVG (foreignObject) chargée par une URL blob: « contamine » le canvas dans Chrome :
+  // toDataURL/toBlob échouaient, d'où des PPTX sans visuel, des PNG absents et un envoi Google Slides en erreur.
+  // Le SVG est désormais chargé en data: URL et les images internes (logo…) y sont intégrées.
+  const exportImageCache=new Map();
+  async function inlineExportImages(clone){
+    const imgs=[...clone.querySelectorAll('img')];
+    await Promise.all(imgs.map(async img=>{
+      const src=img.getAttribute('src');if(!src||/^data:/i.test(src))return;
+      const abs=new URL(src,location.href).href;
+      try{if(!exportImageCache.has(abs))exportImageCache.set(abs,assetDataUrl(abs));img.setAttribute('src',await exportImageCache.get(abs));}
+      catch{exportImageCache.delete(abs);img.removeAttribute('src');}
+    }));
+  }
+  let exportCssCache='';
+  function exportCss(){return exportCssCache||(exportCssCache=cssTextForExport().replace(/@import[^;]+;/g,''));}
+  async function svgMarkupForNode(node,width,height){
     const clone=node.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
-    clone.querySelectorAll('img').forEach(img=>{const src=img.getAttribute('src');if(src)img.setAttribute('src',new URL(src,location.href).href);});
+    await inlineExportImages(clone);
     clone.style.width=`${width}px`; clone.style.height=`${height}px`; clone.style.maxWidth=`${width}px`;
-    const xhtml=`<div xmlns="http://www.w3.org/1999/xhtml"><style>${cssTextForExport()}</style>${clone.outerHTML}</div>`;
+    const xhtml=`<div xmlns="http://www.w3.org/1999/xhtml"><style><![CDATA[${exportCss().replace(/\]\]>/g,'] ]>')}]]></style>${new XMLSerializer().serializeToString(clone)}</div>`;
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
   }
+  const svgDataUrl=svg=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  function loadImage(url){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Rendu du visuel impossible.'));im.src=url;});}
+  async function canvasFromNode(node,width,height,outW=width,outH=height){
+    const img=await loadImage(svgDataUrl(await svgMarkupForNode(node,width,height)));
+    const canvas=document.createElement('canvas');canvas.width=outW;canvas.height=outH;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,outW,outH);ctx.drawImage(img,0,0,outW,outH);return canvas;
+  }
   async function pngDataUrlFromNode(node,width=1920,height=1080){
-    const svg=svgMarkupForNode(node,width,height);
-    const svgBlob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
-    const url=URL.createObjectURL(svgBlob);
-    try{
-      const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=url;});
-      const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.drawImage(img,0,0,width,height);return canvas.toDataURL('image/png');
-    }finally{URL.revokeObjectURL(url);}
+    return (await canvasFromNode(node,width,height)).toDataURL('image/png');
   }
   async function bodyPngForSlide(slide){
     if(!slide||slide.type==='cover'||!slide.contentHtml)return '';
@@ -507,25 +522,26 @@
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
     try{return await pngDataUrlFromNode(host,2400,1140);}finally{host.remove();}
   }
-  function exportStageNode(node,filename,format='png'){
+  function downloadBlob(blob,name){const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+  async function exportStageNode(node,filename,format='png'){
     if(!node)return;
-    const svg=svgMarkupForNode(node,3840,2160);
-    const svgBlob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
-    const download=(blob,name)=>{const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);};
-    if(format==='svg'){download(svgBlob,`${filename}.svg`);return;}
-    const url=URL.createObjectURL(svgBlob);const img=new Image();
-    img.onload=()=>{const canvas=document.createElement('canvas');canvas.width=3840;canvas.height=2160;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);canvas.toBlob(blob=>{if(blob)download(blob,`${filename}.png`);URL.revokeObjectURL(url);},'image/png');};
-    img.onerror=()=>URL.revokeObjectURL(url);img.src=url;
+    try{
+      if(format==='svg'){downloadBlob(new Blob([await svgMarkupForNode(node,3840,2160)],{type:'image/svg+xml;charset=utf-8'}),`${filename}.svg`);return;}
+      const canvas=await canvasFromNode(node,3840,2160);
+      const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
+      if(!blob)throw new Error('Image PNG vide.');
+      downloadBlob(blob,`${filename}.png`);
+    }catch(err){console.error('Export slide',err);alert('Export impossible : '+(err?.message||err));}
   }
   function exportPresentationSlide(id,format='png'){
     const slide=state.presentationSlides.find(s=>s.id===id);if(!slide)return;
     const node=document.getElementById('obsPresentationStage');
-    exportStageNode(node,`Observatoire_Prestaterre_${slide.type==='cover'?'couverture':String(slide.title||'slide').replace(/[^a-z0-9_-]+/gi,'_').slice(0,60)}`,format);
+    return exportStageNode(node,`Observatoire_Prestaterre_${slide.type==='cover'?'couverture':String(slide.title||'slide').replace(/[^a-z0-9_-]+/gi,'_').slice(0,60)}`,format);
   }
   function exportAllPresentationSlides(format='png'){
     if(!state.presentationSlides.length)return;
     const currentId=state.presentationActiveId,ids=state.presentationSlides.map(s=>s.id);let i=0;
-    const next=()=>{if(i>=ids.length){state.presentationActiveId=currentId;savePresentationState();renderPage();return;}state.presentationActiveId=ids[i];savePresentationState();renderPage();requestAnimationFrame(()=>requestAnimationFrame(()=>{exportPresentationSlide(ids[i],format);i+=1;setTimeout(next,350);}));};next();
+    const next=()=>{if(i>=ids.length){state.presentationActiveId=currentId;savePresentationState();renderPage();return;}state.presentationActiveId=ids[i];savePresentationState();renderPage();requestAnimationFrame(()=>requestAnimationFrame(async()=>{await exportPresentationSlide(ids[i],format);i+=1;setTimeout(next,350);}));};next();
   }
   function googleSlidesNumber(value){
     const raw=String(value??'').replace(/\u00a0/g,' ').trim();
@@ -614,7 +630,7 @@
   async function googleSlideSnapshot(model){
     const wrap=document.createElement('div');wrap.className='obs-google-slide-snapshot';wrap.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:-99999;';wrap.innerHTML=presentationSlideMarkup(model);document.body.appendChild(wrap);
     const node=wrap.querySelector('#obsPresentationStage');
-    try{await Promise.all([...node.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const svg=svgMarkupForNode(node,1600,900),blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'}),url=URL.createObjectURL(blob);try{const img=await new Promise((res,rej)=>{const im=new Image();im.onload=()=>res(im);im.onerror=rej;im.src=url;});const canvas=document.createElement('canvas');canvas.width=1600;canvas.height=900;const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,900);ctx.drawImage(img,0,0,1600,900);return canvas.toDataURL('image/jpeg',0.92);}finally{URL.revokeObjectURL(url);}}finally{wrap.remove();}
+    try{await Promise.all([...node.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return (await canvasFromNode(node,1600,900)).toDataURL('image/jpeg',0.92);}finally{wrap.remove();}
   }
   async function buildGoogleSlidesPayload(){
     const slides=[];
@@ -625,18 +641,22 @@
   async function exportPresentationGoogleSlides(){
     if(!state.presentationSlides.length)return;
     if(typeof engine.createGoogleSlides!=='function'){alert('Le pont Google Slides n’est pas disponible dans cette version.');return;}
-    const target=window.open('about:blank','newosb_google_slides');
-    if(target){try{target.document.write('<title>Observatoire Prestaterre → Google Slides</title><div style="font-family:Arial;padding:32px">Création de la présentation Google Slides en cours…</div>');}catch{}}
+    // V6.14 : la fenêtre du pont Google est ouverte immédiatement, pendant le clic. Auparavant elle était ouverte
+    // après la préparation des images (asynchrone) et le navigateur la bloquait comme pop-up.
+    let prepared=null;
+    try{prepared=engine.prepareGoogleSlides?.();}catch(err){alert('Google Slides impossible : '+(err?.message||err));return;}
+    const button=pageEl.querySelector('[data-pres-google-slides]');if(button){button.disabled=true;button.textContent='Google Slides… en cours';}
     try{
       const payload=await buildGoogleSlidesPayload();
-      const result=await engine.createGoogleSlides(payload);
-      if(!result?.ok)throw new Error(result?.error||'Création Google Slides impossible.');
-      if(target&&!target.closed)target.location.href=result.url;else if(result.url)window.open(result.url,'_blank','noopener');
-      const toast=document.getElementById('toast');if(toast){toast.textContent='Présentation Google Slides créée.';toast.classList.add('is-visible');setTimeout(()=>toast.classList.remove('is-visible'),2200);}
+      const result=await engine.createGoogleSlides(payload,prepared);
+      if(!result?.ok||!result.url)throw new Error(result?.error||'Création Google Slides impossible.');
+      const shown=engine.showGoogleSlidesResult?.(result.url);
+      if(!shown){const w=window.open(result.url,'_blank','noopener');if(!w)prompt('Présentation créée. Copie ce lien pour l’ouvrir :',result.url);}
+      const toast=document.getElementById('toast');if(toast){toast.textContent='Présentation Google Slides créée.';toast.classList.add('is-visible');setTimeout(()=>toast.classList.remove('is-visible'),2600);}
     }catch(err){
-      try{if(target&&!target.closed)target.close();}catch{}
+      engine.cancelGoogleSlides?.();
       console.error(err);alert('Google Slides impossible : '+(err?.message||err));
-    }
+    }finally{const b=pageEl.querySelector('[data-pres-google-slides]');if(b){b.disabled=false;b.textContent='Google Slides ↗';}}
   }
   function pptxFontName(cssFont){return String(cssFont||'Arial').split(',')[0].replace(/["']/g,'').trim()||'Arial';}
   async function exportPresentationPptx(){
@@ -2190,7 +2210,39 @@
   }
   function projectGeneralHtml(project,op){
     const cert=op||project;
-    return `<div class="p10-dashboard"><div class="p10-dashboard-main"><div class="p10-pair"><article class="p10-card">${projectUxHeading('Identit\u00e9 du projet','source')}<dl class="p10-data-list">${projectUxDatum('Code projet',project.code)}${projectUxDatum('Ma\u00eetre d\u2019ouvrage',project.moa)}${projectUxDatum('Groupe MOA',privacy()?.enabled?.()&&project.moaGroup?privacy().moa(project.moaGroup):project.moaGroup)}${projectUxDatum('Ann\u00e9e de construction',op?.constructionYear)}${projectUxDatum('Ann\u00e9e de certification',cert.year)}${projectUxDatum('R\u00e9f\u00e9rentiel',cert.referential)}</dl></article>${projectUxTimelineHtml(project,op)}</div><div class="p10-pair">${projectUxEnvelopeHtml(op)}${projectUxCvcHtml(op)}</div><article class="p10-card p10-performance-card">${projectUxHeading('Performances \u00e9nerg\u00e9tiques','chart','energy')}<div class="p10-performance-grid">${projectUxCompareChart(op)}${projectUxDpeHtml(op)}</div></article>${projectUxWindowsHtml(op)}${projectUxTagsHtml(project,op)}</div><aside class="p10-dashboard-aside">${projectUxSynthesisHtml(project,op)}<article class="p10-card p10-cert-card">${projectUxHeading('Certification','check')}<dl class="p10-data-list">${projectUxDatum('Mention / label',projectUxValue(cert,'mentions')||cert.mentions)}${projectUxDatum('Performance',projectUxValue(cert,'performance')||cert.performance)}${projectUxDatum('Profil',projectUxValue(cert,'profile')||cert.profile)}${projectUxDatum('Version du r\u00e9f\u00e9rentiel',projectUxText(cert?.version)||projectUxRawHeader(cert,'Version')||projectUxRawHeader(cert,'Version du r\u00e9f\u00e9rentiel applicable: Version'))}</dl></article></aside></div>`;
+    return `<div class="p10-dashboard"><div class="p10-dashboard-main"><div class="p10-pair"><article class="p10-card">${projectUxHeading('Identit\u00e9 du projet','source')}<dl class="p10-data-list">${projectUxDatum('Code projet',project.code)}${projectUxDatum('Ma\u00eetre d\u2019ouvrage',project.moa)}${projectUxDatum('Groupe MOA',privacy()?.enabled?.()&&project.moaGroup?privacy().moa(project.moaGroup):project.moaGroup)}${projectUxDatum('Ann\u00e9e de construction',op?.constructionYear)}${projectUxDatum('Ann\u00e9e de certification',cert.year)}${projectUxDatum('R\u00e9f\u00e9rentiel',cert.referential)}</dl></article>${projectUxTimelineHtml(project,op)}</div><div class="p10-pair">${projectUxEnvelopeHtml(op)}${projectUxCvcHtml(op)}</div><article class="p10-card p10-performance-card">${projectUxHeading('Performances \u00e9nerg\u00e9tiques','chart','energy')}<div class="p10-performance-grid">${projectUxCompareChart(op)}${projectUxDpeHtml(op)}</div></article>${projectUxWindowsHtml(op)}${projectUxTagsHtml(project,op)}</div><aside class="p10-dashboard-aside">${projectUxSynthesisHtml(project,op)}<article class="p10-card p10-cert-card">${projectUxHeading('Certification','check')}<dl class="p10-data-list">${projectUxDatum('Mention / label',projectUxValue(cert,'mentions')||cert.mentions)}${projectUxDatum('Performance',projectUxValue(cert,'performance')||cert.performance)}${projectUxDatum('Profil',projectUxValue(cert,'profile')||cert.profile)}${projectUxDatum('Version du r\u00e9f\u00e9rentiel',projectUxText(cert?.version)||projectUxRawHeader(cert,'Version')||projectUxRawHeader(cert,'Version du r\u00e9f\u00e9rentiel applicable: Version'))}</dl></article></aside></div>${projectUxRequirementsHtml(project)}`;
+  }
+  // V6.14 : rappel des exigences sélectionnées (source Exigences / RAPPORT), par code opération uniquement.
+  // Données lues via l'API figée NEWOSB_REQUIREMENTS.getOperationRequirements, indépendante des filtres de l'onglet Exigences.
+  const PROJECT_REQ_TARGETS={'1':'Cible 1 · \u00c9co-conception & management du projet','2':'Cible 2 · Le b\u00e2timent dans son environnement','3':'Cible 3 · Sobri\u00e9t\u00e9 et efficacit\u00e9 du b\u00e2timent','4':'Cible 4 · Usages & qualit\u00e9 de vie'};
+  function projectUxRequirementsHtml(project){
+    const api=window.NEWOSB_REQUIREMENTS;
+    const title=projectUxHeading('Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration','check');
+    const wrap=(body,cls='')=>`<section class="p10-card p10-req-card ${cls}" aria-label="Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration" data-project-requirements>${title}${body}<p class="p10-req-note">Une exigence pr\u00e9sente dans RAPPORT est une s\u00e9lection document\u00e9e ; elle ne vaut pas validation.</p></section>`;
+    const info=(text,cls)=>wrap(`<p class="p10-req-state" role="status">${text}</p>`,cls);
+    if(!api?.getOperationRequirements)return info('Module Exigences indisponible.','is-muted');
+    const code=String(project?.code||'').trim();
+    if(!code)return info('Ce projet n\u2019a pas de code op\u00e9ration : aucun rapprochement avec la source Exigences n\u2019est possible.','is-muted');
+    const data=api.getOperationRequirements(code,{pseudonymized:Boolean(privacy()?.enabled?.())});
+    if(data.state==='disconnected')return info('Source Exigences non connect\u00e9e pour cette session : les exigences de l\u2019op\u00e9ration ne peuvent pas \u00eatre affich\u00e9es. Connecte-la depuis l\u2019onglet <b>Exigences</b> (URL du script et cl\u00e9 d\u2019acc\u00e8s).','is-muted');
+    if(data.state==='loading')return info('Chargement de la source Exigences\u2026','is-loading');
+    if(data.state==='unauthorized')return info(`Source Exigences : acc\u00e8s non autoris\u00e9. ${esc(data.error||'')}`,'is-error');
+    if(data.state==='error')return info(`Source Exigences indisponible : ${esc(data.error||'erreur inconnue')}. Aucune conclusion n\u2019est tir\u00e9e sur les exigences de cette op\u00e9ration.`,'is-error');
+    if(!data.matched)return info('Aucune ligne RAPPORT n\u2019est rattach\u00e9e \u00e0 ce code op\u00e9ration. Cela ne prouve pas qu\u2019aucune exigence n\u2019a \u00e9t\u00e9 s\u00e9lectionn\u00e9e : la saisie peut \u00eatre absente ou rattach\u00e9e \u00e0 un autre code.','is-muted');
+    const evs=data.evaluations;
+    const partial=data.partial?.length?`<div class="p10-req-partial" role="note"><b>Correspondance partielle</b><ul>${data.partial.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></div>`:'';
+    const multi=data.multiple?`<p class="p10-req-multi" role="note"><b>${fmt(evs.length)} \u00e9valuations ou versions</b> concernent cette op\u00e9ration. Elles restent s\u00e9par\u00e9es : aucune n\u2019est d\u00e9sign\u00e9e comme \u00ab actuelle \u00bb faute de donn\u00e9e le permettant, et leurs exigences ne sont pas fusionn\u00e9es.</p>`:'';
+    const blocks=evs.map((ev,i)=>{
+      const groups=new Map();ev.requirements.forEach(r=>{const k=r.target||'';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});
+      const ordered=[...groups.entries()].sort((a,b)=>(a[0]||'9').localeCompare(b[0]||'9'));
+      const list=ordered.map(([t,items])=>`<div class="p10-req-group"><h4>${esc(t?PROJECT_REQ_TARGETS[t]||('Cible '+t):'Cible non d\u00e9termin\u00e9e')}<small>${fmt(items.length)}</small></h4><ul>${items.map(r=>`<li><b>${esc(r.code||'\u2014')}</b><span>${esc(r.label)}</span>${r.validated?`<em title="Valeur de la colonne \u00ab Exigence valid\u00e9e \u00bb">Valid\u00e9e : ${esc(r.validated)}</em>`:''}${r.code?'':`<em class="is-warn">${esc(r.reason||'Sans code')}</em>`}</li>`).join('')}</ul></div>`).join('');
+      const label=ev.synthetic?'\u00c9valuation non identifi\u00e9e':`\u00c9valuation ${esc(ev.evaluationCode)}`;
+      const meta=[ev.referential||'R\u00e9f\u00e9rentiel non pr\u00e9cis\u00e9',ev.referentialVersion?`version ${ev.referentialVersion}`:'version non pr\u00e9cis\u00e9e',ev.status?`statut ${ev.status}`:''].filter(Boolean).map(esc).join(' \u00b7 ');
+      return `<details class="p10-req-eval" ${i===0?'open':''}><summary><span>${label}</span><b>${fmt(ev.requirements.length)} exigence${ev.requirements.length>1?'s':''} distincte${ev.requirements.length>1?'s':''}</b><small>${meta}</small></summary>${ev.duplicatesRemoved?`<p class="p10-req-dup">${fmt(ev.rows)} lignes RAPPORT, ${fmt(ev.duplicatesRemoved)} doublon${ev.duplicatesRemoved>1?'s':''} retir\u00e9${ev.duplicatesRemoved>1?'s':''} dans cette \u00e9valuation.</p>`:''}${list}</details>`;
+    }).join('');
+    const total=evs.reduce((n,e)=>n+e.requirements.length,0);
+    const head=`<div class="p10-req-summary"><div><span>Exigences distinctes</span><b>${fmt(evs.length===1?evs[0].requirements.length:total)}</b><small>${evs.length===1?'dans l\u2019\u00e9valuation':'cumul\u00e9es par \u00e9valuation (non fusionn\u00e9es)'}</small></div><div><span>\u00c9valuations / versions</span><b>${fmt(evs.length)}</b></div><div><span>Source</span><b>RAPPORT</b><small>${data.loadedAt?`actualis\u00e9e le ${esc(new Date(data.loadedAt).toLocaleString('fr-FR'))}`:''}</small></div></div>`;
+    return wrap(`${head}${multi}${partial}${blocks}`);
   }
   function projectUxSourceHtml(op){
     const entries=Object.entries(op?.raw||{});
@@ -2220,7 +2272,7 @@
   function ensureProjectWindow(){
     if(projectWindowEl)return projectWindowEl;
     projectWindowEl=document.createElement('div');projectWindowEl.className='obs-project-window obs-project-ux10';projectWindowEl.setAttribute('aria-hidden','true');
-    projectWindowEl.innerHTML=`<div class="obs-project-window-backdrop" data-project-close="1"></div><section class="obs-project-window-panel" role="dialog" aria-modal="true" aria-labelledby="obsProjectUxTitle"><div class="p10-toolbar"><button type="button" class="p10-back" data-project-close="1">${projectUxIcon('back')}Retour \u00e0 l\u2019Observatoire</button><span>PROJETS & OP\u00c9RATIONS <b data-project-code></b></span><button type="button" class="p10-close" data-project-close="1" aria-label="Fermer la fiche projet">${projectUxIcon('close')}</button></div><div class="p10-scroll" data-project-scroll><div class="p10-intro" data-project-intro></div><div class="p10-selector" data-project-selector></div><nav class="p10-tabs" data-project-main-tabs role="tablist" aria-label="Rubriques de la fiche"></nav><div class="p10-source-slot" data-project-source-slot></div><main class="p10-body" data-project-body role="tabpanel" id="obsProjectUxPanel"></main><footer class="p10-footer">Observatoire Prestaterre \u00b7 V6.12 <span>Les valeurs absentes ne sont pas remplac\u00e9es par z\u00e9ro.</span></footer></div></section>`;
+    projectWindowEl.innerHTML=`<div class="obs-project-window-backdrop" data-project-close="1"></div><section class="obs-project-window-panel" role="dialog" aria-modal="true" aria-labelledby="obsProjectUxTitle"><div class="p10-toolbar"><button type="button" class="p10-back" data-project-close="1">${projectUxIcon('back')}Retour \u00e0 l\u2019Observatoire</button><span>PROJETS & OP\u00c9RATIONS <b data-project-code></b></span><button type="button" class="p10-close" data-project-close="1" aria-label="Fermer la fiche projet">${projectUxIcon('close')}</button></div><div class="p10-scroll" data-project-scroll><div class="p10-intro" data-project-intro></div><div class="p10-selector" data-project-selector></div><nav class="p10-tabs" data-project-main-tabs role="tablist" aria-label="Rubriques de la fiche"></nav><div class="p10-source-slot" data-project-source-slot></div><main class="p10-body" data-project-body role="tabpanel" id="obsProjectUxPanel"></main><footer class="p10-footer">Observatoire Prestaterre \u00b7 V6.14 <span>Les valeurs absentes ne sont pas remplac\u00e9es par z\u00e9ro.</span></footer></div></section>`;
     document.body.appendChild(projectWindowEl);
     projectWindowEl.addEventListener('click',e=>{
       if(e.target.closest('[data-project-close]')){closeProjectWindow();return;}
@@ -2278,7 +2330,7 @@
     if(projectUxExportBusy||!state.activeProject)return;projectUxExportBusy=true;
     const {project,selected,techs}=projectUxSelected(),button=projectWindowEl.querySelector('[data-project-export]');if(button)button.disabled=true;
     try{
-      const css=await Promise.all(['newosb.css?v=6.13.7','project-ux.css?v=6.13.7'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
+      const css=await Promise.all(['newosb.css?v=6.14.0','project-ux.css?v=6.14.0'].map(async path=>{const response=await fetch(path);if(!response.ok)throw new Error('Feuille de style indisponible');return response.text();}));
       const picture=await fetch('assets/building_final.png');if(!picture.ok)throw new Error('Illustration indisponible');const blob=await picture.blob();const image=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(blob);});
       const sections=[['Vue d\u2019ensemble',projectGeneralHtml(project,selected)],['B\u00e2timent & \u00e9quipements',projectBuildingHtml(project,selected)],['\u00c9nergie & transition',projectEnergyHtml(project,selected)],['Carbone & DPE',projectCarbonHtml(project,selected)],['Donn\u00e9es \u00e9conomiques',projectEconomicsHtml()]];
       const htmlBody=projectUxHeroHtml(project,selected)+projectUxKpisHtml(project,selected,techs)+`<p>Op\u00e9ration technique : ${esc(projectTechnicalLabel(selected,Math.max(0,techs.findIndex(t=>t.code===selected.code))))} \u00b7 ${esc(selected.code)} \u00b7 export du ${esc(new Date().toLocaleDateString('fr-FR'))}</p>`+sections.map(([l,h])=>`<section class="p10-export-section"><h2>${esc(l)}</h2>${h}</section>`).join('');
@@ -2938,7 +2990,7 @@
   pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
   document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';const host=document.getElementById('obsTerritoryMap');if(host?._newosbOsmCtx)scheduleOsmRender(host._newosbOsmCtx);});
-  window.addEventListener('newosb:requirementschange',e=>{if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
+  window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});

@@ -113,8 +113,9 @@
       <div class="data-modal-grid">
         <div class="data-source-card">
           <label>Mode</label>
-          <select id="dataMode"><option value="demo">Démonstration intégrée</option><option value="appsScript">Google Apps Script (JSON)</option><option value="googleSheet">Google Sheet public (CSV)</option></select>
+          <select id="dataMode"><option value="demo">Démonstration intégrée</option><option value="appsScript">Google Apps Script privé (pont sécurisé)</option><option value="googleSheet">Google Sheet public (CSV) — données déjà publiques uniquement</option></select>
           <label>URL de la source</label><input id="dataUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec ou URL Google Sheet">
+          <label for="dataKey">Clé d’accès Apps Script <small>(gardée en mémoire pendant la session, jamais enregistrée)</small></label><input id="dataKey" type="password" autocomplete="off" spellcheck="false" placeholder="Clé d’accès OPERATIONS (NEWOSB_ACCESS_KEY)">
           <label>Nom de l’onglet Google Sheet</label><input id="dataTab" type="text" value="OPERATIONS">
           <div class="data-actions"><button id="dataConnectBtn" class="btn btn-primary" type="button">Connecter / actualiser</button><button id="dataDisconnectBtn" class="btn btn-secondary" type="button">Revenir au mode manuel</button></div><div class="data-resource-actions"><button id="dataShowGsBtn" class="btn btn-secondary btn-small" type="button">Code .gs</button><button id="dataCopyColumnsBtn" class="btn btn-secondary btn-small" type="button">Colonnes Excel</button><button id="dataHelpBtn" class="btn btn-secondary btn-small" type="button">Aide connexion</button></div>
           <div id="dataFeedback" class="data-feedback">Aucune source connectée.</div>
@@ -151,8 +152,9 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
   <script src="auth.js?v=304"></script>
-  <script src="privacy.js?v=6.13.7"></script>
-  <script src="newosb-rules.js?v=6.13.7"></script>
-  <script src="app.js?v=29.7.24-newosb6.13.7"></script>
+  <script src="privacy.js?v=6.14.0"></script>
+  <script src="newosb-rules.js?v=6.14.0"></script>
+  <script src="newosb-bridge.js?v=6.14.0"></script>
+  <script src="app.js?v=29.7.24-newosb6.14.0"></script>
 </body>
 </html>
