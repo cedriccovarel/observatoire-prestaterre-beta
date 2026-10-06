@@ -4,11 +4,12 @@ Généré à partir de `mentions_catalog.js`. Une ligne par mention. « Critère
 
 ## Sources
 
+**Règle d’application (V6.14.2, décision Prestaterre du 06/10/2026)** : la date de version indiquée dans RAPPORT n’est pas utilisée. Toutes les lignes *Logement Neuf* sont comparées aux règles du 04/05/2026 et toutes les lignes *Logement Rénovation* aux règles du 18/06/2025, par code d’exigence. Un code absent du référentiel de la famille est écarté au diagnostic.
+
 | Contexte | Référentiel | Version | Statut | Pages mentions / annexe | Remarque |
 |---|---|---|---|---|---|
 | BEE_LR@2025-06-18 | BEE Logement Rénovation REF AN 010-3 | 18/06/2025 | règles saisies | 10-13 / 67-72 | REF_AN_010-3_BEE_Logement_Rénovation_-_Version_du_18-06-2025.pdf |
 | BEE_LN@2026-05-04 | BEE Logement Neuf REF AN 010-1 | 04/05/2026 | règles saisies | 10-20 / 98-103 | BEE_Logement_Neuf_2026_Mentions_pour_Claude.txt (dossier d’extraction transmis avec la demande ; le PDF lui-même n’a pas été transmis dans cette session) |
-| BEE_LR@2026-05-04 | BEE Logement Rénovation REF AN 010-3 | 04/05/2026 | **non fourni** | — | PDF « REF AN 010-3 BEE Logement Rénovation — version du 04/05/2026 » non fourni (seule la version du 18/06/2025 a été transmise). Les règles 2025 ne sont pas transposées. |
 | BEE_TN@? | BEE Tertiaire Neuf  | version non communiquée | **non fourni** | — | Référentiel BEE Tertiaire Neuf non fourni (ni document ni version). |
 | BEE_TE@? | BEE Tertiaire Exploitation  | version non communiquée | **non fourni** | — | Référentiel BEE Tertiaire Exploitation non fourni (ni document ni version) : sa numérotation propre n’a pas pu être vérifiée. |
 

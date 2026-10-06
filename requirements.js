@@ -17,7 +17,7 @@
     views:{chronology:'list',topGlobal:'list',target1:'list',target2:'list',target3:'list',target4:'list',evolution:'list',mentions:'list',mentionReqs:'list'},
     pages:{},
     // Encart « Compatibilité des exigences sélectionnées avec les mentions » (V6.14).
-    compat:{context:'',manualMention:'',values:{},openBouquet:false,openDiag:false,openFields:false},
+    compat:{context:'',manualMention:'',values:{},size:'',openBouquet:false,openDiag:false,openFields:false},
     focusSelector:''
   };
   // URL mémorisée sans aucune clé. Une ancienne URL « …?key=… » (V6.13) est nettoyée et la clé
@@ -501,9 +501,10 @@
     const M=MENTIONS(),cat=MENTION_CATALOG();
     if(!M||!cat)return {error:'Moteur ou catalogue des mentions indisponible (newosb-mentions.js / mentions_catalog.js).'};
     const rows=compatScopeRows();
-    const sig=`${rows.length}|${state.rows.length}|${state.loadedAt}|${JSON.stringify(state.filters)}`;
+    const size=state.compat.size||M.BOUQUET_SIZE;
+    const sig=`${rows.length}|${state.rows.length}|${state.loadedAt}|${JSON.stringify(state.filters)}|${size}`;
     let bouquets;
-    if(compatCache&&compatCache.sig===sig)bouquets=compatCache.bouquets;else{bouquets=M.buildBouquets(rows,cat,{size:M.BOUQUET_SIZE});compatCache={sig,bouquets};}
+    if(compatCache&&compatCache.sig===sig)bouquets=compatCache.bouquets;else{bouquets=M.buildBouquets(rows,cat,{size});compatCache={sig,bouquets};}
     const contexts=bouquets.contexts;
     let ctx=contexts.find(c=>c.key===state.compat.context);
     // Périmètre initial : le plus documenté parmi ceux dont les règles sont disponibles (sinon le plus documenté).
@@ -560,10 +561,13 @@
     const fieldsHtml=fields.length?`<details class="req-compat-fields" ${state.compat.openFields?'open':''} data-req-compat-toggle="openFields"><summary>Conditions d’application du contexte (${fmt(fields.filter(f=>values[f.id]).length)} / ${fmt(fields.length)} renseignées)</summary><p>Une condition laissée « Inconnu » rend les mentions concernées provisoires : elles sont alors exclues du classement automatique.</p><div class="req-compat-field-grid">${fields.map(f=>`<label><span>${esc(f.label)}</span><select data-req-compat-field="${attr(f.id)}"><option value="">Inconnu</option>${f.values.map(([v,l])=>`<option value="${attr(v)}" ${values[f.id]===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`).join('')}</div></details>`:'';
     const source=ctx.source;
     const analysis=model.analysis;
-    const meta=`<div class="req-compat-meta"><div><span>Contexte comparé</span><b>${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}</b></div><div><span>Opérations documentées</span><b>${fmt(ctx.operations)}</b></div><div><span>Bouquet comparé</span><b>${fmt(ctx.top.length)} exigence${ctx.top.length>1?'s':''}</b><small>${ctx.top.length<ctx.size?`moins de ${fmt(ctx.size)} exigences disponibles`:`Top ${fmt(ctx.size)} par opérations distinctes`}</small></div></div>`;
-    let cards=ctx.partialMatch?.length?`<div class="req-compat-uncovered" role="note"><b>Version identifiée ${ctx.partialMatch.includes('year')?'par l’année seule':'par le mois et l’année'}</b><span>Les lignes RAPPORT ne portent pas la date complète de la version ; une seule version de ce référentiel correspond dans le catalogue (${esc(ctx.familyLabel)} · ${esc(ctx.versionLabel)}). À confirmer.</span></div>`:'';
+    const sizes=[[String(M.BOUQUET_SIZE),`Top ${M.BOUQUET_SIZE} (par défaut)`],['40','Top 40'],['all','Toutes les exigences du périmètre filtré']];
+    const curSize=String(state.compat.size||M.BOUQUET_SIZE);
+    const sizeSelect=`<label class="req-compat-size"><span>Bouquet comparé</span><select data-req-compat-size="1">${sizes.map(([v,l])=>`<option value="${v}" ${curSize===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;
+    const meta=`<div class="req-compat-meta"><div><span>Référentiel comparé</span><b>${esc(ctx.familyLabel)}</b><small>${ctx.source?.status==='available'?`règles du ${esc(ctx.versionLabel)}, appliquées à toutes les versions`:'règles non fournies'}</small></div><div><span>Opérations documentées</span><b>${fmt(ctx.operations)}</b><small>opérations distinctes ayant des lignes RAPPORT</small></div><div>${sizeSelect}<b>${fmt(ctx.top.length)} exigence${ctx.top.length>1?'s':''}</b><small>${curSize==='all'?'toutes les exigences sélectionnées au moins une fois':ctx.top.length<ctx.size?`moins de ${fmt(ctx.size)} exigences disponibles`:`les plus sélectionnées, par opérations distinctes`}</small></div></div>`;
+    let cards='';
     if(!source||source.status!=='available'){
-      cards+=`<div class="req-compat-uncovered" role="note"><b>Version non couverte</b><span>${esc(source?.missing||`Aucune règle de mentions n’est disponible pour ${ctx.familyLabel} · ${ctx.versionLabel}. Les règles d’une autre version ne sont pas transposées.`)}</span></div>`;
+      cards+=`<div class="req-compat-uncovered" role="note"><b>Règles non disponibles</b><span>${esc(source?.missing||`Aucune règle de mentions n’a été fournie pour ${ctx.familyLabel}.`)}</span></div>`;
     }
     const ranked=analysis?.ranked||[];
     const menu=M.mentionMenu(cat);
@@ -587,12 +591,15 @@
       }
       thirdHtml=mentionCardHtml(result,3,model,selectHtml+extra);
     }else thirdHtml=mentionCardHtml(third,3,model,selectHtml);
-    const lessThan3=ranked.length<3?`<p class="req-compat-few" role="note">${ranked.length?`Seulement ${fmt(ranked.length)} mention${ranked.length>1?'s':''} calculable${ranked.length>1?'s':''} de façon fiable dans ce contexte.`:'Aucune mention calculable de façon fiable dans ce contexte.'} Les mentions provisoires ou non calculables sont listées ci-dessous.</p>`:'';
-    const others=(analysis?.results||[]).filter(r=>r.status!=='ok');
+    const lessThan3=ranked.length<3?`<p class="req-compat-few" role="note">${ranked.length?`Seulement ${fmt(ranked.length)} mention${ranked.length>1?'s':''} calculable${ranked.length>1?'s':''} de façon fiable dans ce contexte.`:'Aucune mention calculable de façon fiable dans ce contexte.'} Les mentions provisoires ou non calculables figurent dans le tableau ci-dessus avec leur raison.</p>`:'';
+    const allRes=(analysis?.results||[]).slice().sort((a,b)=>{const rk=r=>r.status==='ok'?0:r.status==='provisional'?1:2;return rk(a)-rk(b)||((b.pct??-1)-(a.pct??-1))||(b.required-a.required)||String(a.name).localeCompare(String(b.name),'fr');});
+    const statusLabel=r=>r.status==='ok'?'Calculée':r.status==='provisional'?'Provisoire':r.status==='not_applicable'?'Non applicable':'Non calculable';
+    const tableHtml=allRes.length?`<div class="req-compat-all"><h3>Compatibilité des opérations filtrées avec chaque mention · ${esc(ctx.familyLabel)}</h3><div class="req-table-wrap"><table class="req-matrix req-compat-table"><thead><tr><th>Mention</th><th>Compatibilité</th><th>Critères couverts</th><th>Statut</th><th></th></tr></thead><tbody>${allRes.map(r=>`<tr class="is-${attr(r.status)}"><td><b>${esc(r.name)}</b></td><td class="req-compat-pct">${r.pct===null||r.pct===undefined||r.status==='not_applicable'||r.status==='not_computable'?'—':`<span class="req-compat-bar"><i style="width:${Math.max(0,Math.min(100,r.pct)).toFixed(1)}%"></i></span><b>${fmt(r.pct,0)} %</b>`}</td><td>${r.required?`${fmt(r.covered)} / ${fmt(r.required)}`:'—'}${r.unknownUnits?` <small>+ ${fmt(r.unknownUnits)} indéterminé${r.unknownUnits>1?'s':''}</small>`:''}</td><td><span class="req-compat-status is-${attr(r.status)}" title="${attr(r.reason||'')}">${statusLabel(r)}</span>${r.status!=='ok'&&r.reason?`<small>${esc(r.reason)}</small>`:''}</td><td><button type="button" class="req-compat-see" data-req-compat-see="${attr(r.id)}">Détail</button></td></tr>`).join('')}</tbody></table></div></div>`:'';
+    const others=[];
     const othersHtml=others.length?`<details class="req-compat-others"><summary>Mentions non classées dans ce contexte (${fmt(others.length)})</summary><ul>${others.map(r=>`<li><b>${esc(r.name)}</b> · ${esc(r.status==='provisional'?'provisoire':r.status==='not_applicable'?'non applicable':'non calculable')}${r.status==='provisional'&&r.pct!==null?` (${fmt(r.pct,0)} % sur les critères déterminés)`:''} — ${esc(r.reason)}</li>`).join('')}</ul></details>`:'';
     const legend=`<div class="req-compat-legend" aria-label="Légende"><span class="is-covered"><i aria-hidden="true">✓</i>Présente dans le bouquet comparé</span><span class="is-absent"><i aria-hidden="true">○</i>Absente du bouquet comparé</span><span class="is-unknown"><i aria-hidden="true">?</i>Condition inconnue ou correspondance non résolue</span><span class="is-na"><i aria-hidden="true">—</i>Non applicable</span></div>`;
     const grid=(source&&source.status==='available')?`<div class="req-compat-grid">${mentionCardHtml(ranked[0]||null,1,model)}${mentionCardHtml(ranked[1]||null,2,model)}${thirdHtml}</div>`:`<div class="req-compat-grid req-compat-grid-single">${thirdHtml}</div>`;
-    return `${head}<article class="obs-card req-compat-card" aria-labelledby="reqCompatTitle"><div class="obs-card-head"><div><span>MENTIONS × BOUQUET D’EXIGENCES</span><h2 id="reqCompatTitle">Couverture des critères par le bouquet</h2></div><div class="req-head-actions">${ctxSelect}</div></div>${meta}${cards}${fieldsHtml}${legend}${lessThan3}${grid}${othersHtml}${bouquetHtml(ctx)}${diagHtml(model)}${disclaimer}</article>`;
+    return `${head}<article class="obs-card req-compat-card" aria-labelledby="reqCompatTitle"><div class="obs-card-head"><div><span>MENTIONS × BOUQUET D’EXIGENCES</span><h2 id="reqCompatTitle">Couverture des critères par le bouquet</h2></div><div class="req-head-actions">${ctxSelect}</div></div>${meta}${cards}${fieldsHtml}${tableHtml}${legend}${lessThan3}${grid}${othersHtml}${bouquetHtml(ctx)}${diagHtml(model)}${disclaimer}</article>`;
   }
   function bouquetHtml(ctx){
     const rows=ctx.top.map((it,i)=>`<tr><td>${i+1}</td><td><b>${esc(it.code)}</b></td><td>${esc(it.label)}</td><td>${fmt(it.operations)}</td><td>${fmt(100*it.frequency,1)} %</td></tr>`).join('');
@@ -605,9 +612,9 @@
     if(d.rowsWithoutOperation)list.push(`<tr><td>—</td><td>Lignes sans code opération</td><td>Impossible de compter une opération distincte : lignes exclues du calcul</td><td>${fmt(d.rowsWithoutOperation)} ligne${d.rowsWithoutOperation>1?'s':''}</td></tr>`);
     const others=(model.bouquets?.contexts||[]).filter(c=>c.key!==ctx?.key).map(c=>`${c.familyLabel} · ${c.versionLabel} (${fmt(c.operations)})`);
     const vers=(d.versions||[]);
-    const versHtml=vers.length?`<h4 class="req-compat-diag-title">Référentiels et versions lus dans RAPPORT (périmètre filtré)</h4><div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Référentiel (RAPPORT)</th><th>Version (RAPPORT)</th><th>Opérations</th><th>Rattachement</th></tr></thead><tbody>${vers.map(v=>`<tr><td>${esc(v.referential||'—')}</td><td>${esc(v.version||'—')}</td><td>${fmt(v.operations)}</td><td>${v.covered?`✓ ${esc(v.sourceLabel)}${v.match==='year'?' (par l’année)':v.match==='month'?' (par le mois)':''}`:esc(v.reason||(v.sourceLabel?`${v.sourceLabel} : règles non fournies`:'Version non couverte'))}</td></tr>`).join('')}</tbody></table></div>`:'';
+    const versHtml=vers.length?`<h4 class="req-compat-diag-title">Référentiels et versions lus dans RAPPORT (périmètre filtré) — la version est indicative, seules les familles Neuf / Rénovation comptent</h4><div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Référentiel (RAPPORT)</th><th>Version (RAPPORT)</th><th>Opérations</th><th>Rattachement</th></tr></thead><tbody>${vers.map(v=>`<tr><td>${esc(v.referential||'—')}</td><td>${esc(v.version||'—')}</td><td>${fmt(v.operations)}</td><td>${v.covered?`✓ règles ${esc(v.sourceLabel)}`:esc(v.reason||(v.sourceLabel?`${v.sourceLabel} : règles non fournies`:'Version non couverte'))}</td></tr>`).join('')}</tbody></table></div>`:'';
     const uncoveredOps=vers.filter(v=>!v.covered).reduce((n,v)=>n+v.operations,0);
-    return `<details class="req-compat-diag" ${state.compat.openDiag?'open':''} data-req-compat-toggle="openDiag"><summary>Diagnostic : versions lues et exigences sans correspondance fiable (${fmt(list.length)}${uncoveredOps?` · ${fmt(uncoveredOps)} opération${uncoveredOps>1?'s':''} sur une version non couverte`:''})</summary>${versHtml}${others.length?`<p>Autres périmètres présents dans les filtres, non mélangés : ${esc(others.join(' · '))}.</p>`:''}${list.length?`<div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Code</th><th>Exigence</th><th>Raison de l’exclusion</th><th>Opérations</th></tr></thead><tbody>${list.join('')}</tbody></table></div>`:'<p>Toutes les exigences du contexte ont une correspondance fiable.</p>'}</details>`;
+    return `<details class="req-compat-diag" ${state.compat.openDiag?'open':''} data-req-compat-toggle="openDiag"><summary>Diagnostic : versions lues et exigences sans correspondance fiable (${fmt(list.length)}${uncoveredOps?` · ${fmt(uncoveredOps)} opération${uncoveredOps>1?'s':''} sans règles disponibles`:''})</summary>${versHtml}${others.length?`<p>Autres périmètres présents dans les filtres, non mélangés : ${esc(others.join(' · '))}.</p>`:''}${list.length?`<div class="req-table-wrap"><table class="req-matrix"><thead><tr><th>Code</th><th>Exigence</th><th>Raison de l’exclusion</th><th>Opérations</th></tr></thead><tbody>${list.join('')}</tbody></table></div>`:'<p>Toutes les exigences du contexte ont une correspondance fiable.</p>'}</details>`;
   }
 
   function render(){
@@ -642,6 +649,7 @@
       state.focusSelector='[data-req-connect]';load(url);return true;}
     if(e.target.closest('[data-req-disconnect]')){state.focusSelector='[data-req-connect]';disconnect();return true;}
     if(e.target.closest('[data-req-forget]')){forgetSource();return true;}
+    const see=e.target.closest('[data-req-compat-see]');if(see){state.compat.manualMention=see.dataset.reqCompatSee||'';state.focusSelector='[data-req-compat-mention]';emit();setTimeout(()=>{try{document.querySelector('[data-req-compat-mention]')?.closest('.req-compat-mention')?.scrollIntoView({block:'nearest'});}catch{}},40);return true;}
     if(e.target.closest('[data-req-compat-auto]')){state.compat.manualMention='';state.focusSelector='[data-req-compat-mention]';emit();return true;}
     const go=e.target.closest('[data-req-compat-context-go]');if(go){state.compat.context=go.dataset.reqCompatContextGo||'';state.focusSelector='[data-req-compat-mention]';emit();return true;}
     const tg=e.target.closest('details[data-req-compat-toggle]>summary');if(tg){const d=tg.parentElement,k=d.dataset.reqCompatToggle;setTimeout(()=>{if(k in state.compat)state.compat[k]=!!d.open;},0);return false;}
@@ -663,6 +671,7 @@
     const mf=e.target.closest('[data-req-mention-focus]');if(mf){state.mentionFocus=mf.value||'';emit();return true;}
     // Encart compatibilité : ces choix ne modifient ni les filtres généraux ni les deux premières cartes.
     const cm=e.target.closest('[data-req-compat-mention]');if(cm){state.compat.manualMention=cm.value||'';state.focusSelector='[data-req-compat-mention]';emit();return true;}
+    const cs=e.target.closest('[data-req-compat-size]');if(cs){state.compat.size=cs.value&&cs.value!==String(MENTIONS()?.BOUQUET_SIZE)?cs.value:'';state.focusSelector='[data-req-compat-size]';emit();return true;}
     const cc=e.target.closest('[data-req-compat-context]');if(cc){state.compat.context=cc.value||'';state.focusSelector='[data-req-compat-context]';emit();return true;}
     const cf=e.target.closest('[data-req-compat-field]');if(cf){const ctxKey=compatModel().ctx?.key||'';const f=cf.dataset.reqCompatField;state.compat.values[ctxKey]={...(state.compat.values[ctxKey]||{}),[f]:cf.value||''};state.compat.openFields=true;state.focusSelector=`[data-req-compat-field="${typeof CSS!=="undefined"&&CSS.escape?CSS.escape(f):f}"]`;emit();return true;}
     return false;

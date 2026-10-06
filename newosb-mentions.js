@@ -74,26 +74,17 @@
     m = s.match(/(?:^|\D)(20\d{2})(?!\d)/);
     return m ? { year: +m[1], month: 0 } : null;
   }
-  // Rattachement d'une ligne à un contexte normatif (famille + version datée).
-  // Ordre : date complète ; sinon mois/année ou année seule, UNIQUEMENT si une seule version de cette famille
-  // du catalogue y correspond (le rattachement est alors signalé « par l'année » ou « par le mois ») ; sinon version non datée.
+  // Rattachement d'une ligne à un contexte normatif.
+  // V6.14.2 (décision Prestaterre du 06/10/2026) : la date de version n'intervient plus. Seule la FAMILLE compte
+  // (Neuf / Rénovation, Logement / Tertiaire) : chaque ligne est comparée aux règles du référentiel fourni pour sa famille
+  // (catalog.familyRules), quelle que soit la version indiquée dans RAPPORT. Les codes absents de ce référentiel restent au diagnostic.
   function rowContext(row, catalog = null) {
     const family = referentialFamily(row?.referential);
-    const candidates = [row?.referentialVersion, row?.referentialVersionDate, row?.referential].map(v => String(v ?? '').trim()).filter(Boolean);
     const versionText = String(row?.referentialVersion || row?.referentialVersionDate || '').trim();
-    let version = '';
-    for (const c of candidates) { version = parseVersionDate(c); if (version) break; }
-    if (!family) return { key: '', family: '', version, versionText, reason: row?.referential ? `Référentiel non reconnu : « ${row.referential} »` : 'Référentiel absent' };
-    if (version) return { key: `${family}@${version}`, family, version, versionText, match: 'date', reason: '' };
-    const sources = (Array.isArray(catalog?.sources) ? catalog.sources : []).filter(s => s.family === family && s.version);
-    for (const c of candidates) {
-      const p = parsePartialVersion(c);
-      if (!p) continue;
-      const hits = sources.filter(s => +s.version.slice(0, 4) === p.year && (!p.month || +s.version.slice(5, 7) === p.month));
-      if (hits.length === 1) return { key: hits[0].context, family, version: hits[0].version, versionText, match: p.month ? 'month' : 'year', reason: '' };
-      return { key: `${family}@?${p.month ? p.year + '-' + pad(p.month) : p.year}`, family, version: '', versionText, reason: hits.length ? `Plusieurs versions ${p.year} possibles : « ${versionText} »` : `Version ${p.month ? pad(p.month) + '/' : ''}${p.year} non fournie : « ${versionText} »` };
-    }
-    return { key: `${family}@?${versionText ? norm(versionText) : ''}`, family, version: '', versionText, reason: versionText ? `Version non datée : « ${versionText} »` : 'Version du référentiel absente' };
+    if (!family) return { key: '', family: '', version: '', versionText, reason: row?.referential ? `Référentiel non reconnu : « ${row.referential} »` : 'Référentiel absent' };
+    const key = (catalog && catalog.familyRules && catalog.familyRules[family]) || `${family}@?`;
+    const source = sourceFor(catalog, key);
+    return { key, family, version: source?.version || '', versionText, match: 'family', reason: source ? '' : `Aucun référentiel fourni pour ${catalog?.families?.[family] || family}` };
   }
 
   // ---------------------------------------------------------------- exigences
@@ -147,7 +138,7 @@
   // rows : lignes RAPPORT normalisées du périmètre (jamais les éléments visibles ni une page).
   // Fréquence = opérations distinctes ayant sélectionné l'exigence / opérations distinctes documentées du contexte.
   function buildBouquets(rows, catalog, options = {}) {
-    const size = Math.max(1, Number(options.size) || BOUQUET_SIZE);
+    const size = options.size === 'all' ? Infinity : Math.max(1, Number(options.size) || BOUQUET_SIZE);
     const contexts = new Map(), noOperation = [], noContext = new Map();
     const versionValues = new Map();
     for (const row of rows || []) {

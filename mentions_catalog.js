@@ -295,6 +295,9 @@
   const catalog = {
     schemaVersion: 1,
     generatedFor: 'Observatoire Prestaterre V6.14',
+    // Règles appliquées par famille, toutes versions confondues (décision Prestaterre du 06/10/2026) :
+    // les lignes RAPPORT sont comparées, par code d'exigence, au référentiel fourni pour leur famille.
+    familyRules: { BEE_LN: 'BEE_LN@2026-05-04', BEE_LR: 'BEE_LR@2025-06-18', BEE_TN: 'BEE_TN@?', BEE_TE: 'BEE_TE@?' },
     families: {
       BEE_LN: 'BEE Logement Neuf',
       BEE_LR: 'BEE Logement Rénovation',
@@ -606,11 +609,6 @@
       {"code": "4.10.7", "title": "Poignées de portes adaptées", "points": 15, "page": "103"},
       {"code": "4.10.8", "title": "Dispositif d’appel d'urgence", "points": 20, "page": "103"}
         ]
-      },
-      {
-        context: 'BEE_LR@2026-05-04', family: 'BEE_LR', version: '2026-05-04', versionLabel: '04/05/2026', ref: 'REF AN 010-3',
-        title: 'BEE Logement Rénovation', status: 'source_missing',
-        missing: 'PDF « REF AN 010-3 BEE Logement Rénovation — version du 04/05/2026 » non fourni (seule la version du 18/06/2025 a été transmise). Les règles 2025 ne sont pas transposées.'
       },
       {
         context: 'BEE_TN@?', family: 'BEE_TN', version: '', versionLabel: 'version non communiquée', ref: '',

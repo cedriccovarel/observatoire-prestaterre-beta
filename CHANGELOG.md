@@ -1,5 +1,16 @@
 # Historique
 
+## V6.14.2
+
+**Vue d’ensemble : graphique « Évolution des projets » rétabli avec les filtres**
+- Depuis la V6.13.1, la courbe ne lisait que l’année de *certification* : dès qu’un filtre ne gardait que des projets en cours (un MOA, la Rénovation, un avancement, un département…), le graphique disparaissait (« Aucune année exploitable »).
+- Choix de l’année : Automatique (certification, ou création si la sélection n’a aucune décision de certification), Certification, Création. Une note indique l’année utilisée et le nombre de projets non représentés.
+
+**Compatibilité des mentions : par famille de référentiel, toutes versions**
+- Décision Prestaterre : la date de version n’intervient plus. Les lignes *Logement Neuf* sont comparées aux règles BEE Logement Neuf 04/05/2026 et les lignes *Logement Rénovation* aux règles du 18/06/2025, par code d’exigence. Neuf et Rénovation ne sont jamais mélangés.
+- Nouveau tableau « Compatibilité des opérations filtrées avec chaque mention » : pourcentage, critères couverts, statut (calculée / provisoire / non applicable) pour toutes les mentions de la famille ; bouton « Détail » vers la carte de la mention.
+- Taille du bouquet réglable : Top 20 (par défaut), Top 40, ou toutes les exigences du périmètre filtré.
+
 ## V6.14.1
 
 **Compatibilité des mentions : rattachement des lignes RAPPORT aux versions des référentiels**

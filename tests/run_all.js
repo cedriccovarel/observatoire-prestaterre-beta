@@ -202,22 +202,12 @@ test('identifiants : espaces, casse, invisibles normalisés ; zéros significati
 test('référentiels : 4 familles distinctes, autres non reconnus', () => {
   assert.strictEqual(MEN.referentialFamily('BEE Logement Neuf'), 'BEE_LN'); assert.strictEqual(MEN.referentialFamily('BEE Logement Rénovation'), 'BEE_LR'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Neuf'), 'BEE_TN'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Exploitation'), 'BEE_TE'); assert.strictEqual(MEN.referentialFamily('NF Habitat'), '');
 });
-test('versions : contexte = famille + date ; versions différentes jamais fusionnées', () => {
-  assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: 'Version du 04/05/2026' }).key, LN_CTX);
-  assert.notStrictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: '01/02/2023' }).key, LN_CTX);
-  assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: '18-06-2025' }).key, LR_CTX);
-});
-test('versions : formats de date variés reconnus (Sheets, ISO, 2 chiffres, en lettres, numéro de série)', () => {
-  for (const v of ['04/05/2026', '4/5/26', '04.05.2026', '2026-05-04T00:00:00', '4 mai 2026', 'Version du 04/05/2026', '46146']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: v }, CAT).key, LN_CTX, v);
+test('famille seule (décision du 06/10/2026) : toutes versions Neuf → règles LN 2026, Rénovation → règles LR 2025 ; jamais mélangées', () => {
+  for (const v of ['04/05/2026', '01/02/2023', 'V5', '']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: v }, CAT).key, LN_CTX, v);
+  for (const v of ['18/06/2025', '04/05/2026', '2019']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: v }, CAT).key, LR_CTX, v);
 });
 test('famille reconnue avec ou sans « BEE » ; autres référentiels écartés', () => { assert.strictEqual(MEN.referentialFamily('Logement Neuf'), 'BEE_LN'); assert.strictEqual(MEN.referentialFamily('Logement - Rénovation'), 'BEE_LR'); assert.strictEqual(MEN.referentialFamily('NF Habitat Neuf'), ''); });
-test('version sans date complète : rattachée seulement si une seule version du catalogue correspond, et signalée', () => {
-  const y = MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: 'V2026' }, CAT); assert.strictEqual(y.key, LN_CTX); assert.strictEqual(y.match, 'year');
-  const m = MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: 'juin 2025' }, CAT); assert.strictEqual(m.key, LR_CTX); assert.strictEqual(m.match, 'month');
-  assert.notStrictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: '2024' }, CAT).key, LN_CTX);
-  assert(/non datée/.test(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: 'V5' }, CAT).reason));
-});
-test('diagnostic : valeurs brutes de référentiel et de version listées avec leur rattachement', () => { const b = MEN.buildBouquets([mkRow('A', '1.1.1'), mkRow('B', '1.1.1', ['BEE Logement Neuf', 'V5'])], CAT); const v = b.diagnostics.versions; assert.strictEqual(v.length, 2); assert(v.some(x => x.covered && x.version === '04/05/2026')); assert(v.some(x => !x.covered && /non datée/.test(x.reason))); });
+test('diagnostic : valeurs brutes de référentiel et de version listées (à titre indicatif)', () => { const b = MEN.buildBouquets([mkRow('A', '1.1.1'), mkRow('B', '1.1.1', ['BEE Logement Neuf', 'V5'])], CAT); const v = b.diagnostics.versions; assert.strictEqual(v.length, 2); assert(v.every(x => x.covered && x.context === LN_CTX)); assert.strictEqual(b.contexts.length, 1); assert.strictEqual(b.contexts[0].operations, 2); });
 test('codes : Tertiaire / anciennes numérotations acceptés, pas seulement 1 à 4', () => { assert.strictEqual(MEN.codeFrom('4.B.2 - x'), '4.B.2'); assert.strictEqual(MEN.codeFrom('5.1.2 Exploitation'), '5.1.2'); assert.strictEqual(MEN.codeFrom('E1.2.3 - Suivi'), 'E1.2.3'); assert.strictEqual(MEN.codeFrom('4.10.2 - Localisation'), '4.10.2'); });
 test('codes contradictoires sur une ligne → non résolu', () => assert.strictEqual(MEN.canonicalCode({ requirementCode: '1.1.1', requirement: '1.1.2 - Diagnostic' }).code, ''));
 test('même numéro, référentiels différents : identités distinctes', () => { const a = MEN.resolveRequirement({ referential: 'BEE Logement Neuf', referentialVersion: '04/05/2026', requirementCode: '1.1.7' }, CAT); const b = MEN.resolveRequirement({ referential: 'BEE Logement Rénovation', referentialVersion: '18/06/2025', requirementCode: '1.1.7' }, CAT); assert.notStrictEqual(a.key, b.key); assert.notStrictEqual(a.label, b.label); });
@@ -265,7 +255,8 @@ test('condition inconnue ne changeant pas le résultat : calcul fiable (même r�
 test('ambiguïté du référentiel affectant le dénominateur : provisoire, exclue du classement', () => { const a = evalIn(LN_CTX, ['3.1.1'], { 'ln2026.regime': 'RT2012' }); assert.strictEqual(byId(a, 'BEE_LN_2026_BPE').status, 'provisional'); assert(!a.ranked.some(r => r.id === 'BEE_LN_2026_BPE')); });
 test('correspondance « à vérifier » (niveau supérieur présumé) : pas de coche verte, résultat provisoire', () => { const r = byId(evalIn(LR_CTX, ['3.1.11']), 'BEE_LR_2025_ECONOMIE_CIRCULAIRE'); const u = r.units.find(x => x.code === '3.1.10'); assert.strictEqual(u.state, 'unresolved'); assert.strictEqual(r.status, 'provisional'); });
 test('règle sans critère défini (BPE LR 2025) : « Non calculable », jamais 0 %', () => { const r = byId(evalIn(LR_CTX, ['3.1.2']), 'BEE_LR_2025_BPE'); assert.strictEqual(r.status, 'not_computable'); assert.strictEqual(r.pct, null); assert(r.reason); });
-test('version non couverte (LR 04/05/2026) : aucune mention calculée, aucune transposition des règles 2025', () => { const a = evalIn('BEE_LR@2026-05-04', ['1.2.1', '1.2.2']); assert.strictEqual(a.results.length, 0); assert.strictEqual(a.source.status, 'source_missing'); assert.strictEqual(MEN.mentionsForContext(CAT, 'BEE_LR@2026-05-04').length, 0); });
+test('Tertiaire (référentiel non fourni) : aucune mention calculée, « règles non disponibles »', () => { const ctx = MEN.rowContext({ referential: 'BEE Tertiaire Neuf', referentialVersion: '2024' }, CAT); const a = evalIn(ctx.key, ['1.2.1']); assert.strictEqual(a.results.length, 0); assert.strictEqual(a.source.status, 'source_missing'); });
+test('ancien code absent du référentiel de la famille : écarté au diagnostic, jamais rapproché par similitude', () => { const b = MEN.buildBouquets([mkRow('A', '4.B.2', ['BEE Logement Neuf', '01/02/2018'])], CAT); assert.strictEqual(b.contexts[0].items.length, 0); assert.strictEqual(b.contexts[0].unresolved.length, 1); });
 test('classement : couverture décroissante (avant arrondi), puis unités requises, puis nom', () => {
   const fake = [{ id: 'b', name: 'B', status: 'ok', pct: 66.7, required: 3 }, { id: 'a', name: 'A', status: 'ok', pct: 66.66, required: 9 }, { id: 'c', name: 'C', status: 'ok', pct: 50, required: 2 }, { id: 'd', name: 'D', status: 'ok', pct: 50, required: 2 }, { id: 'p', name: 'P', status: 'provisional', pct: 99, required: 1 }];
   assert.deepStrictEqual(MEN.rankMentions(fake).map(r => r.id), ['b', 'a', 'c', 'd']);
@@ -396,6 +387,21 @@ atest('encart : moins de trois mentions calculables → résultats disponibles +
   assert(html.includes('Compatibilité des sélections ; l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils applicables.'));
   assert(!/jamais sélectionnée/i.test(html)); assert(/Aucun résultat calculable|Seulement \d+ mention|Aucune mention calculable/.test(html) || (html.match(/req-compat-score">/g) || []).length >= 3);
   assert(html.includes('Diagnostic : versions lues et exigences sans correspondance fiable') && html.includes('9.9.9'));
+});
+atest('encart : tableau de toutes les mentions de la famille avec leur pourcentage ; « Détail » ouvre la 3e carte', async () => {
+  const m = reqModule(R1); await m.connect(); m.check('referential', 'BEE Logement Neuf');
+  for (const [f, v] of [['ln2026.regime', 'RE2020'], ['ln2026.buildingType', 'collectif'], ['ln2026.permit', '2025_2027']]) m.api.handleChange({ target: m.el({ 'data-req-compat-field': '' }, { dataset: { reqCompatField: f }, value: v }) });
+  const html = m.api.render(); const t = html.slice(html.indexOf('req-compat-all'), html.indexOf('</table>', html.indexOf('req-compat-all')));
+  assert.strictEqual((t.match(/data-req-compat-see=/g) || []).length, CAT.mentions.filter(x => x.context === 'BEE_LN@2026-05-04').length);
+  assert(/Biodiversité<\/b><\/td><td class="req-compat-pct">.*?<b>90 %<\/b>/.test(t));
+  m.api.handleClick({ target: m.el({ 'data-req-compat-see': 'BEE_LN_2026_EFFINERGIE_RE2020' }) }); assert.strictEqual(m.api._compatSnapshot().manual, 'BEE_LN_2026_EFFINERGIE_RE2020');
+});
+atest('encart : taille du bouquet réglable (Top 20 / Top 40 / toutes les exigences filtrées)', async () => {
+  const rows = R1.slice(); for (let i = 0; i < 30; i++) rows.push([`4.10.${(i % 8) + 1} - x`, 'EVA-T' + i, 'Promoteur T', 'OP-T' + i, 'BEE Logement Neuf', '04/05/2026', 'Bretagne', '35', `4.10.${(i % 8) + 1}`, '', 'En cours', '']);
+  const m = reqModule(rows); await m.connect();
+  const top = () => m.api._compatSnapshot().contexts.find(c => c.key === 'BEE_LN@2026-05-04').top.length;
+  assert.strictEqual(top(), 20); m.api.handleChange({ target: m.el({ 'data-req-compat-size': '' }, { value: 'all' }) }); assert(top() > 20);
+  m.api.handleChange({ target: m.el({ 'data-req-compat-size': '' }, { value: '20' }) }); assert.strictEqual(top(), 20);
 });
 atest('échappement HTML des contenus du Sheet (MOA, intitulés)', async () => {
   const rows = R1.slice(); rows.push(['<img src=x onerror=alert(1)> - piège', 'EVA-H', '<script>alert(1)</script>', 'OP-<i>X</i>', 'BEE Logement Neuf', '04/05/2026', 'Bretagne', '35', '1.1.1', '', 'En cours', '']);

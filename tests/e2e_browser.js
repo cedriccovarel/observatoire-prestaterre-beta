@@ -147,6 +147,15 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const op2 = await page.evaluate(() => ({ project: window.NEWOSB_ENGINE.getOperations().find(o => o.code === 'OP-2').status, rows: window.NEWOSB_ENGINE.getTechnicalOperations().filter(o => o.projectCode === 'OP-2').map(o => o.status) }));
       check(op2.project === 'notStarted', `projet à plusieurs lignes : avancement global = étape la moins avancée (obtenu : ${op2.project})`);
       check(op2.rows.join(',') === 'incomplete,notStarted', `opération détaillée : statut exact de chaque ligne (obtenu : ${op2.rows.join(',')})`);
+      // Vue d'ensemble : le graphique « Évolution des projets » reste affiché quel que soit le filtre (V6.14.2)
+      await page.click('button[data-page="overview"]'); await page.waitForTimeout(200);
+      { const res = [];
+        for (const [k, v] of [['moa', 'Bailleur B'], ['referential', 'BEE Logement Rénovation'], ['status', 'notStarted']]) {
+          await page.evaluate(([k, v]) => { const i = [...document.querySelectorAll(`[data-global-filter-check="${k}"]`)].find(x => x.value === v); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); }, [k, v]); await page.waitForTimeout(250);
+          res.push(await page.evaluate(() => !!document.querySelector('.obs-evolution-multi svg')));
+          await page.click('#obsResetFilters'); await page.waitForTimeout(200);
+        }
+        check(res.every(Boolean), `Vue d’ensemble : graphique affiché avec un filtre MOA, Référentiel ou Avancement (${res.join(',')})`); }
       await page.click('button[data-page="overview"]'); await page.waitForTimeout(200);
       const yrs = Object.fromEntries((await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => [o.code, [o.year, o.createdYear]]))));
       check(String(yrs['OP-7'][0]) === '2024' && String(yrs['OP-10'][0]) === '2024' && String(yrs['OP-9'][0]) === '2025', 'année de certification lue dans « Date de décision de certification » (15/03/24 → 2024)');
@@ -274,7 +283,8 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const pos = await page.evaluate(() => { const c = document.querySelector('.req-compat-card'), pg = document.getElementById('obsPage'); const cards = [...pg.querySelectorAll('.obs-card')]; return { exists: !!c, last: cards[cards.length - 1] === c || cards.indexOf(c) >= cards.length - 1, width: c && c.getBoundingClientRect().width, pageW: pg.clientWidth }; });
       check(pos.exists && pos.last && pos.width > pos.pageW * 0.85, `encart présent en bas de page, pleine largeur (${Math.round(pos.width)} / ${pos.pageW} px)`);
       const txt = await page.textContent('.req-compat-card');
-      check(/Contexte comparé/.test(txt) && /BEE Logement Neuf · 04\/05\/2026/.test(txt) && /Opérations documentées/.test(txt), 'périmètre par défaut : le plus documenté (BEE LN 04/05/2026), effectif affiché');
+      check(/Référentiel comparé/.test(txt) && /BEE Logement Neuf/.test(txt) && /appliquées à toutes les versions/.test(txt) && /Opérations documentées/.test(txt), 'périmètre par défaut : BEE Logement Neuf (le plus documenté), toutes versions, effectif affiché');
+      check(/Compatibilité des opérations filtrées avec chaque mention/.test(txt), 'tableau du pourcentage de compatibilité pour chaque mention');
       check(/Présente dans le bouquet comparé/.test(txt) && /Absente du bouquet comparé/.test(txt) && /l’obtention d’une mention reste soumise/.test(txt), 'légende et mention permanente affichées');
       // Conditions de contexte : régime, type, permis → 3 cartes calculées
       await page.click('.req-compat-fields > summary'); await page.waitForTimeout(150);

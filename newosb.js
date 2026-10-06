@@ -112,6 +112,7 @@
     crossX:'icConstructionMax',
     crossY:'icConstruction',
     overviewShowTotal:true,
+    overviewYearBasis:'auto',
     qualityIssuePage:1,
     dictionaryPage:1,
     dictionarySearch:'',
@@ -292,7 +293,7 @@
   }
   async function cloneAsPortableHtml(node){
     const clone=node.cloneNode(true);
-    clone.querySelectorAll('[data-add-presentation], .obs-pres-head-tools, .obs-kpi-group-pres-btn, .obs-table-pager, .req-pager, .obs-view-toggle, .req-view-toggle, .obs-table-search').forEach(el=>el.remove());
+    clone.querySelectorAll('[data-add-presentation], .obs-evolution-basis, .obs-pres-head-tools, .obs-kpi-group-pres-btn, .obs-table-pager, .req-pager, .obs-view-toggle, .req-view-toggle, .obs-table-search').forEach(el=>el.remove());
     clone.querySelectorAll('button').forEach(btn=>{btn.setAttribute('type','button');});
     const imgs=[...clone.querySelectorAll('img')];
     await Promise.all(imgs.map(async img=>{
@@ -1186,14 +1187,27 @@
     return `<div class="obs-bars obs-bars-visual">${top.map((item,index)=>`<button class="obs-bar-row obs-bar-row-visual" type="button" ${field?`data-quick-filter="${attr(field)}" data-quick-value="${attr(item[valueKey])}"`:''}><span class="obs-bar-label"><i>${index+1}</i><b title="${attr(item.name)}">${esc(item.name)}</b></span><span class="obs-bar-track"><i class="obs-bar-fill" style="width:${Math.max(2,100*item.value/max).toFixed(1)}%"></i></span><strong><b>${fmt(item.value)}</b><small>${fmt(pct(item.value,total),1)} %</small></strong></button>`).join('')}</div>`;
   }
 
+  // V6.14.2 : depuis la V6.13.1 la courbe ne lisait que l'année de certification ; une sélection de projets en cours
+  // (MOA, Rénovation, avancement…) n'en a pas et le graphique disparaissait. L'axe peut maintenant suivre l'année de
+  // certification ou de création ; en mode automatique, la création est utilisée si la sélection n'a aucune année de certification.
+  const isYear=y=>/^\d{4}$/.test(String(y??''));
+  function evolutionBasis(ops){
+    if(state.overviewYearBasis==='certification'||state.overviewYearBasis==='created')return state.overviewYearBasis;
+    return ops.some(o=>isYear(o.year))?'certification':'created';
+  }
   function evolutionSvg(ops,showTotal=true){
-    const years=uniq(ops.map(o=>o.year).filter(y=>/^\d{4}$/.test(String(y)))).sort((a,b)=>Number(a)-Number(b));
-    const refs=uniq(ops.map(o=>o.referential||'Non précisé'));
-    if(!years.length) return '<div class="obs-empty">Aucune année exploitable dans la sélection.</div>';
+    const basis=evolutionBasis(ops),yearOf=o=>basis==='created'?o.createdYear:o.year,yearFilter=basis==='created'?'createdYear':'year';
+    const dated=ops.filter(o=>isYear(yearOf(o)));
+    const years=uniq(dated.map(yearOf)).sort((a,b)=>Number(a)-Number(b));
+    const refs=uniq(dated.map(o=>o.referential||'Non précisé'));
+    const missing=ops.length-dated.length;
+    const basisTools=`<div class="obs-evolution-basis" role="group" aria-label="Année utilisée"><span>Année :</span>${[['auto','Automatique'],['certification','Certification'],['created','Création']].map(([k,l])=>`<button type="button" data-overview-year-basis="${k}" class="${state.overviewYearBasis===k?'is-active':''}" aria-pressed="${state.overviewYearBasis===k}">${l}</button>`).join('')}</div>`;
+    const note=`<p class="obs-evolution-note">${basis==='created'?'Axe : année de <b>création</b>':'Axe : année de <b>certification</b>'}${state.overviewYearBasis==='auto'&&basis==='created'?' (aucun projet de la sélection n’a encore de date de décision de certification)':''}${missing?` · ${fmt(missing)} projet${missing>1?'s':''} sans ${basis==='created'?'date de création':'décision de certification'} non représenté${missing>1?'s':''}`:''}.</p>`;
+    if(!years.length) return `${basisTools}<div class="obs-empty">Aucune année ${basis==='created'?'de création':'de certification'} exploitable dans la sélection.</div>`;
     if(!refs.length) return '<div class="obs-empty">Aucun référentiel exploitable dans la sélection.</div>';
     const palette=['#0B6B43','#FF7A24','#2376D2','#7B4CC7','#E0A11B','#C85050','#3AA66A','#2A8A91','#B45C8A','#65707A','#A36D2D','#425CB5'];
-    const series=refs.map((ref,idx)=>({ref,color:palette[idx%palette.length],values:years.map(year=>ops.filter(o=>String(o.year)===String(year)&&String(o.referential||'Non précisé')===String(ref)).length)})).sort((a,b)=>b.values.reduce((s,v)=>s+v,0)-a.values.reduce((s,v)=>s+v,0));
-    const totals=years.map(year=>ops.filter(o=>String(o.year)===String(year)).length);
+    const series=refs.map((ref,idx)=>({ref,color:palette[idx%palette.length],values:years.map(year=>dated.filter(o=>String(yearOf(o))===String(year)&&String(o.referential||'Non précisé')===String(ref)).length)})).sort((a,b)=>b.values.reduce((s,v)=>s+v,0)-a.values.reduce((s,v)=>s+v,0));
+    const totals=years.map(year=>dated.filter(o=>String(yearOf(o))===String(year)).length);
     const W=820,H=300,pad={l:48,r:24,t:28,b:42}, max=Math.max(1,...series.flatMap(s=>s.values),...(showTotal?totals:[]));
     const x=i=>years.length===1?W/2:pad.l+i*(W-pad.l-pad.r)/(years.length-1);
     const y=v=>H-pad.b-(v/max)*(H-pad.t-pad.b);
@@ -1203,13 +1217,13 @@
       const points=s.values.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
       const area=`${x(0).toFixed(1)},${(H-pad.b).toFixed(1)} ${points} ${x(years.length-1).toFixed(1)},${(H-pad.b).toFixed(1)}`;
       const showLabels=series.length<=5 || si<3;
-      return `<g class="obs-evolution-series"><polygon points="${area}" fill="url(#obsEvoGrad${si})"/><polyline fill="none" stroke="${s.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}"/>${s.values.map((v,i)=>`<g><circle class="obs-evolution-ref-dot" data-quick-filter="year" data-quick-value="${attr(years[i])}" cx="${x(i)}" cy="${y(v)}" r="4.8" fill="${s.color}"><title>${esc(s.ref)} · ${esc(years[i])} : ${fmt(v)} projet${v>1?'s':''}</title></circle>${showLabels&&v?`<text class="obs-evolution-value" x="${x(i)}" y="${Math.max(12,y(v)-9)}" text-anchor="middle" fill="${s.color}">${fmt(v)}</text>`:''}</g>`).join('')}</g>`;
+      return `<g class="obs-evolution-series"><polygon points="${area}" fill="url(#obsEvoGrad${si})"/><polyline fill="none" stroke="${s.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}"/>${s.values.map((v,i)=>`<g><circle class="obs-evolution-ref-dot" data-quick-filter="${yearFilter}" data-quick-value="${attr(years[i])}" cx="${x(i)}" cy="${y(v)}" r="4.8" fill="${s.color}"><title>${esc(s.ref)} · ${esc(years[i])} : ${fmt(v)} projet${v>1?'s':''}</title></circle>${showLabels&&v?`<text class="obs-evolution-value" x="${x(i)}" y="${Math.max(12,y(v)-9)}" text-anchor="middle" fill="${s.color}">${fmt(v)}</text>`:''}</g>`).join('')}</g>`;
     }).join('');
     const totalPts=totals.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '), totalArea=`${x(0).toFixed(1)},${H-pad.b} ${totalPts} ${x(years.length-1).toFixed(1)},${H-pad.b}`;
     const totalPath=showTotal?`<g class="obs-evolution-total"><polygon points="${totalArea}" fill="url(#obsTotalGrad)"/><polyline fill="none" stroke="#06402B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" points="${totalPts}"/>${totals.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="5.5" fill="#06402B" stroke="#fff" stroke-width="2"><title>Total · ${esc(years[i])} : ${fmt(v)}</title></circle><text class="obs-evolution-total-value" x="${x(i)}" y="${Math.max(13,y(v)-12)}" text-anchor="middle">${fmt(v)}</text>`).join('')}</g>`:'';
     const labels=years.map((yr,i)=>`<text class="obs-axis-label" x="${x(i)}" y="${H-11}" text-anchor="middle">${esc(yr)}</text>`).join('');
     const legend=`<div class="obs-evolution-legend obs-evolution-legend-visual">${series.map(s=>`<button type="button" data-quick-filter="referential" data-quick-value="${attr(s.ref)}" title="Filtrer sur ${attr(s.ref)}"><i style="background:${s.color}"></i><span>${esc(s.ref)}</span></button>`).join('')}<button type="button" class="obs-evolution-total-legend ${showTotal?'is-active':'is-muted'}" data-overview-total-toggle="1" aria-pressed="${showTotal?'true':'false'}" title="${showTotal?'Masquer':'Afficher'} le Total général"><i></i><span>Total général</span></button></div>`;
-    return `<div class="obs-evolution-multi obs-evolution-visual"><svg class="obs-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution des projets par année et par référentiel">${defs}${grid}${paths}${totalPath}${labels}</svg>${legend}</div>`;
+    return `${basisTools}<div class="obs-evolution-multi obs-evolution-visual"><svg class="obs-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Évolution des projets par année et par référentiel">${defs}${grid}${paths}${totalPath}${labels}</svg>${legend}${note}</div>`;
   }
 
   // V6.13.7 : includeExcluded=true compte aussi les affaires annulées / abandonnées / perdues
@@ -2954,6 +2968,7 @@
     const flow=e.target.closest('[data-flow-focus][data-flow-before]'); if(flow){const key=flow.dataset.flowFocus,val=decodeURIComponent(flow.dataset.flowBefore||'');if(state.flowFocus[key]!==undefined){state.flowFocus[key]=norm(state.flowFocus[key])===norm(val)?'':val;renderPage();}return;}
     const q=e.target.closest('[data-quick-filter]'); if(q){quickFilter(q.dataset.quickFilter,q.dataset.quickValue);return;}
     const fullscreen=e.target.closest('[data-map-fullscreen]'); if(fullscreen){const card=fullscreen.closest('.obs-map-card')||document.querySelector('.obs-map-card');if(card){if(document.fullscreenElement)document.exitFullscreen?.();else card.requestFullscreen?.();}return;}
+    const yb=e.target.closest('[data-overview-year-basis]');if(yb){preserveUiScroll(()=>{state.overviewYearBasis=yb.dataset.overviewYearBasis||'auto';renderPage();});pageEl.querySelector(`[data-overview-year-basis="${state.overviewYearBasis}"]`)?.focus({preventScroll:true});return;}
     if(e.target.closest('[data-overview-total-toggle]')){preserveUiScroll(()=>{state.overviewShowTotal=!state.overviewShowTotal;renderPage();});return;}
     const solutionView=e.target.closest('[data-solution-view][data-view]'); if(solutionView){preserveUiScroll(()=>{const key=solutionView.dataset.solutionView;state.solutionViews[key]=solutionView.dataset.view==='pie'?'pie':'bar';renderPage();});return;}
     const energyCepView=e.target.closest('[data-energy-cep-view][data-view]');if(energyCepView){preserveUiScroll(()=>{const key=energyCepView.dataset.energyCepView;if(!state.energyCepViews)state.energyCepViews={};state.energyCepViews[key]=energyCepView.dataset.view==='bar'?'bar':'pie';renderPage();});return;}
