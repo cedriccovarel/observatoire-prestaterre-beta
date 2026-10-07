@@ -1,8 +1,9 @@
-# Observatoire Prestaterre — V6.14
+# Observatoire Prestaterre — V6.15
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 
 - **Mettre à jour depuis une V6.13.x** : voir `GUIDE_MISE_A_JOUR_V6_14.md` (les deux scripts Apps Script changent ; clé d’accès obligatoire).
+- **Colonnes OPERATIONS et extraction** : `docs/reference/COLONNES_OPERATIONS_V6_15.md` (132 colonnes, dont 26 nouvelles thermique / carbone rénovation après « Tags ») et `docs/reference/PROMPT_EXTRACTION_OPERATIONS_V6_15.md`.
 - **Règles des mentions** : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 - **Historique des versions** : `CHANGELOG.md` (anciens README/QA par version dans `docs/historique/`).
 - **Tests** : `node tests/run_all.js` (non-régression, sans dépendance) et `node tests/e2e_browser.js` (navigateur, optionnel).

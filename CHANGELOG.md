@@ -1,5 +1,16 @@
 # Historique
 
+## V6.15
+
+**Thermique et carbone en rénovation : les valeurs des études sont enfin extraites et affichées**
+- Cause : la liste de colonnes V6.7 n’avait aucune colonne pour les indicateurs BBCA Rénovation (Eges PCE, énergie, eau, chantier, total et leurs maxima), ni pour Ubat réf / max, Cep réf, Cep max du label visé ou la surface de plancher ; et la règle 11 du prompt demandait de laisser le carbone vide en RT Existant. Résultat : un dossier de rénovation complet (notice thermique, Pléiades, calculette et notice ACV BBCA) ne produisait aucun champ carbone ou thermique.
+- 26 nouvelles colonnes OPERATIONS, à ajouter **après « Tags »** (132 colonnes au total) : `docs/reference/COLONNES_OPERATIONS_V6_15.md` / `.tsv`. Les anciennes colonnes ne bougent pas.
+- Nouveau prompt d’extraction V6.15 : carte « où trouver quoi » par type de document (Pléiades / Th-C-E ex, notice thermique, calculette et notice ACV BBCA, repérage des isolants), règles propres à la rénovation, tableau de contrôle obligatoire (valeur, page, statut, contradictions). Les fichiers V6.7 sont déplacés dans `docs/historique/`.
+- Page **Carbone** : nouvelle section « Carbone en rénovation · BBCA Rénovation » (niveaux, Eges par poste et seuils).
+- Fiche projet : onglet Carbone avec jauges Eges et émissions d’exploitation ; les jauges et seuils RE 2020 (2028 / 2031) sont masqués pour une opération uniquement en rénovation. Onglet Énergie : Ubat réf / max, Cep réf, Cep max du label, label visé, énergie finale projet.
+- Lecture des colonnes : les nouveaux champs à seuil (« Eges PCE » / « Eges PCE max »…) ne sont lus que sur leur intitulé exact, pour ne jamais confondre une valeur et son maximum.
+- Correctif : le bouton « Colonnes Excel » de la fenêtre Données plantait (liste de colonnes non définie depuis la V6.12) ; il copie désormais les 132 intitulés.
+
 ## V6.14.2
 
 **Vue d’ensemble : graphique « Évolution des projets » rétabli avec les filtres**
