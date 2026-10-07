@@ -198,11 +198,6 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(q.includes('Colonne utilisée : « Opération: Évaluation: Statut » · colonne BC de la Sheet'), 'Qualité : colonne d’avancement affichée avec sa lettre (BC)');
       check(q.includes('12,3 / 15') && q.includes('U=0,25 W/m².K'), 'Qualité : valeurs illisibles listées (Bbio « 12,3 / 15 », R en W/m².K)');
       check(q.includes('bientôt') && q.includes('colonne « Date de décision de certification »') && q.includes('colonne « Date de création »'), 'Qualité : colonnes d’années affichées et date illisible signalée');
-      await page.click('button[data-page="carbon"]'); await page.waitForTimeout(300);
-      { const ct = await page.textContent('#obsPage');
-        check(/Carbone en rénovation · BBCA Rénovation/.test(ct) && /Eges PCE moyen/.test(ct) && /361/.test(ct) && /BBCA Excellent : 1/.test(ct), 'Carbone : indicateurs BBCA Rénovation (Eges PCE 361, niveau Excellent) lus et affichés'); }
-      { const eg = await page.evaluate(() => { const o = window.NEWOSB_ENGINE.getTechnicalOperations().find(x => x.projectCode === 'OP-4'); return [window.NEWOSB_CORE.rawNumber(o, 'egesPce'), window.NEWOSB_CORE.rawNumber(o, 'egesPceMax'), window.NEWOSB_CORE.rawNumber(o, 'egesTotal'), window.NEWOSB_CORE.rawNumber(o, 'ubatMax')]; });
-        check(JSON.stringify(eg) === JSON.stringify([360.9, 480, 902.53, 0.81]), `colonnes exactes : « Eges PCE » jamais confondue avec « Eges PCE max » (${JSON.stringify(eg)})`); }
       await page.click('button[data-page="energy"]'); await page.waitForTimeout(300);
       const en = await page.textContent('#obsPage');
       check(/échantillon faible \(n = 3\)/.test(en), 'Énergie : Cep moyen sur 3 valeurs signalé « échantillon faible »');

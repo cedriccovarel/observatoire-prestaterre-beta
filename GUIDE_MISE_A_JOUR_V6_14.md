@@ -88,10 +88,6 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
-## V6.15 — Ajouter les colonnes thermique / carbone rénovation (5 min, une seule fois)
-
-Aucun changement d’Apps Script. Dans l’onglet de la Sheet OPERATIONS, **après la colonne « Tags »**, coller sur la ligne d’en-tête les 26 intitulés de `docs/reference/COLONNES_OPERATIONS_V6_15.tsv` (colonnes 107 à 132, à partir de « Surface de plancher (m² SDP) »), dans cet ordre et sans les renommer. Les colonnes existantes ne bougent pas. Le bouton **Colonnes Excel** de la fenêtre Données copie aussi la liste complète. Utiliser ensuite le prompt `docs/reference/PROMPT_EXTRACTION_OPERATIONS_V6_15.md` pour les nouvelles extractions.
-
 ## Retour arrière
 
 Apps Script : Gérer les déploiements → Modifier → choisir la version précédente. GitHub : Revert du commit V6.14. Attention : revenir à l’ancien `Code_Exigences.gs` ré-expose RAPPORT sans contrôle.

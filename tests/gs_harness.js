@@ -96,10 +96,6 @@ ROWS.forEach((r, i) => {
   const AV = { 'Promoteur E': 'Évaluation conforme', 'Promoteur G': 'Visite réalisée' };
   r.push([0, 1, 2].map(k => MENTION_NAMES[(i * 3 + k) % MENTION_NAMES.length]).join(' ; '), [0, 1, 2].map(k => PERF_NAMES[(i * 3 + k + 1) % PERF_NAMES.length]).join(' ; '), r[0] ? '' : (AV[r[4 + 51]] || ''));
 });
-// V6.15 : colonnes carbone rénovation (BBCA Rénovation) ajoutées après « Tags » ; renseignées pour OP-4 (Rénovation).
-const RENO_HEADERS = ['Surface de plancher (m² SDP)', 'Eges PCE', 'Eges PCE max', 'Eges énergie', 'Eges énergie max', 'Eges eau', 'Eges chantier', 'Eges total', 'Eges total max', 'Niveau BBCA', 'Ubat max', 'Cep réf'];
-HEADERS.push(...RENO_HEADERS);
-ROWS.forEach(r => { while (r.length < HEADERS.length - RENO_HEADERS.length) r.push(''); r.push(...(r[0] === 'OP-4' ? ['231', '360,9', '480', '481,06', '1250', '51,98', '8,58', '902,53', '1893,05', 'BBCA Excellent', '0,81', '228,4'] : RENO_HEADERS.map(() => ''))); });
 const MATRIX = [['OBSERVATOIRE'], HEADERS, [], ...ROWS];
 const asObjects = (headers, rows) => rows.map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
 
