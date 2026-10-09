@@ -88,6 +88,12 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.18 — Filtre « Type de programme » (onglet Exigences)
+
+1. Script OPERATIONS : coller le nouveau **`Code_Operations.gs`** (06.18) puis **Nouvelle version** du déploiement. Si tu utilises encore la source Exigences séparée, faire de même avec **`Code_Exigences.gs`**.
+2. RAPPORT doit contenir la colonne **« Évaluation: Opération: Nom du programme (client) »** (déjà ajoutée).
+3. Facultatif : ajouter une colonne **« Type de programme »** dans RAPPORT pour corriger une opération (valeur reprenant une des catégories, ex. « Bureaux », « Équipements publics ») : elle l’emporte sur la déduction.
+
 ## V6.17 — Une seule connexion pour les opérations et les exigences
 
 1. Script OPERATIONS : remplacer le code par le nouveau **`Code_Operations.gs`** (version 06.17), puis **Déployer → Gérer les déploiements → crayon → Nouvelle version**.

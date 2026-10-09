@@ -712,6 +712,59 @@ test('intégration : jeu ouvert pendant les chargements OPERATIONS, Exigences et
   const g = read('newosb-game.js'); assert(!/fetch\(|XMLHttpRequest|NEWOSB_ENGINE|NEWOSB_BRIDGE/.test(g), 'le jeu ne lit aucune donnée');
 });
 
+
+section('13. Type de programme (nom du programme + référentiel) — V6.18');
+const PT = (() => { const c = { console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error }; vm.createContext(c); vm.runInContext(read('Code_Exigences.gs') + ';this.f=newosbExigencesProgramType_;this.i=newosbExigencesProgramTypeInput_;', c); return c; })();
+const TN = 'BEE Tertiaire Neuf', TR = 'BEE Tertiaire Rénovation', LNF = 'BEE Logement Neuf';
+const typeOf = (n, r) => PT.f(n, r).type;
+test('tertiaire : synonymes et termes proches reconnus (noms réels de RAPPORT)', () => {
+  const cases = [['Bureaux - Saint Charles', TR, 'Bureaux'], ['Siège 3 de l’entreprise Kuehne+Nagel', TN, 'Bureaux'], ['Commerce Decathlon', TN, 'Commerces'], ['Hôtel - SCI GUTTI3', TN, 'Hôtelier'],
+    ['Groupe Scolaire Jules Ferry', TN, 'Scolaire et enseignement'], ['Micro Crèche - rue des Hêtres', TN, 'Scolaire et enseignement'], ['Rire et Croco - EAJE', TN, 'Scolaire et enseignement'], ['Campus Neoma Business School', TN, 'Scolaire et enseignement'], ['ALSH', TN, 'Scolaire et enseignement'],
+    ['EHPAD Valdahon', TN, 'Santé et médico-social (cliniques, EHPAD, centres médicaux)'], ['Centre de Soins Médicaux et de Réadaptation', TN, 'Santé et médico-social (cliniques, EHPAD, centres médicaux)'], ['Suchet - CMS', TN, 'Santé et médico-social (cliniques, EHPAD, centres médicaux)'],
+    ['Usine U3 site d’exploitation', TN, 'Locaux d’activité et industrie'], ['Maroquinerie de la Sormonne', TN, 'Locaux d’activité et industrie'], ['Logicor Coignières', TN, 'Logistique (entrepôts, plateformes de distribution)'], ['Entrepôt frigorifique', TN, 'Logistique (entrepôts, plateformes de distribution)'],
+    ['Le Piscinatoire', TN, 'Équipements publics (culturels, sportifs, administratifs)'], ['Réhabilitation Bibliothèque Jean-Louis Barrault', TR, 'Équipements publics (culturels, sportifs, administratifs)'], ['POLE EMPLOI - BAT B', TN, 'Équipements publics (culturels, sportifs, administratifs)'], ['Hôtel de Ville', TN, 'Équipements publics (culturels, sportifs, administratifs)'],
+    ['Résidence Senior - Partie Tertiaire', TN, 'Résidences gérées (étudiantes, seniors, tourisme)']];
+  cases.forEach(([n, r, t]) => assert.strictEqual(typeOf(n, r), t, n));
+});
+test('le premier terme du nom l’emporte ; une adresse ne compte pas (« Rue de la Mairie - bureaux »)', () => {
+  assert.strictEqual(typeOf('Bureaux - Extension de la clinique - Projet Grand-Bé', TN), 'Bureaux');
+  assert.strictEqual(typeOf('Rue de la Mairie - bureaux', TR), 'Bureaux');
+  assert.strictEqual(typeOf('Micro-crèche - rue des écoles', TR), 'Scolaire et enseignement');
+  assert.strictEqual(typeOf('105 rue Réaumur', TR), 'Non déterminé');
+  assert.strictEqual(typeOf('Le Sully Santenov - Partie Enseignement Supérieur', TN), 'Scolaire et enseignement', '« santenov » n’est pas « santé »');
+});
+test('référentiel logement : collectif par défaut, individuel ou résidence gérée si le nom le dit ; « Villa … » ne suffit pas', () => {
+  assert.strictEqual(typeOf('Le 24 Clemenceau', LNF), "Logement collectif (immeubles d'appartements)");
+  assert.strictEqual(typeOf('Villa Julia - 11coll parmi 33 - 1bat', LNF), "Logement collectif (immeubles d'appartements)");
+  assert.strictEqual(typeOf('Lotissement la Marnelle', LNF), 'Logement individuel (maisons, lotissements)');
+  assert.strictEqual(typeOf('Rue Condorcet - individuels', LNF), 'Logement individuel (maisons, lotissements)');
+  assert.strictEqual(typeOf('Résidence Etudiante - rue de Trans', LNF), 'Résidences gérées (étudiantes, seniors, tourisme)');
+  assert.strictEqual(typeOf('Foyer des Jeunes Travailleurs', LNF), 'Résidences gérées (étudiantes, seniors, tourisme)');
+  assert.strictEqual(typeOf('Arques de Gaulle Commerce - 8 individuels', LNF), 'Logement individuel (maisons, lotissements)', 'pas de catégorie tertiaire sur un référentiel logement');
+  assert.strictEqual(typeOf('Bureaux du centre', LNF), "Logement collectif (immeubles d'appartements)");
+});
+test('tertiaire sans terme reconnu : « Non déterminé » (aucune catégorie inventée) ; colonne « Type de programme » prioritaire', () => {
+  assert.strictEqual(typeOf('Biome', TR), 'Non déterminé'); assert.strictEqual(PT.f('', TR).source, 'nom du programme absent');
+  assert.strictEqual(PT.i('Logistique').type, 'Logistique (entrepôts, plateformes de distribution)'); assert.strictEqual(PT.i('Équipements publics').type, 'Équipements publics (culturels, sportifs, administratifs)'); assert.strictEqual(PT.i('n/a'), null); assert.strictEqual(PT.i(''), null);
+});
+test('le script transmet type et nom du programme ; lien anonymisé : type conservé, nom retiré', () => {
+  const H2 = [...RH, 'Évaluation: Opération: Nom du programme (client)'];
+  const M2 = [H2, ['1.1.1 - Ex', 'EVA-9', 'Bailleur Z', 'OP-1', TN, '04/05/2026', 'IDF', '75', '1.1.1', '', 'En cours', '', 'Crèche des Lilas']];
+  const ex = loadGs('Code_Exigences.gs', { matrix: M2, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY } }).newosbExigencesBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 10 }).rows[0];
+  assert.strictEqual(ex.programName, 'Crèche des Lilas'); assert.strictEqual(ex.programType, 'Scolaire et enseignement'); assert(/creche/.test(ex.programTypeSource));
+  const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY }, extraSheets: { RAPPORT: M2 } });
+  const tok = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['requirements'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + 86400000, anonymized: true, reqFilters: { programType: ['Scolaire et enseignement'] } }).token;
+  const row = gs.newosbBridgeRequest({ mode: 'reqChunk', share: tok, offset: 0, limit: 10 }).rows[0];
+  assert.strictEqual(row.programName, ''); assert.strictEqual(row.programType, 'Scolaire et enseignement'); assert(!JSON.stringify(row).includes('Lilas'));
+  assert.strictEqual(JSON.stringify(gs.newosbBridgeRequest({ mode: 'ping', share: tok }).share.reqFilters), '{"programType":["Scolaire et enseignement"]}');
+});
+atest('onglet Exigences : filtre « Type de programme » (ordre de la liste, cumul avec les autres filtres)', async () => {
+  const m = reqModule(R1); await m.connect(); const all = m.api.auditInfo().filteredRows;
+  m.check('programType', "Logement collectif (immeubles d'appartements)"); assert.strictEqual(m.api.auditInfo().filteredRows, all - 0);
+  m.check('programType', "Logement collectif (immeubles d'appartements)", false); m.check('programType', 'Bureaux'); assert.strictEqual(m.api.auditInfo().filteredRows, 0);
+  assert(read('requirements.js').includes("${checkFilter('programType','Type de programme',o.programType)}"));
+});
+
 section('7. Cohérence du paquet');
 const index = read('index.html'), gen = read('generator.html');
 const scripts = h => [...h.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]);

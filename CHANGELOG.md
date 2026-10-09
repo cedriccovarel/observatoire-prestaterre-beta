@@ -1,5 +1,15 @@
 # Historique
 
+## V6.18
+
+**Exigences : nouveau filtre « Type de programme »**
+- Le script lit la colonne « Évaluation: Opération: Nom du programme (client) » de RAPPORT et en déduit le type de programme : Bureaux, Commerces, Hôtelier, Scolaire et enseignement, Logement collectif, Logement individuel, Résidences gérées, Santé et médico-social, Locaux d’activité et industrie, Logistique, Équipements publics.
+- Reconnaissance par synonymes et termes proches (ex. crèche, EAJE, ALSH, groupe scolaire → Scolaire ; EHPAD, CMS, centre de soins → Santé ; gymnase, médiathèque, CAF, Pôle emploi → Équipements publics). Le premier terme du nom l’emporte ; les morceaux du nom qui sont une adresse (« Rue de la Mairie - Bureaux ») sont ignorés.
+- Le référentiel limite la recherche : référentiel tertiaire → catégories tertiaires (et résidences gérées) ; référentiel logement → logement collectif (par défaut), individuel (lotissement, maisons, « individuels », « 2ind ») ou résidence gérée (résidence étudiante / senior, foyer, coliving…). « Villa … » / « Pavillon … » ne suffisent pas (noms commerciaux d’immeubles).
+- Sans terme reconnu en tertiaire : « Non déterminé » (aucune catégorie inventée). Une colonne facultative « Type de programme » dans RAPPORT permet de corriger ou compléter : sa valeur l’emporte.
+- Le type est calculé par le script : un lien de partage anonymisé conserve le filtre mais ne transmet jamais le nom du programme. Le filtre peut être figé dans un lien de partage.
+- Liste des termes : `docs/reference/TYPES_DE_PROGRAMME.md`.
+
 ## V6.17
 
 **Une seule connexion : opérations et exigences avec la même URL et la même clé**

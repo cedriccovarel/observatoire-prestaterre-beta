@@ -45,7 +45,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.17',
+  VERSION: '06.18',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -666,7 +666,7 @@ const NEWOSB_SHARE_CONFIG = {
   MAX_DAYS: 366,
   TABS: ['overview', 'territories', 'stakeholders', 'certification', 'performance', 'requirements', 'solutions', 'energy', 'carbon', 'crossdata', 'operations', 'quality', 'dictionary'],
   RAPPORT_PROPERTY: 'NEWOSB_RAPPORT_SPREADSHEET_ID',
-  REQ_FILTER_KEYS: ['year', 'referential', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone', 'period', 'nature', 'mention', 'moaSector', 'theme'],
+  REQ_FILTER_KEYS: ['year', 'referential', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone', 'period', 'nature', 'mention', 'moaSector', 'theme', 'programType'],
   REQ_PRIVATE_KEYS: ['moa', 'moaGroup'],
   FAILURE_LIMIT: 60
 };
@@ -975,6 +975,9 @@ function newosbRapportRequest_(params, mode, options) {
       out.operationCode = r.operationCode ? newosbPseudonym_('OP', r.operationCode, secret) : '';
       out.evaluationCode = newosbPseudonym_('EVA', r.evaluationCode, secret);
       out.rowCode = r.rowCode ? newosbPseudonym_('ROW', r.rowCode, secret) : '';
+      // Le nom du programme identifie l'operation : retire ; seul son type (deja calcule) est transmis.
+      out.programName = '';
+      out.programTypeSource = out.programTypeSource && out.programTypeSource.indexOf('nom :') === 0 ? 'nom du programme' : out.programTypeSource;
       return out;
     });
   }
@@ -1480,6 +1483,19 @@ const NEWOSB_EXIGENCES_ALIASES = {
     'Mentions',
     'Mention '
   ],
+  programTypeInput: [
+    'Évaluation: Opération: Type de programme',
+    'Evaluation: Operation: Type de programme',
+    'Opération: Type de programme',
+    'Type de programme'
+  ],
+  programName: [
+    'Évaluation: Opération: Nom du programme (client)',
+    'Evaluation: Operation: Nom du programme (client)',
+    'Opération: Nom du programme (client)',
+    'Nom du programme (client)',
+    'Nom du programme'
+  ],
   operationProfile: [
     'Évaluation: Opération: Profil spécifique',
     'Evaluation: Operation: Profil specifique'
@@ -1619,6 +1635,63 @@ function newosbExigencesSector_(referential) {
 }
 
 /**
+ * Type de programme (V6.18), déduit du nom du programme (client) et du référentiel.
+ * Chaque catégorie a ses synonymes et termes proches ; le premier terme reconnu dans le nom
+ * l'emporte (« Bureaux - Extension de la clinique » = Bureaux ; « Crèche - … » = Scolaire).
+ * Référentiel tertiaire : catégories tertiaires seulement ; référentiel logement : logement
+ * collectif, individuel ou résidence gérée (collectif par défaut). Sinon « Non déterminé ».
+ * Pour ajouter un synonyme : compléter la liste de la catégorie (mots sans accents, minuscules).
+ */
+const NEWOSB_PROGRAM_TYPES = [
+  { key: 'bureaux', label: 'Bureaux', scope: 'tertiaire', terms: ['bureaux?', 'immeubles? de bureaux', 'sieges?( sociaux| social)?', 'coworking', 'espaces? de travail', 'plateaux? tertiaires?'] },
+  { key: 'commerces', label: 'Commerces', scope: 'tertiaire', terms: ['commerces?', 'commercial', 'commerciale', 'commerciaux', 'magasins?', 'boutiques?', 'supermarches?', 'hypermarches?', 'grande surface', 'surfaces? de vente', 'galeries? marchandes?', 'centres? commerciaux', 'centres? commercial', 'retail', 'decathlon', 'restaurants?', 'brasserie', 'drive'] },
+  { key: 'hotel', label: 'Hôtelier', scope: 'tertiaire', terms: ['hotels?', 'hoteliers?', 'hoteliere', 'auberges?', 'apart ?hotels?', 'appart ?hotels?', 'hostels?', 'motels?'] },
+  { key: 'scolaire', label: 'Scolaire et enseignement', scope: 'tertiaire', terms: ['ecoles?', 'groupes? scolaires?', 'scolaires?', 'periscolaires?', 'colleges?', 'lycees?', 'campus', 'universite\\w*', 'universitaire\\w*', 'enseignement\\w*', 'formation', 'centres? de formation', 'business school', 'school', 'maternelles?', 'elementaires?', 'refectoires?', 'cantines?', 'restaurants? scolaires?', 'creches?', 'micro ?creches?', 'petite enfance', 'multi ?accueil', 'eaje', 'jeunes? enfants?', 'assistantes? maternelles?', 'halte ?garderie', 'garderie', 'alsh', 'accueils? de loisirs', 'centres? de loisirs?', 'maisons? de l enfance', 'pole enfance', 'internat', 'iut'] },
+  { key: 'residences', label: 'Résidences gérées (étudiantes, seniors, tourisme)', scope: 'tous', terms: ['residences? (etudiantes?|etudiants|seniors?|services?|de services|de tourisme|tourisme|hotelieres?|jeunes|jeunes actifs|intergenerationnelles?|autonomie|gerees?|sociales?)', 'co ?living', 'foyers?', 'logements? foyers?', 'crous', 'villages? (de )?vacances', 'hebergement\\w*', 'pensions? de famille', 'maisons? relais', 'ehpa', 'poles? seniors?'] },
+  { key: 'sante', label: 'Santé et médico-social (cliniques, EHPAD, centres médicaux)', scope: 'tertiaire', terms: ['ehpad', 'cliniques?', 'hopitaux', 'hopital', 'hospitali\\w*', 'centres? hospitaliers?', 'chu', 'centres? medicaux', 'centres? medical', 'poles? medica\\w*', 'maisons? medicales?', 'maisons? de sante', 'centres? de sante', 'centres? de soins', 'cms', 'medico\\w*', 'medical', 'medicale', 'soins', 'readaptation', 'smr', 'ssr', 'sante', 'pharmacies?', 'cabinets? medicaux', 'dialyse', 'radiologie', 'villages? d enfants', 'protection de l enfance', 'esat'] },
+  { key: 'activite', label: 'Locaux d’activité et industrie', scope: 'tertiaire', terms: ['usines?', 'ateliers?', 'industri\\w*', 'locaux d activites?', 'locaux d activite', 'batiments? d activites?', 'parcs? d activites?', 'zones? d activites?', 'ad park', 'manufactures?', 'maroquinerie', 'production', 'sites? d exploitation', 'laboratoires?', 'data ?centers?', 'datacenters?', 'ferme urbaine', 'artisan\\w*', 'garages?', 'centres? techniques?'] },
+  { key: 'logistique', label: 'Logistique (entrepôts, plateformes de distribution)', scope: 'tertiaire', terms: ['entrepots?', 'logistiques?', 'plateformes? logistiques?', 'plateformes? de distribution', 'messagerie', 'stockage', 'logicor', 'cross ?dock'] },
+  { key: 'equipements', label: 'Équipements publics (culturels, sportifs, administratifs)', scope: 'tertiaire', terms: ['mairies?', 'hotel de ville', 'gymnases?', 'complexes? sporti\\w*', 'equipements? sporti\\w*', 'equipements? public\\w*', 'salles? de sport', 'salles? polyvalentes?', 'salles? des fetes', 'piscines?', 'piscinatoire', 'stades?', 'dojo', 'cosec', 'bibliotheques?', 'mediatheques?', 'musees?', 'theatres?', 'cinemas?', 'conservatoires?', 'espaces? cultur\\w*', 'centres? cultur\\w*', 'culture', 'sports?', 'sportifs?', 'casernes?', 'gendarmerie', 'commissariat', 'cite administrative', 'prefecture', 'tribunal', 'palais de justice', 'pole emploi', 'france travail', 'caf', 'maisons? du parc', 'espaces? multiservices?', 'maisons? des jeunes', 'mdj', 'aires? de jeux', 'centres? sociaux', 'centre social', 'maisons? de quartier', 'vie sociale', 'administrati\\w*', 'services? de l etat', 'archives'] },
+  // « Villa … » et « Pavillon … » sont souvent des noms commerciaux d'immeubles : ils ne suffisent pas.
+  { key: 'individuel', label: 'Logement individuel (maisons, lotissements)', scope: 'logement', terms: ['maisons? individuelles?', 'maisons', 'lotissements?', 'pavillonnaire', 'individuel\\w*', 'habitat individuel', 'maisons? groupees?', 'logements? individuels?', '\\d+ ?ind'] },
+  { key: 'collectif', label: 'Logement collectif (immeubles d\'appartements)', scope: 'logement', terms: ['logements? collectifs?', 'immeubles?', 'appartements?', 'residences?', 'collectifs?', '\\d+ ?coll', 'coll'] }
+];
+const NEWOSB_PROGRAM_UNKNOWN = 'Non déterminé';
+let NEWOSB_PROGRAM_RE_ = null;
+
+function newosbProgramNorm_(value) {
+  return ' ' + String(value == null ? '' : value).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[’'`´]/g, ' ').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+}
+
+function newosbExigencesProgramType_(name, referential) {
+  if (!NEWOSB_PROGRAM_RE_) NEWOSB_PROGRAM_RE_ = NEWOSB_PROGRAM_TYPES.map(function(c) { return { c: c, re: new RegExp(' (' + c.terms.join('|') + ')(?= )') }; });
+  const ref = newosbProgramNorm_(referential);
+  const family = ref.indexOf(' tertiaire ') >= 0 ? 'tertiaire' : (ref.indexOf(' logement ') >= 0 ? 'logement' : '');
+  // Les morceaux du nom qui sont une adresse (« Rue de la Mairie - Bureaux ») sont ignorés.
+  const text = ' ' + String(name == null ? '' : name).split(/\s[-–—:]\s|[,\/|()]/).map(newosbProgramNorm_)
+    .filter(function(seg) { return !/^ (\d+ ?[a-z]? )?(bis |ter )?(rues?|avenues?|av|boulevards?|bd|bld|places?|quais?|chemins?|routes?|allees?|impasses?|cours|square|rond point|faubourg|passage) /.test(seg); })
+    .join(' ').replace(/\s+/g, ' ').trim() + ' ';
+  let best = null;
+  NEWOSB_PROGRAM_RE_.forEach(function(item) {
+    if (family && item.c.scope !== 'tous' && item.c.scope !== family) return;
+    const m = item.re.exec(text);
+    if (!m) return;
+    if (!best || m.index < best.index || (m.index === best.index && m[1].length > best.term.length)) best = { index: m.index, term: m[1], c: item.c };
+  });
+  if (best) return { type: best.c.label, source: 'nom : « ' + best.term + ' »' };
+  if (family === 'logement') return { type: 'Logement collectif (immeubles d\'appartements)', source: 'référentiel logement (par défaut)' };
+  return { type: NEWOSB_PROGRAM_UNKNOWN, source: String(name || '').trim() ? 'aucun terme reconnu' : 'nom du programme absent' };
+}
+
+// Type saisi à la main (colonne « Type de programme ») : prioritaire s'il correspond à une catégorie.
+function newosbExigencesProgramTypeInput_(value) {
+  if (!String(value || '').trim()) return null;
+  const found = newosbExigencesProgramType_(value, '');
+  return found.type === NEWOSB_PROGRAM_UNKNOWN ? null : { type: found.type, source: 'saisie (colonne Type de programme)' };
+}
+
+/**
  * Extrait un numéro du type 1.1.1 / 3.3.14 depuis un texte si aucune
  * colonne de référence dédiée n'est disponible.
  */
@@ -1728,6 +1801,7 @@ function newosbExigencesRows_(ctx, offset, limit) {
     if (!requirement && !requirementReference) continue;
     const evaluationCode = newosbExigencesEvaluationCode_(displayRow, cols, sourceRowNumber);
     const referential = newosbExigencesValue_(displayRow, cols.referential);
+    const programType = newosbExigencesProgramTypeInput_(newosbExigencesValue_(displayRow, cols.programTypeInput)) || newosbExigencesProgramType_(newosbExigencesValue_(displayRow, cols.programName), referential);
     const versionText = newosbExigencesValue_(displayRow, cols.referentialVersion);
     let dateInfo = { text: versionText, year: null };
     const versionYear = versionText.match(/\b(20\d{2})\b/);
@@ -1778,7 +1852,10 @@ function newosbExigencesRows_(ctx, offset, limit) {
       theme: theme,
       requirement: requirement || requirementReference,
       nature: newosbExigencesNature_(referential),
-      sector: newosbExigencesSector_(referential)
+      sector: newosbExigencesSector_(referential),
+      programName: newosbExigencesValue_(displayRow, cols.programName),
+      programType: programType.type,
+      programTypeSource: programType.source
     });
   }
   return rows;

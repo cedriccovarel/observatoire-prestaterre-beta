@@ -7,11 +7,15 @@
   const MENTION_CATALOG=()=>window.NEWOSB_MENTION_CATALOG||null;
   // V6.14 : client du pont sécurisé propre à la source Exigences (clé distincte de celle d'OPERATIONS, gardée en mémoire seulement).
   const bridge=window.NEWOSB_BRIDGE?window.NEWOSB_BRIDGE.create('exigences'):null;
+  // V6.18 : types de programme (déduits par le script à partir du nom du programme et du référentiel).
+  const PROGRAM_TYPES=['Bureaux','Commerces','Hôtelier','Scolaire et enseignement',"Logement collectif (immeubles d'appartements)",'Logement individuel (maisons, lotissements)','Résidences gérées (étudiantes, seniors, tourisme)','Santé et médico-social (cliniques, EHPAD, centres médicaux)','Locaux d’activité et industrie','Logistique (entrepôts, plateformes de distribution)','Équipements publics (culturels, sportifs, administratifs)','Non déterminé'];
+  const PROGRAM_TYPE_MISSING='Non disponible (script à mettre à jour)';
+  const programOrder=v=>{const i=PROGRAM_TYPES.indexOf(v);return i<0?99:i;};
   const THEME_COLORS={'1':'#7da7d9','2':'#76b65c','3':'#ed9a42','4':'#8f77bd'};
   const TARGET_NAMES={'1':'Éco-Conception & Management du projet','2':'Le bâtiment dans son environnement','3':'Sobriété et Efficacité du bâtiment','4':'Usages & qualité de vie'};
   const state={
     url:'', rows:[], connected:false, loading:false, error:'', errorKind:'', loadProgress:'', warnings:[],
-    filters:{year:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[],period:[],nature:[],mention:[],moaSector:[],theme:[]},
+    filters:{year:[],referential:[],programType:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[],period:[],nature:[],mention:[],moaSector:[],theme:[]},
     filterSearch:{}, requirement:'', mentionFocus:'', search:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
     loadedAt:'',
     views:{chronology:'list',topGlobal:'list',target1:'list',target2:'list',target3:'list',target4:'list',evolution:'list',mentions:'list',mentionReqs:'list'},
@@ -95,6 +99,8 @@
       referentialVersionDate:String(pick(r.referentialVersionDate,alias(r,['Version du ref ( date )','Version du ref (date)']))),
       requirementValidated:String(pick(r.requirementValidated,alias(r,['Exigence validée','Exigence validee']))),
       sourceRow:Number(r.sourceRow)||0,
+      programName:String(pick(r.programName,alias(r,['Évaluation: Opération: Nom du programme (client)','Nom du programme (client)']))),
+      programType:String(pick(r.programType,PROGRAM_TYPE_MISSING)),programTypeSource:String(pick(r.programTypeSource,'')),
       theme:String(theme), requirement:String(requirement), nature:String(pick(r.nature,natureFromRef(referential))), sector:String(pick(r.sector,sectorFromRef(referential)))
     };
   }
@@ -205,7 +211,7 @@
   }
   // Filtres de l'onglet tels qu'affichés, pour figer un lien de partage.
   function shareFilters(){const out={};Object.keys(state.filters).forEach(k=>{const v=filterValues(k);if(v.length)out[k]=v.slice();});return out;}
-  const FILTER_LABELS={year:'Année',referential:'Référentiel',moaGroup:'Groupe MOA',status:'Avancement',moa:'Maître d’ouvrage',region:'Région',department:'Département',profile:'Profil',socialZone:'Zonage',nature:'Nature',mention:'Mention',moaSector:'Secteur MOA',theme:'Thème',period:'Période réf.'};
+  const FILTER_LABELS={year:'Année',referential:'Référentiel',programType:'Type de programme',moaGroup:'Groupe MOA',status:'Avancement',moa:'Maître d’ouvrage',region:'Région',department:'Département',profile:'Profil',socialZone:'Zonage',nature:'Nature',mention:'Mention',moaSector:'Secteur MOA',theme:'Thème',period:'Période réf.'};
   function disconnect(){
     loadToken++;bridge?.clearKey();bridge?.destroy('Source Exigences déconnectée.');
     clearPrivateData();state.via='';state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
@@ -222,6 +228,7 @@
       if(options.forceReferential&&norm(r.referential)!==norm(options.forceReferential))return false;
       if(!options.forceReferential&&!matchesFilter('referential',r.referential))return false;
       if(hasFilter('year')&&!filterValues('year').some(v=>String(r.operationYear)===String(v)))return false;
+      if(!matchesFilter('programType',r.programType))return false;
       if(!matchesFilter('moaGroup',r.group||'Non précisé'))return false;
       if(!matchesFilter('status',r.status))return false;
       if(!matchesFilter('moa',r.moa))return false;
@@ -350,7 +357,7 @@
     const selectedRegions=filterValues('region');
     const depBase=selectedRegions.length?evs.filter(r=>selectedRegions.some(v=>norm(r.region)===norm(v))):evs;
     return {
-      year:uniq(evs.map(r=>r.operationYear).filter(Boolean)), referential:uniq(evs.map(r=>r.referential)), moaGroup:uniq(evs.map(r=>r.group||'Non précisé')), status:uniq(evs.map(r=>r.status)), moa:uniq(evs.map(r=>r.moa)), region, department:uniq(depBase.map(r=>r.department)), profile:uniq(evs.map(r=>r.profile)), socialZone:uniq(evs.map(r=>r.socialZone||'Non précisé')),
+      year:uniq(evs.map(r=>r.operationYear).filter(Boolean)), referential:uniq(evs.map(r=>r.referential)), programType:uniq(evs.map(r=>r.programType)).sort((a,b)=>programOrder(a)-programOrder(b)), moaGroup:uniq(evs.map(r=>r.group||'Non précisé')), status:uniq(evs.map(r=>r.status)), moa:uniq(evs.map(r=>r.moa)), region, department:uniq(depBase.map(r=>r.department)), profile:uniq(evs.map(r=>r.profile)), socialZone:uniq(evs.map(r=>r.socialZone||'Non précisé')),
       nature:uniq(evs.map(r=>r.nature)), mention:uniq(evs.flatMap(r=>splitMulti(r.mentions))), moaSector:uniq(evs.map(r=>r.moaSector)), theme:['1','2','3','4']
     };
   }
@@ -376,7 +383,7 @@
     }
     const o=filterOptions();
     const activeCount=Object.keys(state.filters).reduce((n,k)=>n+filterValues(k).length,0);
-    return `<div class="req-filterbar req-filterbar-checks">${checkFilter('year','Année',o.year)}${checkFilter('referential','Référentiel',o.referential)}${checkFilter('moaGroup','Groupe MOA',o.moaGroup)}${checkFilter('status','Avancement',o.status)}${checkFilter('moa','Maître d’ouvrage',o.moa)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('profile','Profil',o.profile)}${checkFilter('socialZone','Zonage',o.socialZone)}${checkFilter('nature','Nature',o.nature)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}${checkFilter('period','Période réf.',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
+    return `<div class="req-filterbar req-filterbar-checks">${checkFilter('year','Année',o.year)}${checkFilter('referential','Référentiel',o.referential)}${checkFilter('programType','Type de programme',o.programType)}${checkFilter('moaGroup','Groupe MOA',o.moaGroup)}${checkFilter('status','Avancement',o.status)}${checkFilter('moa','Maître d’ouvrage',o.moa)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('profile','Profil',o.profile)}${checkFilter('socialZone','Zonage',o.socialZone)}${checkFilter('nature','Nature',o.nature)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}${checkFilter('period','Période réf.',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
   }
 
   function sourceStatusText(){
