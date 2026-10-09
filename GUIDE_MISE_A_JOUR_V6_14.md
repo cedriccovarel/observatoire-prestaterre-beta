@@ -95,7 +95,8 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 1. Script OPERATIONS : remplacer le contenu par le nouveau **`Code_Operations.gs`** (version 06.15), enregistrer, puis **Déployer → Gérer les déploiements → crayon → Nouvelle version → Déployer**. L’URL `/exec` ne change pas. Le script Exigences ne change pas.
 2. Site : publier les fichiers de la V6.15 (dont le nouveau `newosb-share.js`), puis recharger une fois avec Ctrl + F5.
 3. Au premier lien créé, le script ajoute un onglet **masqué** `OBSERVATOIRE_PARTAGES` dans le classeur OPERATIONS. Ne pas le modifier à la main (il ne contient que des empreintes de jetons, jamais les liens eux-mêmes).
-4. **Destinataires extérieurs** : le déploiement doit être accessible à « **Tout le monde** » (Déployer → Gérer les déploiements → « Qui a accès »). Avec « Toute personne de votre domaine », seuls les comptes Google de votre organisation peuvent ouvrir un lien. La clé reste obligatoire pour tout le reste : « Tout le monde » ne donne accès à aucune donnée sans clé ou lien valide.
+4. **Partager l’onglet Exigences** (facultatif) : le script OPERATIONS lit lui-même l’onglet RAPPORT pour les liens. Si RAPPORT est dans un autre classeur que OPERATIONS, ajouter dans les propriétés du projet **OPERATIONS** `NEWOSB_RAPPORT_SPREADSHEET_ID` = identifiant du classeur RAPPORT (la partie entre `/d/` et `/edit` de son adresse ; l’adresse complète est aussi acceptée). Le compte qui exécute le script doit pouvoir ouvrir ce classeur. Exécuter ensuite **`verifierPartageExigences`** : le journal doit indiquer « RAPPORT lisible ». Google peut demander une nouvelle autorisation à la première exécution. Le script Exigences n’a rien à changer (le nouveau `Code_Exigences.gs` ne fait que réorganiser le code ; sa mise à jour est facultative).
+5. **Destinataires extérieurs** : le déploiement doit être accessible à « **Tout le monde** » (Déployer → Gérer les déploiements → « Qui a accès »). Avec « Toute personne de votre domaine », seuls les comptes Google de votre organisation peuvent ouvrir un lien. La clé reste obligatoire pour tout le reste : « Tout le monde » ne donne accès à aucune donnée sans clé ou lien valide.
 
 ### Créer un lien
 
@@ -103,7 +104,7 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 2. **⤴ Partager** : nommer le lien, cocher les onglets accessibles, choisir l’onglet d’ouverture et la durée, cocher « Anonymiser » si besoin, puis **Créer le lien**.
 3. **Copier le lien** tout de suite : il n’est affiché qu’une fois. Pour le retrouver plus tard, il faut en créer un nouveau.
 
-Exigences et Présentation ne sont pas partageables (source et clé distinctes, exports Google Slides).
+Pour l’onglet **Exigences** : appliquer d’abord, dans l’onglet Exigences, les filtres voulus (ils sont figés avec le lien ; pour un lien anonymisé, les filtres MOA et Groupe MOA sont retirés). Le destinataire voit les exigences des opérations du lien, l’encart de compatibilité avec les mentions et, dans chaque fiche projet, les exigences de l’opération — sans clé ni URL Exigences. La **Présentation** n’est pas partageable (exports Google Slides).
 
 ### Gérer les liens
 
@@ -114,7 +115,7 @@ La même fenêtre liste les liens : statut, expiration, nombre d’ouvertures, d
 | Garanti par le script, à chaque requête | Restriction d’affichage seulement |
 |---|---|
 | Jeton valide, non révoqué, non expiré | Choix des onglets visibles |
-| Seules les opérations du périmètre sont transmises | Filtres verrouillés dans l’interface |
+| Seules les opérations du périmètre (et leurs lignes RAPPORT) sont transmises | Filtres verrouillés dans l’interface (y compris ceux de l’onglet Exigences) |
 | Données pseudonymisées si le lien est anonymisé | |
 | Aucun accès à l’administration des liens, à Google Slides ni à la lecture complète | |
 

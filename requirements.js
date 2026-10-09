@@ -18,6 +18,8 @@
     pages:{},
     // Encart « Compatibilité des exigences sélectionnées avec les mentions » (V6.14).
     compat:{context:'',manualMention:'',values:{},size:'',openBouquet:false,openDiag:false,openFields:false},
+    // V6.15 : page ouverte par un lien de partage — source et filtres figés.
+    share:null,
     focusSelector:''
   };
   // URL mémorisée sans aucune clé. Une ancienne URL « …?key=… » (V6.13) est nettoyée et la clé
@@ -117,19 +119,9 @@
     try{
       const ping=await bridge.request(url,{mode:'ping'},120000);
       if(ping?.service&&ping.service!=='NEWOSB EXIGENCES')throw new Error('Cette URL n’est pas celle du script Exigences (service « '+ping.service+' »).');
-      const meta=await bridge.request(url,{mode:'meta'},120000);
-      const total=Math.max(0,Number(meta?.rowCount)||0),limit=Math.max(200,Math.min(3000,Number(meta?.chunkSize)||1500)),out=[];
-      if(!total)throw new Error('L’onglet RAPPORT ne contient aucune ligne de données.');
-      const offsets=[];for(let o=0;o<total;o+=limit)offsets.push(o);
-      for(let i=0;i<offsets.length;i+=2){
-        if(token!==loadToken)return;
-        state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
-        const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>bridge.request(url,{mode:'chunk',offset,limit},120000)));
-        chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
-      }
-      if(token!==loadToken)return;
-      const rows=out.map(normalizeRow).filter(r=>r.evaluationCode&&r.requirement);
-      if(!rows.length)throw new Error('Aucune ligne exploitable reçue depuis l’onglet RAPPORT.');
+      const got=await fetchAll(url,'meta','chunk',token);
+      if(!got)return;
+      const {rows,meta}=got;
       resetIndexes();state.rows=rows;state.connected=true;state.loadedAt=new Date().toISOString();state.error='';state.errorKind='';state.warnings=Array.isArray(meta?.warnings)?meta.warnings.slice(0,12).map(String):[];
       if(!state.mentionFocus)state.mentionFocus=topMentions(state.rows,1)[0]?.name||'';
       bridge.closePopupSoon(600);
@@ -143,6 +135,48 @@
     }finally{if(token===loadToken){state.loading=false;state.loadProgress='';emit();}}
   }
   let loadToken=0;
+  // Lecture par blocs (meta puis chunk). Renvoie null si un chargement plus récent a pris le relais.
+  async function fetchAll(url,metaMode,chunkMode,token){
+    const meta=await bridge.request(url,{mode:metaMode},120000);
+    const total=Math.max(0,Number(meta?.rowCount)||0),limit=Math.max(200,Math.min(3000,Number(meta?.chunkSize)||1500)),out=[];
+    if(!total)throw new Error(state.share?'Aucune ligne RAPPORT n’est rattachée aux opérations de ce lien.':'L’onglet RAPPORT ne contient aucune ligne de données.');
+    const offsets=[];for(let o=0;o<total;o+=limit)offsets.push(o);
+    for(let i=0;i<offsets.length;i+=2){
+      if(token!==loadToken)return null;
+      state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
+      const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>bridge.request(url,{mode:chunkMode,offset,limit},120000)));
+      chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
+    }
+    if(token!==loadToken)return null;
+    const rows=out.map(normalizeRow).filter(r=>r.evaluationCode&&r.requirement);
+    if(!rows.length)throw new Error('Aucune ligne exploitable reçue depuis l’onglet RAPPORT.');
+    return {rows,meta};
+  }
+  // V6.15 : lien de partage. Les lignes RAPPORT sont servies par le script OPERATIONS, limitées aux
+  // opérations du lien ; les filtres de l'onglet sont ceux figés à la création et ne sont pas modifiables.
+  async function loadShare(url,shareToken,frozenFilters,usePopup){
+    if(!bridge)return;
+    bridge.setShare(shareToken);
+    if(usePopup&&!bridge.preparePopup(url)){state.error='La fenêtre Google a été bloquée par le navigateur. Autorisez les fenêtres pop-up pour ce site, puis réessayez.';state.errorKind='error';emit();return;}
+    const token=++loadToken;
+    state.share={active:true};state.url='';
+    Object.keys(state.filters).forEach(k=>{const v=frozenFilters&&Array.isArray(frozenFilters[k])?frozenFilters[k]:[];state.filters[k]=v.map(String);});
+    state.loading=true;state.error='';state.errorKind='';state.loadProgress='Chargement des exigences…';emit();
+    try{
+      const got=await fetchAll(url,'reqMeta','reqChunk',token);
+      if(!got)return;
+      resetIndexes();state.rows=got.rows;state.connected=true;state.loadedAt=new Date().toISOString();state.warnings=[];
+      if(!state.mentionFocus)state.mentionFocus=topMentions(filteredRows(),1)[0]?.name||'';
+    }catch(e){
+      if(token!==loadToken)return;
+      clearPrivateData();
+      state.errorKind=e?.authError?'auth':'error';
+      state.error=String(e?.message||e);
+    }finally{if(token===loadToken){state.loading=false;state.loadProgress='';bridge.closePopupSoon(600);emit();}}
+  }
+  // Filtres de l'onglet tels qu'affichés, pour figer un lien de partage.
+  function shareFilters(){const out={};Object.keys(state.filters).forEach(k=>{const v=filterValues(k);if(v.length)out[k]=v.slice();});return out;}
+  const FILTER_LABELS={year:'Année',referential:'Référentiel',moaGroup:'Groupe MOA',status:'Avancement',moa:'Maître d’ouvrage',region:'Région',department:'Département',profile:'Profil',socialZone:'Zonage',nature:'Nature',mention:'Mention',moaSector:'Secteur MOA',theme:'Thème',period:'Période réf.'};
   function disconnect(){
     loadToken++;bridge?.clearKey();bridge?.destroy('Source Exigences déconnectée.');
     clearPrivateData();state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
@@ -307,6 +341,10 @@
     return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu">${search}<div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=lab(v),hidden=query&&!norm(text).includes(query);return `<label data-req-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${isChecked(v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
   }
   function filtersHtml(){
+    if(state.share){
+      const parts=Object.keys(state.filters).filter(k=>filterValues(k).length).map(k=>`${FILTER_LABELS[k]||k} : ${filterValues(k).map(v=>k==='period'?(v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':v):filterOut(k,v)).join(', ')}`);
+      return `<div class="req-share-lock" role="note"><span class="obs-share-lock-badge">🔒 Filtres figés</span><span>${esc(parts.join(' · ')||'Toutes les exigences des opérations partagées')}</span></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
+    }
     const o=filterOptions();
     const activeCount=Object.keys(state.filters).reduce((n,k)=>n+filterValues(k).length,0);
     return `<div class="req-filterbar req-filterbar-checks">${checkFilter('year','Année',o.year)}${checkFilter('referential','Référentiel',o.referential)}${checkFilter('moaGroup','Groupe MOA',o.moaGroup)}${checkFilter('status','Avancement',o.status)}${checkFilter('moa','Maître d’ouvrage',o.moa)}${checkFilter('region','Région',o.region)}${checkFilter('department','Département',o.department)}${checkFilter('profile','Profil',o.profile)}${checkFilter('socialZone','Zonage',o.socialZone)}${checkFilter('nature','Nature',o.nature)}${checkFilter('mention','Mention',o.mention)}${checkFilter('moaSector','Secteur MOA',o.moaSector)}${checkFilter('theme','Thème',o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`)}${checkFilter('period','Période réf.',['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024')}<button type="button" class="req-reset-filters" data-req-reset-filters="1" ${activeCount?'':'disabled'}>Réinitialiser les filtres${activeCount?` · ${activeCount}`:''}</button></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
@@ -320,6 +358,10 @@
     return state.url?'Source Exigences configurée · clé d’accès à saisir pour cette session':'Source Exigences non connectée';
   }
   function sourceCard(){
+    if(state.share){
+      const retry=state.error&&state.errorKind!=='auth'?'<button type="button" data-req-share-retry="1">Ouvrir la connexion Google</button>':'';
+      return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>EXIGENCES · PÉRIMÈTRE PARTAGÉ</span><h2>Exigences des opérations partagées</h2><p role="status" aria-live="polite">${esc(state.loading?(state.loadProgress||'Chargement…'):state.connected?`${fmt(evaluations(state.rows).length)} évaluations · ${fmt(occurrenceRows(state.rows).length)} occurrences`:(state.error||'Chargement…'))}</p></div>${retry?`<div class="req-source-controls">${retry}</div>`:''}</article>`;
+    }
     const keyOk=bridge?.hasKey?.();
     return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>SOURCE EXIGENCES · PRIVÉE</span><h2>Google Sheet · onglet RAPPORT</h2><p role="status" aria-live="polite">${esc(sourceStatusText())}</p></div><div class="req-source-controls"><input id="reqSourceUrl" type="url" value="${attr(state.url)}" placeholder="https://script.google.com/macros/s/…/exec" aria-label="URL /exec du script Exigences" autocomplete="off"><input id="reqSourceKey" type="password" value="" placeholder="${keyOk?'Clé d’accès en mémoire · ressaisir pour changer':'Clé d’accès Exigences'}" aria-label="Clé d’accès de la source Exigences (gardée en mémoire pendant la session)" autocomplete="off" spellcheck="false"><button type="button" data-req-connect="1">${state.connected?'Actualiser':'Connecter'}</button>${(state.connected||keyOk||state.loading)?'<button class="soft" type="button" data-req-disconnect="1">Déconnecter</button>':''}${state.url&&!state.connected&&!state.loading?'<button class="soft" type="button" data-req-forget="1">Oublier l’URL</button>':''}<a class="req-code-link" href="Code_Exigences.gs" download>Code_Exigences.gs ↓</a></div>${state.error?`<div class="req-source-error" role="alert">${esc(state.error)}</div>`:''}${state.migratedKey?'<div class="req-source-note">La clé figurant dans l’ancienne URL mémorisée a été retirée du stockage du navigateur ; elle n’est conservée qu’en mémoire pour cette session.</div>':''}${state.connected&&state.warnings.length?`<details class="req-source-warnings"><summary>${fmt(state.warnings.length)} remarque${state.warnings.length>1?'s':''} du script</summary><ul>${state.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<small>La clé est demandée à chaque session : elle n’est enregistrée ni dans l’URL, ni dans le navigateur. Le script vérifie la clé avant toute lecture de RAPPORT. Le mode anonymisé masque l’affichage mais ne protège pas la source.</small></article>`;
   }
@@ -619,6 +661,7 @@
 
   function render(){
     const source=sourceCard();
+    if(!state.connected&&state.share)return source;
     if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Connecter le Google Sheet des exigences</h2><p>Cette rubrique repart exclusivement de l’onglet <b>RAPPORT</b>. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger Code_Exigences.gs</a></div>${infoModal()}`;
     const rows=filteredRows(), occ=occurrenceRows(rows), evs=evaluations(rows), refs=uniq(evs.map(r=>r.referential)), years=uniq(evs.map(r=>r.year).filter(Boolean)).sort((a,b)=>a-b), neuf=evs.filter(r=>r.nature==='Neuf').length,reno=evs.filter(r=>r.nature==='Rénovation').length;
     return `${source}${filtersHtml()}<div class="req-page-title"><div><span>ANALYSE DES EXIGENCES</span><h1>${filterValues('profile').length===1?`Profil ${esc(filterValues('profile')[0].replace(/^Profil\s+/i,''))}`:filterValues('profile').length>1?`${filterValues('profile').length} profils sélectionnés`:'Toutes évaluations'}</h1><p>Retraitement dynamique de RAPPORT · filtres par profil, région et département · fiches référentiel 2026 accessibles avec le bouton <b>i</b>.</p></div><div class="req-page-meta">${years.length?`${years[0]}–${years[years.length-1]}`:'—'}<small>${refs.length} référentiel${refs.length>1?'s':''}</small></div></div>
@@ -636,6 +679,10 @@
     if(state.focusSelector){const sel=state.focusSelector;state.focusSelector='';const el=document.querySelector(sel);if(el){try{el.focus({preventScroll:true});}catch{}}}
   }
   function handleClick(e){
+    if(state.share){
+      if(e.target.closest('[data-req-share-retry]')){window.NEWOSB_SHARE?.startRequirements?.(true);return true;}
+      if(e.target.closest('[data-req-connect],[data-req-disconnect],[data-req-forget],[data-req-filter-clear],[data-req-filter-all],[data-req-reset-filters]'))return true;
+    }
     const view=e.target.closest('[data-req-view][data-view]');if(view){const mode=['list','bar','tiles'].includes(view.dataset.view)?view.dataset.view:'list';state.views[view.dataset.reqView]=mode;state.pages[view.dataset.reqView]=1;emit();return true;}
     const pager=e.target.closest('[data-req-page][data-page]');if(pager){state.pages[pager.dataset.reqPage]=Math.max(1,Number(pager.dataset.page)||1);emit();return true;}
     const mentionBtn=e.target.closest('[data-req-mention-focus-button]');if(mentionBtn){state.mentionFocus=mentionBtn.dataset.reqMentionFocusButton||'';emit();return true;}
@@ -667,6 +714,7 @@
     return false;
   }
   function handleChange(e){
+    if(state.share&&e.target.closest('[data-req-filter-check]'))return true;
     const f=e.target.closest('[data-req-filter-check]');if(f){const key=f.dataset.reqFilterCheck,value=filterIn(f.dataset.reqFilterCheck,f.value||'');state.openFilter=key;const values=filterValues(key).filter(v=>norm(v)!==norm(value));if(f.checked)values.push(value);state.filters[key]=values;if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}if(key==='mention'&&f.checked)state.mentionFocus=value;emit();return true;}
     const mf=e.target.closest('[data-req-mention-focus]');if(mf){state.mentionFocus=mf.value||'';emit();return true;}
     // Encart compatibilité : ces choix ne modifient ni les filtres généraux ni les deux premières cartes.
@@ -691,7 +739,7 @@
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
   window.addEventListener('newosb:privacychange',emit);
   // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,disconnect,status,auditInfo,getOperationRequirements,
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,shareFilters,disconnect,status,auditInfo,getOperationRequirements,
     // Accès de test / diagnostic, sans exposer l'état mutable.
     _compatSnapshot(){const m=compatModel();return m.error?{error:m.error}:{context:m.ctx?.key||'',contexts:m.bouquets.contexts.map(c=>({key:c.key,operations:c.operations,top:c.top.map(i=>({code:i.code,operations:i.operations,frequency:i.frequency}))})),ranked:(m.analysis?.ranked||[]).map(r=>({id:r.id,pct:r.pct,covered:r.covered,required:r.required})),results:(m.analysis?.results||[]).map(r=>({id:r.id,status:r.status,pct:r.pct,covered:r.covered,required:r.required})),manual:state.compat.manualMention};}};
 })();

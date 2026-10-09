@@ -19,7 +19,7 @@
 
   const PAGE_LABELS = {
     overview: 'Vue d’ensemble', territories: 'Territoires', stakeholders: 'Acteurs', certification: 'Certification',
-    performance: 'Labels & performances', solutions: 'Solutions constructives', energy: 'Énergie & transitions',
+    performance: 'Labels & performances', requirements: 'Exigences', solutions: 'Solutions constructives', energy: 'Énergie & transitions',
     carbon: 'Carbone & DPE', crossdata: 'Croiser les données', operations: 'Projets & opérations',
     quality: 'Qualité & données', dictionary: 'Dictionnaire'
   };
@@ -95,6 +95,7 @@
       document.documentElement.classList.toggle('newosb-share-anonymized', !!share.info.anonymized);
       Object.assign(share, { status: 'ready', message: '' });
       emit();
+      if (share.info.tabs.includes('requirements')) startRequirements(false);
     } catch (err) {
       if (attempt !== share.attempt) return;
       const denied = !!err?.authError;
@@ -111,6 +112,12 @@
     if (/Trop de tentatives/i.test(text)) return 'Trop de tentatives avec des liens invalides : réessayez dans quelques minutes.';
     if (/Colonne du code interne introuvable/i.test(text)) return 'La source a changé de structure : ce lien ne peut plus être lu. Demandez un nouveau lien.';
     return text;
+  }
+
+  // Exigences : lignes RAPPORT servies par le même script, avec le même jeton (aucune clé Exigences).
+  function startRequirements(usePopup) {
+    if (share.status !== 'ready' || !(share.info?.tabs || []).includes('requirements')) return;
+    window.NEWOSB_REQUIREMENTS?.loadShare?.(share.src, share.token, share.info.reqFilters || {}, !!usePopup);
   }
 
   function gateHtml() {
@@ -140,7 +147,7 @@
   function allowedPage(page) { return !share.active || (share.status === 'ready' && (share.info?.tabs || []).includes(page)); }
   function landingPage() { const t = share.info?.tabs || []; return t.includes(share.info?.landing) ? share.info.landing : (t[0] || 'overview'); }
 
-  Object.assign(share, { start, frenchMessage, gateHtml, lockedFiltersHtml, allowedPage, landingPage });
+  Object.assign(share, { start, startRequirements, frenchMessage, gateHtml, lockedFiltersHtml, allowedPage, landingPage });
   window.NEWOSB_SHARE = share;
 
   // ---------------------------------------------------------------------------
@@ -154,7 +161,10 @@
   function scopeInfo(anonymized) {
     const scope = app()?.shareScope?.() || { displayCodes: [], parts: [], cross: [], search: '', page: 'overview', privacy: false };
     const resolved = engine()?.resolveRealCodes?.(scope.displayCodes) || { codes: [], missing: scope.displayCodes.length, codeHeader: '' };
-    return { scope, resolved, summary: buildSummary(scope, anonymized) };
+    // Filtres de l'onglet Exigences tels qu'affichés (sans MOA ni groupe pour un lien anonymisé).
+    const reqFilters = { ...(window.NEWOSB_REQUIREMENTS?.shareFilters?.() || {}) };
+    if (anonymized) { delete reqFilters.moa; delete reqFilters.moaGroup; }
+    return { scope, resolved, reqFilters, summary: buildSummary(scope, anonymized) };
   }
 
   function prepare() {
@@ -238,6 +248,7 @@
     ${anonymized ? '<small class="obs-share-hint">Lien anonymisé : le nom du lien est affiché tel quel au destinataire, n’y mettez pas de nom de MOA ou d’opération. Laissé vide, il reprend le résumé anonymisé du périmètre.</small>' : ''}
     <label>Onglets accessibles</label>
     <div class="obs-share-tabs">${tabsHtml}</div>
+    ${defaultTabs.includes('requirements') ? `<p class="obs-share-muted obs-share-req-note">Exigences : les lignes RAPPORT des opérations du périmètre sont lues par le script OPERATIONS (aucune clé Exigences pour le destinataire). ${Object.keys(scopeInfo(anonymized).reqFilters).length ? 'Les filtres de l’onglet Exigences affichés maintenant sont figés avec le lien.' : 'Aucun filtre de l’onglet Exigences n’est figé : toutes les exigences des opérations partagées.'}</p>` : ''}
     <label for="obsShareLanding">Onglet d’ouverture</label>
     <select id="obsShareLanding" data-share-landing>${landingOptions}</select>
     <label for="obsShareDuration">Durée d’accès</label>
@@ -286,11 +297,11 @@ ${listHtml()}
     const v = formValues();
     if (!v.tabs.length) { admin.error = 'Choisissez au moins un onglet.'; render(true); return; }
     if (!v.expiresAt || v.expiresAt < Date.now() + 3600000) { admin.error = 'Choisissez une date d’expiration future.'; render(true); return; }
-    const { resolved, summary } = scopeInfo(v.anonymized);
+    const { resolved, summary, reqFilters } = scopeInfo(v.anonymized);
     if (!resolved.codes.length) { admin.error = 'Aucune opération avec un code interne dans le périmètre actuel.'; render(true); return; }
     admin.busy = true; admin.error = ''; render(true);
     try {
-      const res = await call({ mode: 'shareCreate', label: v.label || summary.slice(0, 120), tabs: v.tabs, landing: v.tabs.includes(v.landing) ? v.landing : v.tabs[0], expiresAt: v.expiresAt, anonymized: v.anonymized, codes: resolved.codes, codeHeader: resolved.codeHeader, summary });
+      const res = await call({ mode: 'shareCreate', label: v.label || summary.slice(0, 120), tabs: v.tabs, landing: v.tabs.includes(v.landing) ? v.landing : v.tabs[0], expiresAt: v.expiresAt, anonymized: v.anonymized, codes: resolved.codes, codeHeader: resolved.codeHeader, summary, reqFilters: v.tabs.includes('requirements') ? reqFilters : {} });
       if (!isValidToken(res.token)) throw new Error('Réponse du script inattendue : lien non créé.');
       admin.lastLink = buildLink(location.origin + location.pathname, res.token, admin.prepared.sourceUrl);
       admin.shares = [res.share, ...admin.shares.filter(s => s.id !== res.share.id)];

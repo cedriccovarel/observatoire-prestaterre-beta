@@ -649,13 +649,16 @@ function handleCommunesProxy_(params) {
 // SHA-256 est conservee dans l'onglet masque OBSERVATOIRE_PARTAGES.
 const NEWOSB_SHARE_CONFIG = {
   SHEET: 'OBSERVATOIRE_PARTAGES',
-  HEADERS: ['Identifiant', 'Empreinte du jeton', 'Nom', 'Cree le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Onglets', 'Anonymise', 'Colonne code', 'Perimetre', 'Operations', 'Dernier acces (ms)', "Nombre d'acces", "Page d'ouverture"],
+  HEADERS: ['Identifiant', 'Empreinte du jeton', 'Nom', 'Cree le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Onglets', 'Anonymise', 'Colonne code', 'Perimetre', 'Operations', 'Dernier acces (ms)', "Nombre d'acces", "Page d'ouverture", 'Filtres exigences'],
   CODE_CELLS: 8,
   CODE_CELL_CHARS: 45000,
   MAX_CODES: 20000,
   MIN_MINUTES: 60,
   MAX_DAYS: 366,
-  TABS: ['overview', 'territories', 'stakeholders', 'certification', 'performance', 'solutions', 'energy', 'carbon', 'crossdata', 'operations', 'quality', 'dictionary'],
+  TABS: ['overview', 'territories', 'stakeholders', 'certification', 'performance', 'requirements', 'solutions', 'energy', 'carbon', 'crossdata', 'operations', 'quality', 'dictionary'],
+  RAPPORT_PROPERTY: 'NEWOSB_RAPPORT_SPREADSHEET_ID',
+  REQ_FILTER_KEYS: ['year', 'referential', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone', 'period', 'nature', 'mention', 'moaSector', 'theme'],
+  REQ_PRIVATE_KEYS: ['moa', 'moaGroup'],
   FAILURE_LIMIT: 60
 };
 
@@ -722,7 +725,8 @@ function newosbShareRecords_(sheet) {
       operationCount: Number(r[10]) || 0,
       lastAccessAt: Number(r[11]) || 0,
       accessCount: Number(r[12]) || 0,
-      landing: String(r[13] || '')
+      landing: String(r[13] || ''),
+      reqFilters: newosbShareParseReqFilters_(r[14])
     };
   }).filter(function(rec) { return rec.id && rec.hash; });
 }
@@ -789,16 +793,18 @@ function newosbShareAdmin_(mode, params) {
     const expiresAt = newosbShareExpiry_(params.expiresAt, now);
     const anonymized = !!params.anonymized || newosbAnonymizedOnly_();
     const landing = tabs.indexOf(String(params.landing || '')) >= 0 ? String(params.landing) : tabs[0];
+    if (tabs.indexOf('requirements') >= 0) newosbRapportContext_();
+    const reqFilters = tabs.indexOf('requirements') >= 0 ? newosbShareCleanReqFilters_(params.reqFilters, anonymized) : {};
     const label = newosbShareText_(params.label, 120) || 'Observatoire partage';
     const summary = newosbShareText_(params.summary, 2000);
-    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing].concat(slices);
+    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices);
     const lock = newosbShareLock_();
     try {
       const sheet = newosbShareSheet_(true);
       const target = sheet.getLastRow() + 1;
       sheet.getRange(target, 1, 1, row.length).setNumberFormat('@').setValues([row]);
     } finally { if (lock) lock.releaseLock(); }
-    const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing };
+    const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing, reqFilters: reqFilters };
     // Le jeton n'est renvoye qu'une fois, a la creation ; seule son empreinte est conservee.
     return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: newosbSharePublic_(rec, now) };
   }
@@ -867,7 +873,86 @@ function newosbShareMatches_(access, meta) {
 }
 
 function newosbShareInfo_(rec) {
-  return { label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, tabs: rec.tabs, landing: rec.landing, anonymized: rec.anonymized || newosbAnonymizedOnly_(), summary: rec.summary, operationCount: rec.operationCount };
+  const anonymized = rec.anonymized || newosbAnonymizedOnly_();
+  return { label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, tabs: rec.tabs, landing: rec.landing, anonymized: anonymized, summary: rec.summary, operationCount: rec.operationCount, reqFilters: rec.tabs.indexOf('requirements') >= 0 ? newosbShareCleanReqFilters_(rec.reqFilters, anonymized) : {} };
+}
+
+// Filtres de l'onglet Exigences figes a la creation (appliques par le navigateur, a l'interieur des
+// lignes deja limitees au perimetre). Pour un lien anonymise, jamais de nom de MOA ou de groupe.
+function newosbShareCleanReqFilters_(value, anonymized) {
+  const out = {};
+  const src = value && typeof value === 'object' ? value : {};
+  NEWOSB_SHARE_CONFIG.REQ_FILTER_KEYS.forEach(function(k) {
+    if (anonymized && NEWOSB_SHARE_CONFIG.REQ_PRIVATE_KEYS.indexOf(k) >= 0) return;
+    const list = Array.isArray(src[k]) ? src[k].map(function(v) { return String(v == null ? '' : v).slice(0, 200); }).filter(Boolean).slice(0, 300) : [];
+    if (list.length) out[k] = list;
+  });
+  return out;
+}
+
+function newosbShareParseReqFilters_(cell) {
+  try { return JSON.parse(String(cell || '').replace(/^~/, '') || '{}') || {}; } catch (e) { return {}; }
+}
+
+// Classeur contenant l'onglet RAPPORT : propriete NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant ou URL),
+// sinon le classeur OPERATIONS s'il contient un onglet RAPPORT.
+function newosbRapportSpreadsheet_() {
+  const raw = newosbProp_(NEWOSB_SHARE_CONFIG.RAPPORT_PROPERTY);
+  if (raw) {
+    const m = raw.match(/\/d\/([A-Za-z0-9_-]{20,})/);
+    return SpreadsheetApp.openById(m ? m[1] : raw);
+  }
+  const ss = getSpreadsheet_();
+  if (ss.getSheetByName(NEWOSB_EXIGENCES_CONFIG.SHEET_NAME)) return ss;
+  throw new Error("Partage des Exigences : renseigne la propriete NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant du classeur qui contient l'onglet RAPPORT) dans le projet Apps Script OPERATIONS.");
+}
+
+function newosbRapportContext_() {
+  return newosbExigencesContext_(newosbRapportSpreadsheet_());
+}
+
+// Lignes RAPPORT du perimetre d'un lien (rattachement par code interne d'operation).
+function newosbShareRapport_(access, params, mode) {
+  const rec = access.record;
+  const anonymized = rec.anonymized || newosbAnonymizedOnly_();
+  const base = { ok: true, service: NEWOSB_EXIGENCES_CONFIG.SERVICE, version: OBSERVATOIRE_CONFIG.VERSION, shared: true };
+  const ctx = newosbRapportContext_();
+  if (ctx.cols.operationCode < 0) throw new Error("Colonne « Evaluation: Operation: Code interne » absente de RAPPORT : les exigences ne peuvent pas etre rattachees aux operations partagees.");
+  const wanted = {};
+  newosbShareCodes_(access.sheet, rec).forEach(function(c) { wanted[c] = true; });
+  const values = ctx.sheet.getRange(NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW, ctx.cols.operationCode + 1, ctx.rowCount, 1).getDisplayValues();
+  const matches = [];
+  values.forEach(function(v, i) { if (wanted[newosbShareNormCode_(v[0])]) matches.push(i); });
+  if (mode === 'reqmeta') {
+    base.rowCount = matches.length;
+    base.chunkSize = NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE;
+    base.warnings = ctx.warnings;
+    return base;
+  }
+  const offset = clampInteger_(params.offset, 0, matches.length, 0);
+  const limit = clampInteger_(params.limit, 1, NEWOSB_EXIGENCES_CONFIG.MAX_CHUNK_SIZE, NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE);
+  const slice = matches.slice(offset, offset + limit);
+  let rows = [];
+  if (slice.length) {
+    const keep = {};
+    slice.forEach(function(i) { keep[NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW + i] = true; });
+    rows = newosbExigencesRows_(ctx, slice[0], slice[slice.length - 1] - slice[0] + 1).filter(function(r) { return keep[r.sourceRow]; });
+  }
+  if (anonymized) {
+    const secret = newosbPseudoSecret_();
+    rows = rows.map(function(r) {
+      const out = {};
+      Object.keys(r).forEach(function(k) { out[k] = r[k]; });
+      out.moa = r.moa ? newosbPseudonym_('MOA', r.moa, secret) : '';
+      out.group = r.group ? newosbPseudonym_('Groupe', r.group, secret) : '';
+      out.operationCode = r.operationCode ? newosbPseudonym_('OP', r.operationCode, secret) : '';
+      out.evaluationCode = newosbPseudonym_('EVA', r.evaluationCode, secret);
+      out.rowCode = r.rowCode ? newosbPseudonym_('ROW', r.rowCode, secret) : '';
+      return out;
+    });
+  }
+  base.offset = offset; base.count = rows.length; base.physicalCount = slice.length; base.done = offset + slice.length >= matches.length; base.rows = rows;
+  return base;
 }
 
 // Requetes autorisees avec un jeton de partage : ping, meta, chunk (lignes du perimetre uniquement), zonage et communes.
@@ -885,6 +970,10 @@ function newosbShareRequest_(access, params) {
     base.transport = 'popup-bridge-ready';
     base.anonymizedOnly = base.share.anonymized;
     return base;
+  }
+  if (mode === 'reqmeta' || mode === 'reqchunk') {
+    if (rec.tabs.indexOf('requirements') < 0) throw new Error("L'onglet Exigences n'est pas inclus dans ce lien.");
+    return newosbShareRapport_(access, params, mode);
   }
   if (mode !== 'meta' && mode !== 'chunk') throw new Error("Action non autorisee avec un lien de partage.");
   const meta = getSheetMeta_();
@@ -1216,3 +1305,455 @@ function testerGoogleSlides() {
   Logger.log('Google Slides OK : ' + p.getUrl());
   return p.getUrl();
 }
+
+// -----------------------------------------------------------------------------
+// V6.15 - Lecture de RAPPORT pour les liens de partage qui incluent l'onglet Exigences.
+// Seule la lecture est reprise de Code_Exigences.gs ; l'acces reste controle par le jeton du lien.
+// -----------------------------------------------------------------------------
+const NEWOSB_EXIGENCES_CONFIG = { SHEET_NAME: 'RAPPORT', HEADER_ROW: 1, FIRST_DATA_ROW: 2, SERVICE: 'NEWOSB EXIGENCES', CHUNK_SIZE: 1500, MAX_CHUNK_SIZE: 3000 };
+
+/**
+ * A lancer depuis l'editeur pour verifier que le script OPERATIONS peut lire RAPPORT
+ * (necessaire uniquement pour partager l'onglet Exigences).
+ */
+function verifierPartageExigences() {
+  try {
+    const ctx = newosbRapportContext_();
+    Logger.log('RAPPORT lisible : ' + ctx.rowCount + ' lignes ; colonne code operation : ' + (ctx.cols.operationCode >= 0 ? 'trouvee' : 'ABSENTE'));
+    return { ok: true, rows: ctx.rowCount, operationCode: ctx.cols.operationCode >= 0 };
+  } catch (e) {
+    Logger.log('RAPPORT illisible : ' + (e && e.message ? e.message : e));
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+}
+
+// >>> LECTURE RAPPORT — bloc partagé : copie identique dans Code_Operations.gs (liens de partage).
+// Toute modification doit être reportée à l'identique dans les deux fichiers (contrôlé par les tests).
+/**
+ * Tous les intitulés connus de RAPPORT.
+ * Ajouter un alias ici suffit pour rendre une nouvelle variante compatible.
+ */
+const NEWOSB_EXIGENCES_ALIASES = {
+  rowCode: [
+    'Code interne'
+  ],
+  requirementCode: [
+    "Code d'exigence",
+    'Numéro d\'exigence',
+    'Numéro d’exigence',
+    'Exigence de référence'
+  ],
+  rubricCode: [
+    'Code de rubrique',
+    'Rubrique: Code interne'
+  ],
+  createdBy: [
+    'Créé par: Nom complet'
+  ],
+  createdAt: [
+    'Date de création'
+  ],
+  lastActivityAt: [
+    'Date de dernière activité'
+  ],
+  modifiedAt: [
+    'Date de dernière modification'
+  ],
+  modifiedBy: [
+    'Dernière modification par: Nom complet'
+  ],
+  description: [
+    'Description'
+  ],
+  evaluationCode: [
+    'Évaluation: Code interne',
+    'Evaluation: Code interne',
+    'Code EVA interne',
+    'Rubrique: Évaluation: Code interne',
+    'Rubrique: Evaluation: Code interne'
+  ],
+  associatedRequirementName: [
+    'Exigence associée: Nom',
+    'Exigence associee: Nom'
+  ],
+  requirementReference: [
+    'Exigence de référence',
+    'Exigence de reference',
+    "Code d'exigence",
+    'Numéro d\'exigence',
+    'Numéro d’exigence'
+  ],
+  requirementValidated: [
+    'Exigence validée',
+    'Exigence validee'
+  ],
+  title: [
+    'Intitulé',
+    'Intitule'
+  ],
+  name: [
+    'Nom'
+  ],
+  requirementNumber: [
+    'Numéro d\'exigence',
+    'Numéro d’exigence'
+  ],
+  profile: [
+    'Profil spécifique',
+    'Profil specifique',
+    'Évaluation: Opération: Profil spécifique',
+    'Evaluation: Operation: Profil specifique',
+    'Profil'
+  ],
+  operationCode: [
+    'Évaluation: Opération: Code interne',
+    'Evaluation: Operation: Code interne'
+  ],
+  operationYear: [
+    'Évaluation: Opération: Année',
+    'Evaluation: Operation: Annee',
+    'Année opération',
+    'Annee operation',
+    'Année'
+  ],
+  socialZone: [
+    'Évaluation: Opération: Zonage logement social 1/2/3',
+    'Evaluation: Operation: Zonage logement social 1/2/3',
+    'Zonage logement social 1/2/3',
+    'Zonage'
+  ],
+  region: [
+    'Évaluation: Opération: Région',
+    'Evaluation: Operation: Region',
+    'Région',
+    'Region'
+  ],
+  department: [
+    'Évaluation: Opération: Département',
+    'Evaluation: Operation: Departement',
+    'Département',
+    'Departement'
+  ],
+  referential: [
+    'Évaluation: Opération: Référentiel: Nom du référentiel',
+    'Evaluation: Operation: Referentiel: Nom du referentiel',
+    'Référentiel',
+    'Referentiel'
+  ],
+  referentialVersion: [
+    'Évaluation: Opération: Version du référentiel applicable: Version',
+    'Evaluation: Operation: Version du referentiel applicable: Version',
+    'Version du référentiel applicable',
+    'Version du referentiel applicable'
+  ],
+  mentions: [
+    'Évaluation: Opération: Mentions',
+    'Evaluation: Operation: Mentions',
+    'Mention',
+    'Mentions',
+    'Mention '
+  ],
+  operationProfile: [
+    'Évaluation: Opération: Profil spécifique',
+    'Evaluation: Operation: Profil specifique'
+  ],
+  performance: [
+    'Évaluation: Opération: Performance',
+    'Evaluation: Operation: Performance'
+  ],
+  rubricEvaluationCode: [
+    'Rubrique: Évaluation: Code interne',
+    'Rubrique: Evaluation: Code interne'
+  ],
+  status: [
+    'Évaluation: Statut',
+    'Evaluation: Statut'
+  ],
+  moa: [
+    "Évaluation: Opération: Maître d'ouvrage: Nom de la société",
+    "Evaluation: Operation: Maitre d'ouvrage: Nom de la societe"
+  ],
+  moaSector: [
+    "Évaluation: Opération: Maître d'ouvrage: Secteur d'activité",
+    "Evaluation: Operation: Maitre d'ouvrage: Secteur d'activite"
+  ],
+  group: [
+    "Évaluation: Opération: Maître d'ouvrage: Groupe principal Nom",
+    "Evaluation: Operation: Maitre d'ouvrage: Groupe principal Nom"
+  ],
+  groupSector: [
+    "Évaluation: Opération: Maître d'ouvrage: Groupe principal Secteur d'activité",
+    "Evaluation: Operation: Maitre d'ouvrage: Groupe principal Secteur d'activite"
+  ],
+  associatedRequirementReferenceTitle: [
+    'Exigence associée: Exigence de référence: Intitulé',
+    'Exigence associee: Exigence de reference: Intitule'
+  ],
+  theme: [
+    'Thème',
+    'Theme'
+  ],
+  referentialVersionDate: [
+    'Version du ref ( date )',
+    'Version du ref (date)',
+    'Date de version du référentiel',
+    'Date version'
+  ]
+};
+
+/**
+ * Normalise fortement un intitulé afin de reconnaître :
+ * - accents / absence d'accents ;
+ * - apostrophes droites / typographiques ;
+ * - espaces multiples ;
+ * - ponctuation et différences de casse.
+ */
+function newosbExigencesNorm_(value) {
+  return String(value == null ? '' : value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[’'`´]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function newosbExigencesHeaderIndex_(headers) {
+  const out = {};
+  headers.forEach(function(header, index) {
+    const key = newosbExigencesNorm_(header);
+    if (!key) return;
+    // Première occurrence conservée si un export contient deux colonnes homonymes.
+    if (!Object.prototype.hasOwnProperty.call(out, key)) out[key] = index;
+  });
+  return out;
+}
+
+function newosbExigencesCol_(index, aliases) {
+  for (let i = 0; i < aliases.length; i += 1) {
+    const key = newosbExigencesNorm_(aliases[i]);
+    if (Object.prototype.hasOwnProperty.call(index, key)) return index[key];
+  }
+  return -1;
+}
+
+function newosbExigencesResolveCols_(headers, index) {
+  const cols = {};
+  const mapping = {};
+
+  Object.keys(NEWOSB_EXIGENCES_ALIASES).forEach(function(field) {
+    const idx = newosbExigencesCol_(index, NEWOSB_EXIGENCES_ALIASES[field]);
+    cols[field] = idx;
+    mapping[field] = idx >= 0 ? headers[idx] : null;
+  });
+
+  return { cols: cols, mapping: mapping };
+}
+
+function newosbExigencesValue_(displayRow, idx) {
+  return idx >= 0 ? String(displayRow[idx] == null ? '' : displayRow[idx]).trim() : '';
+}
+
+function newosbExigencesFirstValue_(displayRow, indices) {
+  for (let i = 0; i < indices.length; i += 1) {
+    const value = newosbExigencesValue_(displayRow, indices[i]);
+    if (value !== '') return value;
+  }
+  return '';
+}
+
+function newosbExigencesDate_(rawRow, displayRow, idx, timezone) {
+  if (idx < 0) return { text: '', year: null };
+  const raw = rawRow[idx];
+  if (Object.prototype.toString.call(raw) === '[object Date]' && !isNaN(raw.getTime())) {
+    return {
+      text: Utilities.formatDate(raw, timezone, 'yyyy-MM-dd'),
+      year: Number(Utilities.formatDate(raw, timezone, 'yyyy'))
+    };
+  }
+  const text = String(displayRow[idx] == null ? '' : displayRow[idx]).trim();
+  const y = text.match(/\b(20\d{2})\b/);
+  return { text: text, year: y ? Number(y[1]) : null };
+}
+
+function newosbExigencesNature_(referential) {
+  const s = newosbExigencesNorm_(referential);
+  if (s.indexOf('renovation') >= 0) return 'Rénovation';
+  if (s.indexOf('neuf') >= 0) return 'Neuf';
+  return 'Autre';
+}
+
+function newosbExigencesSector_(referential) {
+  const s = newosbExigencesNorm_(referential);
+  if (s.indexOf('tertiaire') >= 0) return 'Tertiaire';
+  if (s.indexOf('logement') >= 0) return 'Logement';
+  return 'Autre';
+}
+
+/**
+ * Extrait un numéro du type 1.1.1 / 3.3.14 depuis un texte si aucune
+ * colonne de référence dédiée n'est disponible.
+ */
+function newosbExigencesReferenceFromText_(text) {
+  const s = String(text || '').trim();
+  const match = s.match(/(?:^|\s)(\d+(?:\.\d+){1,3})(?:\.|\s|-|$)/);
+  return match ? match[1].replace(/\.$/, '') : '';
+}
+
+function newosbExigencesThemeFromReference_(reference) {
+  const ref = String(reference || '').trim();
+  if (!ref) return '';
+  const parts = ref.split('.').filter(Boolean);
+  if (parts.length >= 2) return parts[0] + '.' + parts[1];
+  return parts.length ? parts[0] : '';
+}
+
+function newosbExigencesTargetFromTexts_(values) {
+  for (let i = 0; i < values.length; i += 1) {
+    const s = String(values[i] || '').trim();
+    if (!s) continue;
+    const m = s.match(/^\s*([1-4])(?=\s*(?:\.|-|–|—|:|$))/);
+    if (m) return m[1];
+  }
+  return '';
+}
+
+function newosbExigencesRequirementText_(displayRow, cols) {
+  // Priorité : nom de l'exigence associée > intitulé référentiel associé > intitulé > nom > description.
+  return newosbExigencesFirstValue_(displayRow, [
+    cols.associatedRequirementName,
+    cols.associatedRequirementReferenceTitle,
+    cols.title,
+    cols.name,
+    cols.description
+  ]);
+}
+
+function newosbExigencesEvaluationCode_(displayRow, cols, rowNumber) {
+  // Priorité aux identifiants évaluation explicites.
+  const code = newosbExigencesFirstValue_(displayRow, [
+    cols.evaluationCode,
+    cols.rubricEvaluationCode
+  ]);
+  if (code) return code;
+
+  // À défaut, l'opération sert d'identifiant de regroupement.
+  const op = newosbExigencesValue_(displayRow, cols.operationCode);
+  if (op) return 'OP:' + op;
+
+  // Dernier recours : le code interne de la ligne. Cela évite de perdre la donnée.
+  const rowCode = newosbExigencesValue_(displayRow, cols.rowCode);
+  if (rowCode) return 'ROW:' + rowCode;
+
+  return 'LIGNE:' + rowNumber;
+}
+
+// -----------------------------------------------------------------------------
+// Lecture de RAPPORT (appelée uniquement après vérification de la clé)
+// -----------------------------------------------------------------------------
+function newosbExigencesContext_(spreadsheet) {
+  const ss = spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(NEWOSB_EXIGENCES_CONFIG.SHEET_NAME);
+  if (!sheet) throw new Error('Onglet RAPPORT introuvable. Renommez l’onglet source exactement "RAPPORT".');
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+  if (lastRow < NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW || lastColumn < 1) throw new Error('L’onglet RAPPORT ne contient pas de données exploitables.');
+  const headers = sheet.getRange(NEWOSB_EXIGENCES_CONFIG.HEADER_ROW, 1, 1, lastColumn).getDisplayValues()[0].map(function(v) { return String(v || '').trim(); });
+  const index = newosbExigencesHeaderIndex_(headers);
+  const resolved = newosbExigencesResolveCols_(headers, index);
+  const cols = resolved.cols;
+  const warnings = [];
+  const hasRequirementField = [cols.associatedRequirementName, cols.associatedRequirementReferenceTitle, cols.title, cols.name, cols.description, cols.requirementReference, cols.requirementCode, cols.requirementNumber].some(function(idx) { return idx >= 0; });
+  if (!hasRequirementField) {
+    throw new Error('Aucune colonne permettant d’identifier les exigences n’a été trouvée dans RAPPORT. Colonnes reconnues : Exigence associée: Nom, Intitulé, Nom, Description, Code d’exigence, Numéro d’exigence ou Exigence de référence.');
+  }
+  if (cols.operationCode < 0) warnings.push('Colonne « Évaluation: Opération: Code interne » absente : les exigences ne pourront pas être rattachées aux opérations ni comptées par opération.');
+  if (cols.evaluationCode < 0 && cols.rubricEvaluationCode < 0) warnings.push('Aucune colonne Évaluation: Code interne trouvée : NEWOSB utilisera le code opération, puis le code interne de ligne, comme identifiant de regroupement.');
+  if (cols.referential < 0) warnings.push('Référentiel absent : la nature Neuf/Rénovation ne pourra pas être déterminée avec certitude.');
+  if (cols.referentialVersion < 0 && cols.referentialVersionDate < 0) warnings.push('Version du référentiel absente : les mentions ne pourront pas être rapprochées d’une version datée.');
+  if (cols.region < 0) warnings.push('Région absente : le filtre Région restera vide.');
+  if (cols.department < 0) warnings.push('Département absent : le filtre Département restera vide.');
+  if (cols.profile < 0 && cols.operationProfile < 0) warnings.push('Profil spécifique absent : le filtre Profil restera vide.');
+  return {
+    ss: ss, sheet: sheet, headers: headers, cols: cols, mapping: resolved.mapping, warnings: warnings,
+    lastColumn: lastColumn, rowCount: lastRow - NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW + 1,
+    timezone: ss.getSpreadsheetTimeZone() || Session.getScriptTimeZone() || 'Europe/Paris'
+  };
+}
+
+function newosbExigencesRows_(ctx, offset, limit) {
+  const count = Math.max(0, Math.min(limit, ctx.rowCount - offset));
+  if (!count) return [];
+  const cols = ctx.cols;
+  const first = NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW + offset;
+  const range = ctx.sheet.getRange(first, 1, count, ctx.lastColumn);
+  const rawValues = range.getValues();
+  const displayValues = range.getDisplayValues();
+  const rows = [];
+  for (let i = 0; i < displayValues.length; i += 1) {
+    const displayRow = displayValues[i];
+    const rawRow = rawValues[i];
+    const sourceRowNumber = first + i;
+    const requirement = newosbExigencesRequirementText_(displayRow, cols);
+    let requirementReference = newosbExigencesFirstValue_(displayRow, [cols.requirementCode, cols.requirementNumber, cols.requirementReference]);
+    if (!requirementReference) requirementReference = newosbExigencesReferenceFromText_(requirement);
+    if (!requirement && !requirementReference) continue;
+    const evaluationCode = newosbExigencesEvaluationCode_(displayRow, cols, sourceRowNumber);
+    const referential = newosbExigencesValue_(displayRow, cols.referential);
+    const versionText = newosbExigencesValue_(displayRow, cols.referentialVersion);
+    let dateInfo = { text: versionText, year: null };
+    const versionYear = versionText.match(/\b(20\d{2})\b/);
+    if (versionYear) dateInfo.year = Number(versionYear[1]);
+    if (!dateInfo.year) dateInfo = newosbExigencesDate_(rawRow, displayRow, cols.createdAt, ctx.timezone);
+    const versionDate = newosbExigencesDate_(rawRow, displayRow, cols.referentialVersionDate, ctx.timezone);
+    const sourceTheme = newosbExigencesValue_(displayRow, cols.theme);
+    const theme = sourceTheme || newosbExigencesThemeFromReference_(requirementReference);
+    const codeTarget = newosbExigencesTargetFromTexts_([
+      newosbExigencesValue_(displayRow, cols.requirementCode),
+      newosbExigencesValue_(displayRow, cols.requirementNumber),
+      newosbExigencesValue_(displayRow, cols.associatedRequirementReferenceTitle),
+      newosbExigencesValue_(displayRow, cols.title),
+      requirement,
+      requirementReference
+    ]);
+    const themeTarget = newosbExigencesTargetFromTexts_([sourceTheme, theme]);
+    rows.push({
+      sourceRow: sourceRowNumber,
+      rowCode: newosbExigencesValue_(displayRow, cols.rowCode),
+      evaluationCode: evaluationCode,
+      operationCode: newosbExigencesValue_(displayRow, cols.operationCode),
+      operationYear: newosbExigencesValue_(displayRow, cols.operationYear),
+      socialZone: newosbExigencesValue_(displayRow, cols.socialZone),
+      region: newosbExigencesValue_(displayRow, cols.region),
+      department: newosbExigencesValue_(displayRow, cols.department),
+      referential: referential,
+      referentialVersion: versionText,
+      referentialVersionDate: versionDate.text,
+      referentialDate: dateInfo.text,
+      year: dateInfo.year,
+      mentions: newosbExigencesValue_(displayRow, cols.mentions),
+      profile: newosbExigencesFirstValue_(displayRow, [cols.profile, cols.operationProfile]),
+      performance: newosbExigencesValue_(displayRow, cols.performance),
+      status: newosbExigencesValue_(displayRow, cols.status),
+      moa: newosbExigencesValue_(displayRow, cols.moa),
+      moaSector: newosbExigencesValue_(displayRow, cols.moaSector),
+      group: newosbExigencesValue_(displayRow, cols.group),
+      groupSector: newosbExigencesValue_(displayRow, cols.groupSector),
+      requirementReference: requirementReference,
+      requirementLabel: newosbExigencesFirstValue_(displayRow, [cols.associatedRequirementReferenceTitle, cols.associatedRequirementName, cols.title, cols.name]),
+      associatedRequirementReferenceTitle: newosbExigencesValue_(displayRow, cols.associatedRequirementReferenceTitle),
+      requirementCode: newosbExigencesValue_(displayRow, cols.requirementCode),
+      requirementNumber: newosbExigencesValue_(displayRow, cols.requirementNumber),
+      requirementValidated: newosbExigencesValue_(displayRow, cols.requirementValidated),
+      rubricCode: newosbExigencesFirstValue_(displayRow, [cols.rubricCode]),
+      target: codeTarget || themeTarget,
+      theme: theme,
+      requirement: requirement || requirementReference,
+      nature: newosbExigencesNature_(referential),
+      sector: newosbExigencesSector_(referential)
+    });
+  }
+  return rows;
+}
+// <<< LECTURE RAPPORT

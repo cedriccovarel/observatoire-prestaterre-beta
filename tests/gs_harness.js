@@ -3,7 +3,7 @@
 // sur une feuille OPERATIONS fictive (ligne 1 titre, ligne 2 en-têtes, données dès la ligne 4).
 const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = require('crypto');
 
-function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache = true }) {
+function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache = true, extraSheets = {} }) {
   const props = { ...properties };
   const cacheStore = {};
   // Feuille en mémoire, lecture et écriture (l'onglet OPERATIONS et l'onglet masqué des liens de partage).
@@ -28,6 +28,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
     return sh;
   };
   const sheets = { [sheetName]: makeSheet(matrix) };
+  Object.entries(extraSheets).forEach(([n, m]) => { sheets[n] = makeSheet(m); });
   const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet([])), getSpreadsheetTimeZone: () => 'Europe/Paris' };
   const ctx = {
     console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error,
@@ -54,7 +55,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
   if (cache) ctx.CacheService = { getScriptCache: () => ({ get: k => (k in cacheStore ? cacheStore[k] : null), put: (k, v) => { cacheStore[k] = String(v); } }) };
   vm.createContext(ctx);
   const names = ['doGet', 'newosbApiRequest_', 'newosbBridgeRequest', 'buildBridgeHtml_', 'newosbScrubMatrix_', 'newosbColumnRule_', 'newosbAllowedOrigins_', 'configurerSecuriteObservatoire', 'genererCleAccesObservatoire',
-    'newosbExigencesBridgeRequest', 'newosbExigencesBridgeHtml_', 'configurerSecuriteExigences', 'genererCleAccesExigences'];
+    'newosbExigencesBridgeRequest', 'newosbExigencesBridgeHtml_', 'configurerSecuriteExigences', 'genererCleAccesExigences', 'verifierPartageExigences'];
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\n;this.__exports={' + names.map(n => `${n}:typeof ${n}==='function'?${n}:undefined`).join(',') + '};', ctx);
   return { ...ctx.__exports, props, logs, slidesLog, sheets };
 }

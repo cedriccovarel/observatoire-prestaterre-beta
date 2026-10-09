@@ -32,6 +32,160 @@ const NEWOSB_EXIGENCES_CONFIG = {
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY'
 };
 
+
+// -----------------------------------------------------------------------------
+// Point d'entrée web : aucune donnée de RAPPORT hors du pont authentifié.
+// -----------------------------------------------------------------------------
+function doGet(e) {
+  const params = (e && e.parameter) || {};
+  if (String(params.bridge || '') === '1') return newosbExigencesBridgeHtml_(params);
+  const mode = String(params.mode || '').toLowerCase();
+  if (mode === 'ping') {
+    return newosbExigencesJson_({ ok: true, service: NEWOSB_EXIGENCES_CONFIG.SERVICE, version: NEWOSB_EXIGENCES_CONFIG.VERSION, protected: true });
+  }
+  return newosbExigencesJson_({
+    ok: false,
+    service: NEWOSB_EXIGENCES_CONFIG.SERVICE,
+    version: NEWOSB_EXIGENCES_CONFIG.VERSION,
+    protected: true,
+    error: "Lecture directe désactivée : les données RAPPORT ne sont transmises qu'à l'Observatoire, par le pont sécurisé et avec la clé d'accès."
+  });
+}
+
+/**
+ * Appelée par google.script.run depuis la page du pont. La clé est vérifiée ici, côté serveur,
+ * avant toute lecture du classeur (données, en-têtes, volumes, correspondances de colonnes).
+ */
+function newosbExigencesBridgeRequest(params) {
+  const service = NEWOSB_EXIGENCES_CONFIG.SERVICE, version = NEWOSB_EXIGENCES_CONFIG.VERSION;
+  try {
+    const input = params || {};
+    const access = newosbExigencesCheckAccess_(input);
+    if (!access.ok) return { ok: false, authError: true, service: service, version: version, error: access.error };
+    const mode = String(input.mode || '').toLowerCase();
+    if (mode === 'ping') return { ok: true, service: service, version: version, generatedAt: new Date().toISOString() };
+    if (mode === 'meta') {
+      const ctx = newosbExigencesContext_();
+      return {
+        ok: true, service: service, version: version, generatedAt: new Date().toISOString(),
+        sheet: NEWOSB_EXIGENCES_CONFIG.SHEET_NAME, rowCount: ctx.rowCount, chunkSize: NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE,
+        headers: ctx.headers, mapping: ctx.mapping, warnings: ctx.warnings
+      };
+    }
+    if (mode === 'chunk') {
+      const ctx = newosbExigencesContext_();
+      const offset = Math.max(0, Math.min(ctx.rowCount, Math.floor(Number(input.offset) || 0)));
+      const limit = Math.max(1, Math.min(NEWOSB_EXIGENCES_CONFIG.MAX_CHUNK_SIZE, Math.floor(Number(input.limit) || NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE)));
+      const rows = newosbExigencesRows_(ctx, offset, limit);
+      return { ok: true, service: service, version: version, offset: offset, count: rows.length, physicalCount: Math.min(limit, Math.max(0, ctx.rowCount - offset)), done: offset + limit >= ctx.rowCount, rows: rows };
+    }
+    return { ok: false, service: service, version: version, error: 'Mode inconnu.' };
+  } catch (error) {
+    return { ok: false, service: service, version: version, error: String(error && error.message ? error.message : error) };
+  }
+}
+
+function newosbExigencesJson_(payload) {
+  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function newosbExigencesProp_(name) {
+  try { return String(PropertiesService.getScriptProperties().getProperty(name) || '').trim(); } catch (e) { return ''; }
+}
+
+function newosbExigencesAllowedOrigins_() {
+  return newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ALLOWED_ORIGINS_PROPERTY)
+    .split(/[\s,;]+/)
+    .map(function(v) { return v.replace(/\/+$/, ''); })
+    .filter(function(v) { return /^https?:\/\/[^\/\s]+$/i.test(v); });
+}
+
+function newosbExigencesSafeEqual_(a, b) {
+  a = String(a || ''); b = String(b || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Clé OBLIGATOIRE, vérifiée à chaque requête, jamais journalisée.
+function newosbExigencesCheckAccess_(params) {
+  const expected = newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY);
+  if (!expected) return { ok: false, error: 'Propriété NEWOSB_ACCESS_KEY non configurée dans le projet Apps Script Exigences : toute lecture est refusée.' };
+  if (expected.length < NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH) return { ok: false, error: 'Propriété NEWOSB_ACCESS_KEY trop courte (' + NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH + ' caractères minimum) : toute lecture est refusée.' };
+  let failures = 0;
+  try { failures = Number(CacheService.getScriptCache().get('newosb_req_key_failures') || 0); } catch (e) {}
+  if (failures >= 30) return { ok: false, error: 'Trop de tentatives avec une clé invalide : réessaie dans quelques minutes.' };
+  if (newosbExigencesSafeEqual_(params && params.key, expected)) return { ok: true };
+  try { CacheService.getScriptCache().put('newosb_req_key_failures', String(failures + 1), 600); } catch (e) {}
+  return { ok: false, error: "Clé d'accès absente ou invalide." };
+}
+
+function newosbExigencesBridgeHtml_(params) {
+  const interactive = String(params && params.interactive || '') === '1';
+  const token = String(params && params.bridgeToken || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120);
+  const allowedJson = JSON.stringify(newosbExigencesAllowedOrigins_()).replace(/</g, '\\u003c');
+  const v = NEWOSB_EXIGENCES_CONFIG.VERSION;
+  const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<style>html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;background:#f3f7f5;color:#173b3f}.wrap{display:' + (interactive ? 'flex' : 'none') + ';min-height:100vh;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}.card{width:min(520px,100%);background:#fff;border:1px solid #d6e2dd;border-radius:18px;padding:28px;box-shadow:0 20px 55px rgba(6,64,43,.12)}.brand{font-size:12px;font-weight:800;letter-spacing:.11em;color:#0b6b4a;text-transform:uppercase}.title{font-size:22px;font-weight:800;margin:8px 0 10px}.status{font-size:14px;line-height:1.5;color:#52666b}.small{margin-top:18px;font-size:12px;color:#7a8a8d}</style></head>' +
+    '<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.14</div><div class="title">Connexion Google · Exigences</div><div class="status" id="status">Connexion au classeur RAPPORT en cours... Cette fenêtre se fermera automatiquement.</div><div class="small">Si Google demande une autorisation, valide-la ici.</div></div></div>' +
+    '<script>(function(){' +
+    'var TOKEN=' + JSON.stringify(token) + ';var ALLOWED=' + allowedJson + ';var PEER=null,PEER_ORIGIN="";' +
+    'var st=document.getElementById("status");function setStatus(t){if(st)st.textContent=t;}' +
+    'function send(w,p,o){try{if(w&&w!==window&&o)w.postMessage(p,o);}catch(e){}}' +
+    'function ready(w){for(var i=0;i<ALLOWED.length;i++)send(w,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN},ALLOWED[i]);}' +
+    'function broadcast(){if(PEER)return;try{ready(window.opener);}catch(e){}try{ready(window.parent&&window.parent.opener);}catch(e){}try{ready(window.top&&window.top.opener);}catch(e){}try{if(window.top!==window)ready(window.top);}catch(e){}try{ready(parent);}catch(e){}}' +
+    'window.addEventListener("message",function(ev){var m=ev.data||{};if(!TOKEN||!m||m.token!==TOKEN)return;' +
+    'if(ALLOWED.indexOf(ev.origin)<0){var r=ALLOWED.length?"Site non autorisé par le script Exigences : "+ev.origin+". Ajoute cette adresse dans la propriété NEWOSB_ALLOWED_ORIGINS.":"Propriété NEWOSB_ALLOWED_ORIGINS non configurée dans le projet Apps Script Exigences : le pont refuse de transmettre les données.";setStatus(r);' +
+    'if(m.type==="NEWOSB_BRIDGE_REQUEST"&&m.id)send(ev.source,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,error:r,token:TOKEN},ev.origin);else if(m.type==="NEWOSB_BRIDGE_HELLO")send(ev.source,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN,refused:true,error:r},ev.origin);return;}' +
+    'if(!PEER){PEER=ev.source;PEER_ORIGIN=ev.origin;}if(ev.source!==PEER||ev.origin!==PEER_ORIGIN)return;' +
+    'if(m.type==="NEWOSB_BRIDGE_HELLO"){send(PEER,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN},PEER_ORIGIN);return;}' +
+    'if(m.type==="NEWOSB_BRIDGE_CLOSE"){try{window.close();}catch(e){}return;}' +
+    'if(m.type!=="NEWOSB_BRIDGE_REQUEST"||!m.id)return;var p=m.params||{};setStatus("Lecture "+String(p.mode||"requête")+" en cours...");' +
+    'google.script.run.withSuccessHandler(function(payload){setStatus(payload&&payload.authError?"Accès refusé par le script.":"Connexion établie.");send(PEER,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,payload:payload,token:TOKEN},PEER_ORIGIN);})' +
+    '.withFailureHandler(function(err){var t=String(err&&err.message?err.message:err);setStatus("Erreur : "+t);send(PEER,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,error:t,token:TOKEN},PEER_ORIGIN);})' +
+    '.newosbExigencesBridgeRequest(p);});' +
+    'broadcast();var n=0,timer=setInterval(function(){n++;broadcast();if(n>240||PEER)clearInterval(timer);},500);' +
+    '})();</script></body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Observatoire - pont Exigences')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * À lancer depuis l'éditeur : affiche la configuration de sécurité (sans jamais écrire la clé).
+ */
+function configurerSecuriteExigences() {
+  const origins = newosbExigencesAllowedOrigins_();
+  const key = newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY);
+  Logger.log('Version : ' + NEWOSB_EXIGENCES_CONFIG.VERSION);
+  Logger.log('Sites autorisés (NEWOSB_ALLOWED_ORIGINS) : ' + (origins.length ? origins.join(', ') : 'AUCUN - le pont refusera de transmettre les données'));
+  Logger.log('Clé d accès (NEWOSB_ACCESS_KEY) : ' + (!key ? 'NON CONFIGURÉE - toute lecture est refusée' : (key.length < NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH ? 'TROP COURTE - toute lecture est refusée' : 'configurée (' + key.length + ' caractères)')));
+  return { origins: origins, accessKey: !!key && key.length >= NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH };
+}
+
+/**
+ * Crée une clé aléatoire de 40 caractères si aucune n'existe (valeur non journalisée :
+ * la lire dans Paramètres du projet > Propriétés du script). Une clé existante n'est jamais remplacée
+ * par cette fonction (elle est appelable via google.script.run) : la modifier directement dans les propriétés.
+ */
+function genererCleAccesExigences() {
+  if (newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY)) {
+    Logger.log('Une clé existe déjà : modifie-la directement dans les propriétés du script pour la changer.');
+    return { ok: false, exists: true };
+  }
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now())
+    .concat(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random()));
+  let out = '';
+  bytes.slice(0, 40).forEach(function(b) { out += alphabet.charAt(((b % 256) + 256) % alphabet.length); });
+  PropertiesService.getScriptProperties().setProperty(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY, out);
+  Logger.log('Nouvelle clé enregistrée dans NEWOSB_ACCESS_KEY (40 caractères). Consulte-la dans Paramètres du projet > Propriétés du script.');
+  return { ok: true, length: out.length };
+}
+
+// >>> LECTURE RAPPORT — bloc partagé : copie identique dans Code_Operations.gs (liens de partage).
+// Toute modification doit être reportée à l'identique dans les deux fichiers (contrôlé par les tests).
 /**
  * Tous les intitulés connus de RAPPORT.
  * Ajouter un alias ici suffit pour rendre une nouvelle variante compatible.
@@ -204,157 +358,6 @@ const NEWOSB_EXIGENCES_ALIASES = {
   ]
 };
 
-// -----------------------------------------------------------------------------
-// Point d'entrée web : aucune donnée de RAPPORT hors du pont authentifié.
-// -----------------------------------------------------------------------------
-function doGet(e) {
-  const params = (e && e.parameter) || {};
-  if (String(params.bridge || '') === '1') return newosbExigencesBridgeHtml_(params);
-  const mode = String(params.mode || '').toLowerCase();
-  if (mode === 'ping') {
-    return newosbExigencesJson_({ ok: true, service: NEWOSB_EXIGENCES_CONFIG.SERVICE, version: NEWOSB_EXIGENCES_CONFIG.VERSION, protected: true });
-  }
-  return newosbExigencesJson_({
-    ok: false,
-    service: NEWOSB_EXIGENCES_CONFIG.SERVICE,
-    version: NEWOSB_EXIGENCES_CONFIG.VERSION,
-    protected: true,
-    error: "Lecture directe désactivée : les données RAPPORT ne sont transmises qu'à l'Observatoire, par le pont sécurisé et avec la clé d'accès."
-  });
-}
-
-/**
- * Appelée par google.script.run depuis la page du pont. La clé est vérifiée ici, côté serveur,
- * avant toute lecture du classeur (données, en-têtes, volumes, correspondances de colonnes).
- */
-function newosbExigencesBridgeRequest(params) {
-  const service = NEWOSB_EXIGENCES_CONFIG.SERVICE, version = NEWOSB_EXIGENCES_CONFIG.VERSION;
-  try {
-    const input = params || {};
-    const access = newosbExigencesCheckAccess_(input);
-    if (!access.ok) return { ok: false, authError: true, service: service, version: version, error: access.error };
-    const mode = String(input.mode || '').toLowerCase();
-    if (mode === 'ping') return { ok: true, service: service, version: version, generatedAt: new Date().toISOString() };
-    if (mode === 'meta') {
-      const ctx = newosbExigencesContext_();
-      return {
-        ok: true, service: service, version: version, generatedAt: new Date().toISOString(),
-        sheet: NEWOSB_EXIGENCES_CONFIG.SHEET_NAME, rowCount: ctx.rowCount, chunkSize: NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE,
-        headers: ctx.headers, mapping: ctx.mapping, warnings: ctx.warnings
-      };
-    }
-    if (mode === 'chunk') {
-      const ctx = newosbExigencesContext_();
-      const offset = Math.max(0, Math.min(ctx.rowCount, Math.floor(Number(input.offset) || 0)));
-      const limit = Math.max(1, Math.min(NEWOSB_EXIGENCES_CONFIG.MAX_CHUNK_SIZE, Math.floor(Number(input.limit) || NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE)));
-      const rows = newosbExigencesRows_(ctx, offset, limit);
-      return { ok: true, service: service, version: version, offset: offset, count: rows.length, physicalCount: Math.min(limit, Math.max(0, ctx.rowCount - offset)), done: offset + limit >= ctx.rowCount, rows: rows };
-    }
-    return { ok: false, service: service, version: version, error: 'Mode inconnu.' };
-  } catch (error) {
-    return { ok: false, service: service, version: version, error: String(error && error.message ? error.message : error) };
-  }
-}
-
-function newosbExigencesJson_(payload) {
-  return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
-}
-
-function newosbExigencesProp_(name) {
-  try { return String(PropertiesService.getScriptProperties().getProperty(name) || '').trim(); } catch (e) { return ''; }
-}
-
-function newosbExigencesAllowedOrigins_() {
-  return newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ALLOWED_ORIGINS_PROPERTY)
-    .split(/[\s,;]+/)
-    .map(function(v) { return v.replace(/\/+$/, ''); })
-    .filter(function(v) { return /^https?:\/\/[^\/\s]+$/i.test(v); });
-}
-
-function newosbExigencesSafeEqual_(a, b) {
-  a = String(a || ''); b = String(b || '');
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
-// Clé OBLIGATOIRE, vérifiée à chaque requête, jamais journalisée.
-function newosbExigencesCheckAccess_(params) {
-  const expected = newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY);
-  if (!expected) return { ok: false, error: 'Propriété NEWOSB_ACCESS_KEY non configurée dans le projet Apps Script Exigences : toute lecture est refusée.' };
-  if (expected.length < NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH) return { ok: false, error: 'Propriété NEWOSB_ACCESS_KEY trop courte (' + NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH + ' caractères minimum) : toute lecture est refusée.' };
-  let failures = 0;
-  try { failures = Number(CacheService.getScriptCache().get('newosb_req_key_failures') || 0); } catch (e) {}
-  if (failures >= 30) return { ok: false, error: 'Trop de tentatives avec une clé invalide : réessaie dans quelques minutes.' };
-  if (newosbExigencesSafeEqual_(params && params.key, expected)) return { ok: true };
-  try { CacheService.getScriptCache().put('newosb_req_key_failures', String(failures + 1), 600); } catch (e) {}
-  return { ok: false, error: "Clé d'accès absente ou invalide." };
-}
-
-function newosbExigencesBridgeHtml_(params) {
-  const interactive = String(params && params.interactive || '') === '1';
-  const token = String(params && params.bridgeToken || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 120);
-  const allowedJson = JSON.stringify(newosbExigencesAllowedOrigins_()).replace(/</g, '\\u003c');
-  const v = NEWOSB_EXIGENCES_CONFIG.VERSION;
-  const html = '<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-    '<style>html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;background:#f3f7f5;color:#173b3f}.wrap{display:' + (interactive ? 'flex' : 'none') + ';min-height:100vh;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}.card{width:min(520px,100%);background:#fff;border:1px solid #d6e2dd;border-radius:18px;padding:28px;box-shadow:0 20px 55px rgba(6,64,43,.12)}.brand{font-size:12px;font-weight:800;letter-spacing:.11em;color:#0b6b4a;text-transform:uppercase}.title{font-size:22px;font-weight:800;margin:8px 0 10px}.status{font-size:14px;line-height:1.5;color:#52666b}.small{margin-top:18px;font-size:12px;color:#7a8a8d}</style></head>' +
-    '<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.14</div><div class="title">Connexion Google · Exigences</div><div class="status" id="status">Connexion au classeur RAPPORT en cours... Cette fenêtre se fermera automatiquement.</div><div class="small">Si Google demande une autorisation, valide-la ici.</div></div></div>' +
-    '<script>(function(){' +
-    'var TOKEN=' + JSON.stringify(token) + ';var ALLOWED=' + allowedJson + ';var PEER=null,PEER_ORIGIN="";' +
-    'var st=document.getElementById("status");function setStatus(t){if(st)st.textContent=t;}' +
-    'function send(w,p,o){try{if(w&&w!==window&&o)w.postMessage(p,o);}catch(e){}}' +
-    'function ready(w){for(var i=0;i<ALLOWED.length;i++)send(w,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN},ALLOWED[i]);}' +
-    'function broadcast(){if(PEER)return;try{ready(window.opener);}catch(e){}try{ready(window.parent&&window.parent.opener);}catch(e){}try{ready(window.top&&window.top.opener);}catch(e){}try{if(window.top!==window)ready(window.top);}catch(e){}try{ready(parent);}catch(e){}}' +
-    'window.addEventListener("message",function(ev){var m=ev.data||{};if(!TOKEN||!m||m.token!==TOKEN)return;' +
-    'if(ALLOWED.indexOf(ev.origin)<0){var r=ALLOWED.length?"Site non autorisé par le script Exigences : "+ev.origin+". Ajoute cette adresse dans la propriété NEWOSB_ALLOWED_ORIGINS.":"Propriété NEWOSB_ALLOWED_ORIGINS non configurée dans le projet Apps Script Exigences : le pont refuse de transmettre les données.";setStatus(r);' +
-    'if(m.type==="NEWOSB_BRIDGE_REQUEST"&&m.id)send(ev.source,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,error:r,token:TOKEN},ev.origin);else if(m.type==="NEWOSB_BRIDGE_HELLO")send(ev.source,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN,refused:true,error:r},ev.origin);return;}' +
-    'if(!PEER){PEER=ev.source;PEER_ORIGIN=ev.origin;}if(ev.source!==PEER||ev.origin!==PEER_ORIGIN)return;' +
-    'if(m.type==="NEWOSB_BRIDGE_HELLO"){send(PEER,{type:"NEWOSB_BRIDGE_READY",version:"' + v + '",token:TOKEN},PEER_ORIGIN);return;}' +
-    'if(m.type==="NEWOSB_BRIDGE_CLOSE"){try{window.close();}catch(e){}return;}' +
-    'if(m.type!=="NEWOSB_BRIDGE_REQUEST"||!m.id)return;var p=m.params||{};setStatus("Lecture "+String(p.mode||"requête")+" en cours...");' +
-    'google.script.run.withSuccessHandler(function(payload){setStatus(payload&&payload.authError?"Accès refusé par le script.":"Connexion établie.");send(PEER,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,payload:payload,token:TOKEN},PEER_ORIGIN);})' +
-    '.withFailureHandler(function(err){var t=String(err&&err.message?err.message:err);setStatus("Erreur : "+t);send(PEER,{type:"NEWOSB_BRIDGE_RESPONSE",id:m.id,error:t,token:TOKEN},PEER_ORIGIN);})' +
-    '.newosbExigencesBridgeRequest(p);});' +
-    'broadcast();var n=0,timer=setInterval(function(){n++;broadcast();if(n>240||PEER)clearInterval(timer);},500);' +
-    '})();</script></body></html>';
-  return HtmlService.createHtmlOutput(html)
-    .setTitle('Observatoire - pont Exigences')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-/**
- * À lancer depuis l'éditeur : affiche la configuration de sécurité (sans jamais écrire la clé).
- */
-function configurerSecuriteExigences() {
-  const origins = newosbExigencesAllowedOrigins_();
-  const key = newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY);
-  Logger.log('Version : ' + NEWOSB_EXIGENCES_CONFIG.VERSION);
-  Logger.log('Sites autorisés (NEWOSB_ALLOWED_ORIGINS) : ' + (origins.length ? origins.join(', ') : 'AUCUN - le pont refusera de transmettre les données'));
-  Logger.log('Clé d accès (NEWOSB_ACCESS_KEY) : ' + (!key ? 'NON CONFIGURÉE - toute lecture est refusée' : (key.length < NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH ? 'TROP COURTE - toute lecture est refusée' : 'configurée (' + key.length + ' caractères)')));
-  return { origins: origins, accessKey: !!key && key.length >= NEWOSB_EXIGENCES_CONFIG.MIN_KEY_LENGTH };
-}
-
-/**
- * Crée une clé aléatoire de 40 caractères si aucune n'existe (valeur non journalisée :
- * la lire dans Paramètres du projet > Propriétés du script). Une clé existante n'est jamais remplacée
- * par cette fonction (elle est appelable via google.script.run) : la modifier directement dans les propriétés.
- */
-function genererCleAccesExigences() {
-  if (newosbExigencesProp_(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY)) {
-    Logger.log('Une clé existe déjà : modifie-la directement dans les propriétés du script pour la changer.');
-    return { ok: false, exists: true };
-  }
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now())
-    .concat(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random()));
-  let out = '';
-  bytes.slice(0, 40).forEach(function(b) { out += alphabet.charAt(((b % 256) + 256) % alphabet.length); });
-  PropertiesService.getScriptProperties().setProperty(NEWOSB_EXIGENCES_CONFIG.ACCESS_KEY_PROPERTY, out);
-  Logger.log('Nouvelle clé enregistrée dans NEWOSB_ACCESS_KEY (40 caractères). Consulte-la dans Paramètres du projet > Propriétés du script.');
-  return { ok: true, length: out.length };
-}
-
 /**
  * Normalise fortement un intitulé afin de reconnaître :
  * - accents / absence d'accents ;
@@ -506,8 +509,8 @@ function newosbExigencesEvaluationCode_(displayRow, cols, rowNumber) {
 // -----------------------------------------------------------------------------
 // Lecture de RAPPORT (appelée uniquement après vérification de la clé)
 // -----------------------------------------------------------------------------
-function newosbExigencesContext_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+function newosbExigencesContext_(spreadsheet) {
+  const ss = spreadsheet || SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(NEWOSB_EXIGENCES_CONFIG.SHEET_NAME);
   if (!sheet) throw new Error('Onglet RAPPORT introuvable. Renommez l’onglet source exactement "RAPPORT".');
   const lastRow = sheet.getLastRow();
@@ -610,3 +613,4 @@ function newosbExigencesRows_(ctx, offset, limit) {
   }
   return rows;
 }
+// <<< LECTURE RAPPORT

@@ -173,7 +173,7 @@ test('mode anonymisé : noms pseudonymisés, montants/CP supprimés, statut et c
 section('6 quater. Liens de partage à durée limitée (Code_Operations.gs) — V6.15');
 const CODE_H = 'Opération: Code interne', MOA_H = 'Nom de la société: Nom de la société';
 const DAYMS = 86400000;
-const mkShare = (gs, extra = {}) => gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, label: 'Test partage', tabs: ['overview', 'carbon', 'requirements', 'presentation'], landing: 'carbon', expiresAt: Date.now() + 7 * DAYMS, anonymized: false, codes: ['OP-1', ' op-3 ', 'OP-1'], codeHeader: CODE_H, summary: 'Référentiel : BEE Logement Neuf', ...extra });
+const mkShare = (gs, extra = {}) => gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, label: 'Test partage', tabs: ['overview', 'carbon', 'presentation', 'inconnu'], landing: 'carbon', expiresAt: Date.now() + 7 * DAYMS, anonymized: false, codes: ['OP-1', ' op-3 ', 'OP-1'], codeHeader: CODE_H, summary: 'Référentiel : BEE Logement Neuf', ...extra });
 const shareRows = (gs, token) => { const m = gs.newosbBridgeRequest({ mode: 'meta', share: token }); assert.strictEqual(m.ok, true, m.error); const c = gs.newosbBridgeRequest({ mode: 'chunk', share: token, offset: 0, limit: 500, totalRows: 9999, firstDataRow: 1, lastColumn: m.lastColumn }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
 test('création : clé exigée ; le jeton est renvoyé une fois, seule son empreinte est stockée', () => {
   const gs = opsGs();
@@ -223,7 +223,7 @@ test('un lien ne donne accès ni à l’administration, ni à Google Slides, ni 
 });
 test('création refusée : aucun onglet, aucun code, colonne du code inconnue', () => {
   const gs = opsGs();
-  assert(/onglet/.test(mkShare(gs, { tabs: ['requirements'] }).error)); assert(/aucune operation/.test(mkShare(gs, { codes: [] }).error)); assert(/introuvable/.test(mkShare(gs, { codeHeader: 'Colonne absente' }).error));
+  assert(/onglet/.test(mkShare(gs, { tabs: ['presentation'] }).error)); assert(/NEWOSB_RAPPORT_SPREADSHEET_ID/.test(mkShare(gs, { tabs: ['requirements'] }).error)); assert(/aucune operation/.test(mkShare(gs, { codes: [] }).error)); assert(/introuvable/.test(mkShare(gs, { codeHeader: 'Colonne absente' }).error));
 });
 test('déploiement anonymisé (NEWOSB_ANONYMIZED_ONLY) : tous les liens sont anonymisés', () => {
   const gs = opsGs({ NEWOSB_ANONYMIZED_ONLY: '1' }); const r = mkShare(gs, { anonymized: false }); assert.strictEqual(r.share.anonymized, true);
@@ -232,6 +232,43 @@ test('déploiement anonymisé (NEWOSB_ANONYMIZED_ONLY) : tous les liens sont ano
 test('texte libre écrit dans la feuille : jamais interprété comme une formule', () => {
   const gs = opsGs(); mkShare(gs, { label: '=IMPORTRANGE("x")', summary: '+cmd' }); const row = gs.sheets.OBSERVATOIRE_PARTAGES.data[1];
   assert(!/^[=+\-@]/.test(row[2])); assert(!/^[=+\-@]/.test(row[9])); row.slice(14).filter(Boolean).forEach(v => assert(/^~/.test(v)));
+});
+
+
+// Exigences incluses dans un lien : RAPPORT lu par le script OPERATIONS (même classeur ou NEWOSB_RAPPORT_SPREADSHEET_ID).
+const { RAPPORT_HEADERS: RH } = require('./gs_harness');
+const RREQ = [RH];
+const addReq = (op, ev, moa, codes) => codes.forEach(c => RREQ.push([`${c} - Exigence ${c}`, ev, moa, op, 'BEE Logement Neuf', '04/05/2026', 'Nouvelle-Aquitaine', '33', c, '', 'En cours', '']));
+addReq('OP-1', 'EVA-1', 'Promoteur A', ['1.1.1', '2.1.1']); addReq('op-3 ', 'EVA-3', 'Bailleur B', ['1.2.1']); addReq('OP-2', 'EVA-2', 'Promoteur A', ['3.1.1', '4.1.1']);
+const opsReqGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props }, extraSheets: { RAPPORT: RREQ } });
+const reqRows = (gs, token) => { const m = gs.newosbBridgeRequest({ mode: 'reqMeta', share: token }); assert.strictEqual(m.ok, true, m.error); const c = gs.newosbBridgeRequest({ mode: 'reqChunk', share: token, offset: 0, limit: 1500 }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
+test('Exigences dans un lien : seules les lignes RAPPORT des opérations du périmètre, sans clé Exigences', () => {
+  const gs = opsReqGs(); const r = mkShare(gs, { tabs: ['overview', 'requirements'], reqFilters: { referential: ['BEE Logement Neuf'], moa: ['Promoteur A'], inconnu: ['x'] } }); assert.strictEqual(r.ok, true, r.error);
+  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: r.token }); assert(ping.share.tabs.includes('requirements')); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"],"moa":["Promoteur A"]}');
+  const { m, c } = reqRows(gs, r.token); assert.strictEqual(m.rowCount, 3); assert.strictEqual(m.service, 'NEWOSB EXIGENCES');
+  assert.strictEqual(c.rows.map(x => x.operationCode.trim().toUpperCase()).sort().join(','), 'OP-1,OP-1,OP-3'); assert(c.rows.every(x => x.requirement && x.evaluationCode));
+});
+test('Exigences dans un lien anonymisé : MOA, codes et évaluations pseudonymisés comme les opérations, filtres MOA retirés', () => {
+  const gs = opsReqGs(); const r = mkShare(gs, { tabs: ['requirements'], anonymized: true, reqFilters: { moa: ['Promoteur A'], moaGroup: ['G'], referential: ['BEE Logement Neuf'] } });
+  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: r.token }); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"]}');
+  const { c } = reqRows(gs, r.token); const txt = JSON.stringify(c.rows); assert(!/Promoteur A|Bailleur B|EVA-1|"OP-1"/.test(txt));
+  const opCodes = shareRows(gs, r.token).c.rows.map(x => x[HEADERS.indexOf(CODE_H)]);
+  c.rows.forEach(x => { assert(/^MOA [0-9A-F]{8}$/.test(x.moa)); assert(/^EVA [0-9A-F]{8}$/.test(x.evaluationCode)); assert(opCodes.includes(x.operationCode), 'même pseudonyme que dans OPERATIONS'); });
+});
+test('Exigences : refusées si l’onglet n’est pas dans le lien, si le lien est révoqué ou expiré', () => {
+  const gs = opsReqGs(); const a = mkShare(gs, { tabs: ['overview'] }); const b = mkShare(gs, { tabs: ['requirements'] });
+  const no = gs.newosbBridgeRequest({ mode: 'reqChunk', share: a.token, offset: 0, limit: 10 }); assert.strictEqual(no.ok, false); assert(!no.rows);
+  gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: b.share.id });
+  const rev = gs.newosbBridgeRequest({ mode: 'reqMeta', share: b.token }); assert.strictEqual(rev.ok, false); assert.strictEqual(rev.authError, true);
+});
+test('Exigences : RAPPORT dans un autre classeur via NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant ou URL)', () => {
+  const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, NEWOSB_RAPPORT_SPREADSHEET_ID: 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit' }, extraSheets: { RAPPORT: RREQ } });
+  const r = mkShare(gs, { tabs: ['requirements'] }); assert.strictEqual(r.ok, true, r.error); assert.strictEqual(reqRows(gs, r.token).m.rowCount, 3);
+  assert.strictEqual(gs.verifierPartageExigences().ok, true);
+});
+test('lecture de RAPPORT : bloc identique dans Code_Exigences.gs et Code_Operations.gs', () => {
+  const block = f => { const t = read(f); const a = t.indexOf('// >>> LECTURE RAPPORT'), b = t.indexOf('// <<< LECTURE RAPPORT'); assert(a >= 0 && b > a, f); return t.slice(a, b); };
+  assert.strictEqual(block('Code_Operations.gs'), block('Code_Exigences.gs'));
 });
 
 section('6 bis. Script Apps Script Exigences (Code_Exigences.gs) — sécurité V6.14');
@@ -576,8 +613,8 @@ test('résumé du périmètre : un lien anonymisé ne contient ni MOA, ni recher
   const anon = S.buildSummary(scope, true); assert(!/Action Logement|Bailleur|Jardins/.test(anon)); assert(/Référentiel : BEE Logement Neuf/.test(anon)); assert(/2 valeurs sélectionnées/.test(anon)); assert(/Chauffage : PAC/.test(anon));
   const clear = S.buildSummary(scope, false); assert(/Action Logement/.test(clear) && /Jardins/.test(clear));
 });
-test('onglets : seuls ceux accordés sont accessibles, Exigences et Présentation ne sont jamais partageables', () => {
-  const { S } = shareEnv(`#partage=${TOK}&src=${encodeURIComponent(SRC)}`); assert(!S.SHAREABLE.includes('requirements') && !S.SHAREABLE.includes('presentation'));
+test('onglets : seuls ceux accordés sont accessibles ; Exigences partageable, Présentation jamais', () => {
+  const { S } = shareEnv(`#partage=${TOK}&src=${encodeURIComponent(SRC)}`); assert(S.SHAREABLE.includes('requirements') && !S.SHAREABLE.includes('presentation'));
   assert.strictEqual(S.allowedPage('overview'), false);
   Object.assign(S, { status: 'ready', info: { tabs: ['carbon', 'energy'], landing: 'energy' } }); assert.strictEqual(S.allowedPage('carbon'), true); assert.strictEqual(S.allowedPage('overview'), false); assert.strictEqual(S.landingPage(), 'energy');
   assert(/Périmètre figé/.test(S.lockedFiltersHtml(3)) && /3 opérations/.test(S.lockedFiltersHtml(3)));

@@ -34,8 +34,8 @@ rr('OP-4', 'EVA-OP-4', 'Bailleur B', 'BEE Logement Rénovation', '18/06/2025', [
 rr('OP-1', 'EVA-OP-1-ANC', 'Promoteur A', 'BEE Logement Neuf', '01/02/2023', ['1.1.1', '4.B.2']);
 for (let i = 0; i < 40; i++) rr('OP-X' + i, 'EVA-X' + i, 'Promoteur Z', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.1.1']);
 
-async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport } = {}) {
-  const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
+async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {} } = {}) {
+  const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties }, extraSheets });
   const gsReq = loadGs('Code_Exigences.gs', { matrix: RAPPORT, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
   const context = await browser.newContext({ acceptDownloads: true, viewport: viewport || { width: 1280, height: 900 } });
   const requests = [];
@@ -349,7 +349,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(errors.length === 0, 'aucune erreur JavaScript pendant les exports' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close(); }
     console.log('\nH. Liens de partage à durée limitée (V6.15)');
-    { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
+    { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { extraSheets: { RAPPORT } });
       await page.evaluate(() => { const i = [...document.querySelectorAll('[data-global-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
       const adminCount = await page.textContent('#obsFilterCount');
       const pagesBefore = context.pages().length;
@@ -361,6 +361,8 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const scopeTxt = await page.textContent('.obs-share-scope');
       check(/\b3\b\s*opérations/.test(scopeTxt) && /Promoteur A/.test(scopeTxt), `Partager : périmètre figé = sélection affichée (${adminCount} opérations, MOA Promoteur A)`);
       await page.check('[data-share-tab][value="carbon"]');
+      await page.check('[data-share-tab][value="requirements"]');
+      await page.check('[data-share-tab][value="operations"]');
       await page.fill('[data-share-label]', 'Vue Promoteur A');
       await page.selectOption('[data-share-duration]', '7');
       await page.click('[data-share-create]');
@@ -401,7 +403,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const codes = await p2.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => o.code).sort().join(','));
         check(codes === 'OP-1,OP-2,OP-7', `destinataire : uniquement les opérations du périmètre (${codes})`);
         const nav = await p2.$$eval('#obsNav [data-page]', bs => bs.filter(b => getComputedStyle(b).display !== 'none').map(b => b.dataset.page).join(','));
-        check(nav === 'overview,carbon', `destinataire : seuls les onglets accordés sont visibles (${nav})`);
+        check(nav === 'overview,requirements,carbon,operations', `destinataire : seuls les onglets accordés sont visibles (${nav})`);
         const hiddenCtl = await p2.evaluate(() => ['#obsSourceBtn', '#obsResetFilters', '#obsShareBtn', '#obsGeneratorBtn', '#obsRefreshBtn'].every(s => { const el = document.querySelector(s); return !el || getComputedStyle(el).display === 'none'; }));
         check(hiddenCtl, 'destinataire : boutons Données, Réinitialiser, Partager, Générateur et Actualiser masqués');
         const lockTxt = await p2.textContent('#obsFilters');
@@ -412,6 +414,16 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         await p2.evaluate(() => { const b = document.querySelector('#obsNav [data-page="territories"]'); b.hidden = false; b.click(); });
         const stillAllowed = await p2.evaluate(() => !document.querySelector('#obsNav [data-page="territories"]').classList.contains('is-active'));
         check(stillAllowed, 'destinataire : un onglet non accordé ne s’ouvre pas, même en forçant le bouton');
+        await p2.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
+        await p2.click('#obsNav [data-page="requirements"]'); await p2.waitForTimeout(400);
+        const reqTxt = await p2.textContent('#obsPage'); const reqSt = await p2.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
+        check(reqSt.connected && reqSt.count === 4 && /PÉRIMÈTRE PARTAGÉ/.test(reqTxt) && /Filtres figés/.test(reqTxt) && !(await p2.$('[data-req-filter-check]')) && !(await p2.$('#reqSourceKey')), `Exigences partagées : 4 évaluations des opérations du lien, sans clé ni URL, filtres verrouillés (${reqSt.count}${reqSt.error ? ' · ' + reqSt.error : ''})`);
+        check(/Compatibilité/.test(reqTxt), 'Exigences partagées : encart de compatibilité avec les mentions affiché');
+        await p2.click('#obsNav [data-page="operations"]'); await p2.waitForTimeout(400);
+        await p2.evaluate(() => document.querySelector('[data-op-code="OP-1"]')?.click()); await p2.waitForTimeout(500);
+        const fiche = await p2.evaluate(() => document.querySelector('[data-project-requirements]')?.textContent || '');
+        check(/Exigences distinctes/.test(fiche) && /2 évaluations ou versions/.test(fiche), 'fiche partagée : exigences de l’opération affichées (2 évaluations pour OP-1)');
+        await p2.keyboard.press('Escape');
         const auth = await p2.evaluate(() => sessionStorage.getItem('prestaterre-observatoire-v21-auth'));
         check(auth === null, 'destinataire : l’accès n’ouvre pas l’Observatoire complet (aucune session mémorisée)');
         check(errs.length === 0, 'destinataire : aucune erreur JavaScript' + (errs.length ? ' : ' + errs.join(' | ') : ''));
@@ -421,6 +433,15 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const ok = await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready'));
         check(ok && !/Promoteur A|Les Jardins|33400/.test(body), 'lien anonymisé : ni MOA, ni nom d’opération, ni code postal dans la page' + (ok ? ' ' + (body.match(/.{0,60}(Promoteur A|Les Jardins|33400).{0,60}/) || [''])[0] : ' (non chargé)'));
         check(await p2.evaluate(() => getComputedStyle(document.querySelector('.obs-privacy-dock')).display === 'none'), 'lien anonymisé : interrupteur d’anonymisation masqué (mode imposé)');
+        await p2.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
+        await p2.evaluate(() => document.querySelector('#obsNav [data-page="requirements"]').click()); await p2.waitForTimeout(400);
+        const reqBody = await p2.evaluate(() => document.body.innerText); const reqN = await p2.evaluate(() => window.NEWOSB_REQUIREMENTS.status().count);
+        check(reqN === 4 && !/Promoteur A|EVA-OP-1/.test(reqBody), `lien anonymisé : Exigences chargées (${reqN} évaluations) sans nom de MOA ni code d’évaluation réel`);
+        await p2.evaluate(() => document.querySelector('#obsNav [data-page="operations"]').click()); await p2.waitForTimeout(400);
+        await p2.evaluate(() => document.querySelector('[data-op-code]')?.click()); await p2.waitForTimeout(500);
+        const anonFiche = await p2.evaluate(() => document.querySelector('[data-project-requirements]')?.textContent || '');
+        check(/Exigences distinctes/.test(anonFiche) && !/Promoteur A/.test(anonFiche), 'lien anonymisé : la fiche retrouve les exigences de l’opération (pseudonymes identiques des deux côtés)');
+        await p2.keyboard.press('Escape');
         check(await p2.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'lien partagé lisible sur téléphone (pas de défilement horizontal)');
         check(errs.length === 0, 'lien anonymisé : aucune erreur JavaScript' + (errs.length ? ' : ' + errs.join(' | ') : ''));
         await ctx2.close(); }

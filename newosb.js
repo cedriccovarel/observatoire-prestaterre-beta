@@ -2243,7 +2243,7 @@
   // Données lues via l'API figée NEWOSB_REQUIREMENTS.getOperationRequirements, indépendante des filtres de l'onglet Exigences.
   const PROJECT_REQ_TARGETS={'1':'Cible 1 · \u00c9co-conception & management du projet','2':'Cible 2 · Le b\u00e2timent dans son environnement','3':'Cible 3 · Sobri\u00e9t\u00e9 et efficacit\u00e9 du b\u00e2timent','4':'Cible 4 · Usages & qualit\u00e9 de vie'};
   function projectUxRequirementsHtml(project){
-    if(SHARE) return '';
+    if(SHARE && !(SHARE.info?.tabs||[]).includes('requirements')) return '';
     const api=window.NEWOSB_REQUIREMENTS;
     const title=projectUxHeading('Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration','check');
     const wrap=(body,cls='')=>`<section class="p10-card p10-req-card ${cls}" aria-label="Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration" data-project-requirements>${title}${body}<p class="p10-req-note">Une exigence pr\u00e9sente dans RAPPORT est une s\u00e9lection document\u00e9e ; elle ne vaut pas validation.</p></section>`;
