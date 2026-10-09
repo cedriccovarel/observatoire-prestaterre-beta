@@ -34,7 +34,7 @@ rr('OP-4', 'EVA-OP-4', 'Bailleur B', 'BEE Logement Rénovation', '18/06/2025', [
 rr('OP-1', 'EVA-OP-1-ANC', 'Promoteur A', 'BEE Logement Neuf', '01/02/2023', ['1.1.1', '4.B.2']);
 for (let i = 0; i < 40; i++) rr('OP-X' + i, 'EVA-X' + i, 'Promoteur Z', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.1.1']);
 
-async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {} } = {}) {
+async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {}, delayMs = 0, noConnect = false } = {}) {
   const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties }, extraSheets });
   const gsReq = loadGs('Code_Exigences.gs', { matrix: RAPPORT, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
   const context = await browser.newContext({ acceptDownloads: true, viewport: viewport || { width: 1280, height: 900 } });
@@ -44,6 +44,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
     requests.push(url.toString());
     const target = url.pathname.includes('/EXI/') ? gsReq : gs;
     const run = url.pathname.match(/\/__run\/(\w+)$/);
+    if (run && delayMs) await new Promise(r => setTimeout(r, delayMs));
     if (run) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(target[run[1]](JSON.parse(route.request().postData() || '{}'))) });
     const params = Object.fromEntries(url.searchParams.entries());
     const out = target.doGet({ parameter: params });
@@ -58,7 +59,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
   await page.addInitScript(() => { sessionStorage.setItem('prestaterre-observatoire-v21-auth', '1'); });
   await page.goto(origin + '/index.html');
   await page.waitForFunction(() => window.NEWOSB_ENGINE && window.NEWOSB_RULES);
-  await page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; return window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: noKey ? '' : KEY });
+  if (!noConnect) await page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; return window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: noKey ? '' : KEY });
   return { page, context, errors, gs, gsReq, requests };
 }
 
@@ -456,6 +457,40 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const txt = await p2.textContent('#obsPage');
         check(/Accès impossible/.test(txt) && /expiré/.test(txt), 'lien expiré : accès refusé avec un message clair — ' + txt.slice(0, 200));
         await ctx2.close(); }
+      await context.close(); }
+    console.log('\nI. Mini-jeu pendant le chargement des données (V6.16)');
+    { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noConnect: true, delayMs: 900 });
+      const startLoad = () => page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; window.__load = window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: KEY });
+      await page.evaluate(() => window.NEWOSB_ENGINE.showDataSource());
+      await startLoad();
+      const shown = await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).then(() => true, () => false);
+      check(shown && /OPERATIONS/.test(await page.textContent('#obsGameTitle')), 'le jeu s’ouvre pendant le chargement OPERATIONS');
+      await page.bringToFront();
+      const x0 = (await page.evaluate(() => window.NEWOSB_GAME._state())).player.x;
+      await page.keyboard.down('ArrowLeft'); await page.waitForTimeout(350); await page.keyboard.up('ArrowLeft');
+      const st = await page.evaluate(() => window.NEWOSB_GAME._state());
+      check(st.phase === 'play' && st.player.x < x0, `flèches du clavier : le personnage se déplace (${x0} → ${st.player.x.toFixed(2)})`);
+      check(await page.$eval('[data-game-enter]', b => b.disabled), 'accès à l’Observatoire désactivé tant que les données ne sont pas chargées');
+      check(await page.evaluate(() => document.documentElement.scrollTop === 0 && window.scrollY === 0), 'les flèches ne font pas défiler la page');
+      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'game_play.png') }).catch(() => {});
+      await page.waitForFunction(() => !document.querySelector('[data-game-enter]').disabled, null, { timeout: 60000 }).catch(() => {});
+      const statusTxt = await page.textContent('[data-game-status]');
+      check(await page.evaluate(() => !document.getElementById('obsGame').hidden) && /✓/.test(statusTxt), `données chargées pendant la partie : le jeu reste ouvert, bouton d’accès actif (${statusTxt.trim()})`);
+      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'game_loaded.png') }).catch(() => {});
+      await page.keyboard.press('Enter');
+      const after = await page.evaluate(() => ({ game: document.getElementById('obsGame').hidden, modal: document.getElementById('dataConnectModal').hidden, connected: window.NEWOSB_ENGINE.getRuntime().connected }));
+      check(after.game && after.modal && after.connected, 'Entrée : on quitte la partie et on arrive sur l’Observatoire (fenêtre Données refermée)');
+      await startLoad();
+      await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
+      await page.evaluate(() => window.__load);
+      check(await page.evaluate(() => document.getElementById('obsGame').hidden), 'sans avoir joué : l’Observatoire s’affiche dès la fin du chargement');
+      await startLoad();
+      await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
+      await page.keyboard.press('Escape');
+      const hiddenNow = await page.evaluate(() => document.getElementById('obsGame').hidden);
+      await page.evaluate(() => window.__load);
+      check(hiddenNow && await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected), 'Échap masque le jeu ; le chargement continue');
+      check(errors.length === 0, 'mini-jeu : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
   } finally { await browser.close(); server.close(); }
   console.log(`\n${passed} vérifications navigateur réussies, ${failed} en échec.`);

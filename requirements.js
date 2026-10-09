@@ -116,6 +116,7 @@
     const token=++loadToken;
     state.url=url;try{localStorage.setItem(STORAGE_KEY,url);}catch{}
     state.loading=true;state.error='';state.errorKind='';state.loadProgress='Connexion…';emit();
+    window.NEWOSB_GAME?.open({title:'Chargement des exigences (RAPPORT)'});
     try{
       const ping=await bridge.request(url,{mode:'ping'},120000);
       if(ping?.service&&ping.service!=='NEWOSB EXIGENCES')throw new Error('Cette URL n’est pas celle du script Exigences (service « '+ping.service+' »).');
@@ -125,12 +126,14 @@
       resetIndexes();state.rows=rows;state.connected=true;state.loadedAt=new Date().toISOString();state.error='';state.errorKind='';state.warnings=Array.isArray(meta?.warnings)?meta.warnings.slice(0,12).map(String):[];
       if(!state.mentionFocus)state.mentionFocus=topMentions(state.rows,1)[0]?.name||'';
       bridge.closePopupSoon(600);
+      window.NEWOSB_GAME?.done(`${fmt(evaluations(rows).length)} évaluations chargées`);
     }catch(e){
       if(token!==loadToken)return;
       // Une erreur ne laisse jamais un ancien jeu de données affiché comme s'il était à jour ou autorisé.
       clearPrivateData();
       state.errorKind=e?.authError?'auth':'error';
       state.error=e?.authError?`Accès refusé : ${String(e.message||e)}`:String(e?.message||e);
+      window.NEWOSB_GAME?.fail(state.error);
       if(e?.authError)bridge.clearKey();
     }finally{if(token===loadToken){state.loading=false;state.loadProgress='';emit();}}
   }
@@ -144,6 +147,7 @@
     for(let i=0;i<offsets.length;i+=2){
       if(token!==loadToken)return null;
       state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
+      if(!state.share)window.NEWOSB_GAME?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`);
       const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>bridge.request(url,{mode:chunkMode,offset,limit},120000)));
       chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
     }

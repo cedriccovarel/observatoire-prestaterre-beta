@@ -1,5 +1,13 @@
 # Historique
 
+## V6.16
+
+**Mini-jeu pendant le chargement des données : « Capte le CO₂ »**
+- Pendant le chargement depuis la Google Sheet (OPERATIONS, Exigences, ouverture d’un lien de partage), un jeu 8 bits remplace l’écran d’attente : le personnage ramasse les nuages de CO₂ émis par les bâtiments (3 au maximum), les rapporte à la base pour faire pousser l’arbre du logo Prestaterre (6 stades), et évite les nuages de pollution qui le poursuivent. Un arbre adulte = un arbre planté, un toit végétalisé, un niveau de plus (pollueurs plus nombreux et plus rapides). 3 vies ; record gardé dans le navigateur.
+- Commandes : flèches (ou ZQSD / WASD), P pour la pause, Espace pour rejouer ; croix directionnelle et glissement du doigt sur mobile.
+- La barre de progression et le nombre de lignes restent affichés au-dessus du jeu. Quand les données sont prêtes : si l’on n’a pas joué, l’Observatoire s’affiche aussitôt ; sinon le bouton « Accéder à l’Observatoire » (ou Entrée) permet de quitter la partie à tout moment. « Masquer le jeu » / Échap : le chargement continue en arrière-plan. En cas d’erreur, le message s’affiche et le jeu se ferme.
+- Un chargement très rapide (moins d’une demi-seconde) n’affiche pas le jeu. Le jeu ne lit ni ne transmet aucune donnée.
+
 ## V6.15
 
 **Liens de partage à durée limitée**

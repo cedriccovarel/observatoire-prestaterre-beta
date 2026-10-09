@@ -643,6 +643,50 @@ test('un lien de partage ne reconnecte jamais la source mémorisée ; périmètr
   const idx = read('index.html'); const s = [...idx.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]); assert(s.indexOf('newosb-share.js') > s.indexOf('newosb-bridge.js') && s.indexOf('newosb-share.js') < s.indexOf('app.js'));
 });
 
+
+section('12. Mini-jeu de chargement « Capte le CO₂ » (newosb-game.js)');
+function gameEnv() { const ctx = { console, Math, Date, setTimeout, clearTimeout, localStorage: { getItem: () => null, setItem() {} } }; ctx.window = ctx; ctx.addEventListener = () => {}; ctx.document = {}; vm.createContext(ctx); vm.runInContext(read('newosb-game.js'), ctx); return ctx.NEWOSB_GAME; }
+const GM = gameEnv();
+const tick = (game, secs, dir) => { for (let t = 0; t < secs; t += 1 / 60) { if (dir) game.input(dir); game.step(1 / 60); } };
+test('carte : tous les couloirs sont reliés, la base est entourée de couloirs, assez de points de CO₂', () => {
+  const { W, H, walkable, bfs, SPAWN, CO2_SPOTS, isBase, BASE } = GM._map; const d = bfs(SPAWN);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (walkable(x, y)) assert(d[y * W + x] < Infinity, `${x},${y}`);
+  assert(CO2_SPOTS.length >= 30); assert(CO2_SPOTS.every(s => walkable(s.x, s.y) && !isBase(s.x, s.y)));
+  assert(walkable(SPAWN.x, SPAWN.y) && isBase(SPAWN.x, SPAWN.y + 1)); assert(BASE.x1 - BASE.x0 === 2);
+});
+test('rien ne bouge avant la première touche ; une flèche lance la partie', () => {
+  const g = GM._createGame({ rng: GM._rng(1) }); const e0 = JSON.stringify(g.state.enemies.map(e => [e.x, e.y]));
+  tick(g, 3); assert.strictEqual(g.state.phase, 'ready'); assert.strictEqual(JSON.stringify(g.state.enemies.map(e => [e.x, e.y])), e0);
+  g.input('left'); assert.strictEqual(g.state.phase, 'play'); tick(g, 0.5); assert(g.state.player.x < 11);
+});
+test('le personnage ne traverse ni les bâtiments ni la base', () => {
+  const g = GM._createGame({ rng: GM._rng(2) }); g.state.enemies = []; tick(g, 1, 'down'); assert.strictEqual(g.state.player.y, 4, 'base au sud'); tick(g, 1, 'up'); assert.strictEqual(g.state.player.y, 4, 'bâtiment au nord');
+  g.input('left'); tick(g, 0.1); tick(g, 3, 'up'); assert.strictEqual(g.state.player.x, 9); assert.strictEqual(g.state.player.y, 1, 'virage au premier couloir libre');
+  const { walkable } = GM._map; for (let i = 0; i < 400; i++) { g.input(['up', 'down', 'left', 'right'][i % 4]); g.step(1 / 30); const p = g.state.player; assert(walkable(Math.round(p.x), Math.round(p.y))); }
+});
+test('ramassage limité à 3, dépôt à la base : l’arbre pousse ; 15 CO₂ = un arbre planté et un niveau de plus', () => {
+  const g = GM._createGame({ rng: GM._rng(3) }); const s = g.state; s.enemies = []; g.input('right'); s.co2 = [];
+  s.co2 = [{ x: 12, y: 4 }, { x: 13, y: 4 }, { x: 14, y: 4 }, { x: 15, y: 4 }];
+  tick(g, 1.2, 'right'); assert.strictEqual(s.carried, 3); assert(s.co2.some(c => c.x === 15));
+  tick(g, 1.5, 'left'); assert.strictEqual(s.carried, 0); assert.strictEqual(s.growth, 3); assert.strictEqual(g.treeStage(), 1); assert.strictEqual(s.score, 30);
+  s.carried = 3; s.growth = 12; s.enemies = []; tick(g, 1.2, 'right');
+  assert.strictEqual(s.trees, 1); assert.strictEqual(s.level, 2); assert.strictEqual(s.growth, 0); assert.strictEqual(s.enemies.length, 2); assert.strictEqual(s.greenRoofs.length, 1);
+});
+test('pollueurs : poursuivent le personnage ; un contact fait perdre une vie et le CO₂ transporté ; 3 contacts = partie terminée', () => {
+  const g = GM._createGame({ rng: GM._rng(4) }); const s = g.state; g.input('left'); s.enemies.forEach(e => { e.wait = 0; });
+  const start = Math.abs(s.enemies[0].x - s.player.x) + Math.abs(s.enemies[0].y - s.player.y); s.player.speed = 0; tick(g, 3); 
+  const after = Math.abs(s.enemies[0].x - s.player.x) + Math.abs(s.enemies[0].y - s.player.y); assert(after < start || s.lives < 3, 'se rapproche');
+  for (let n = 0; n < 3 && s.phase !== 'over'; n++) { s.carried = 2; s.invuln = 0; Object.assign(s.enemies[0], { x: s.player.x, y: s.player.y, wait: 0 }); g.step(1 / 60); }
+  assert.strictEqual(s.lives, 0); assert.strictEqual(s.phase, 'over'); assert.strictEqual(s.carried, 0);
+});
+test('intégration : jeu ouvert pendant les chargements OPERATIONS, Exigences et lien de partage ; jamais sans chargement', () => {
+  const a = read('app.js'), r = read('requirements.js'), sh = read('newosb-share.js');
+  assert(a.includes("window.NEWOSB_GAME?.open({title:'Chargement des opérations (OPERATIONS)'") && a.includes('window.NEWOSB_GAME?.done(') && a.includes('window.NEWOSB_GAME?.fail('));
+  assert(r.includes("window.NEWOSB_GAME?.open({title:'Chargement des exigences (RAPPORT)'})") && r.includes('window.NEWOSB_GAME?.fail(state.error)'));
+  assert(sh.includes('window.NEWOSB_GAME?.open(') && sh.includes('window.NEWOSB_GAME?.done(') && sh.includes('window.NEWOSB_GAME?.fail('));
+  const g = read('newosb-game.js'); assert(!/fetch\(|XMLHttpRequest|NEWOSB_ENGINE|NEWOSB_BRIDGE/.test(g), 'le jeu ne lit aucune donnée');
+});
+
 section('7. Cohérence du paquet');
 const index = read('index.html'), gen = read('generator.html');
 const scripts = h => [...h.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]);
@@ -652,7 +696,7 @@ test('l’Observatoire et le générateur chargent la même version d’app.js',
 test('tous les fichiers référencés existent', () => { for (const h of [index, gen]) for (const f of [...scripts(h), ...[...h.matchAll(/href="([^"?#:]+\.(?:css|png))/g)].map(m => m[1])]) assert(fs.existsSync(path.join(ROOT, f)), f); });
 test('un seul script Apps Script OPERATIONS à la racine (pas de doGet en double)', () => assert(!fs.existsSync(path.join(ROOT, 'Code.gs'))));
 test('plus de copie périmée du script dans app.js', () => assert(!/NEWOSB V05\.22\\n \* Source OPERATIONS/.test(read('app.js'))));
-test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
+test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-game.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
 test('l’avancement n’est plus déduit de « État du dossier » ni du statut commercial', () => { const a = read('app.js'); assert(!a.includes('dataRawValue(r,fields.status)||dataRawValue(r,fields.dossierState)||affairStage')); });
 
 (async () => {

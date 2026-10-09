@@ -1,4 +1,4 @@
-# Observatoire Prestaterre — V6.15
+# Observatoire Prestaterre — V6.16
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 
@@ -21,6 +21,7 @@ Observatoire du bâtiment durable de Prestaterre Certification : site statique (
 | `privacy.js` | Mode anonymisé |
 | `requirements.js`, `requirements_catalog.*` | Module Exigences (onglet, fiche opération, encart de compatibilité) |
 | `newosb-bridge.js` | Client du pont sécurisé Apps Script (clé en mémoire, origine et fenêtre vérifiées) |
+| `newosb-game.js` | Mini-jeu 8 bits « Capte le CO₂ » affiché pendant le chargement des données |
 | `newosb-share.js` | Liens de partage à durée limitée : fenêtre « Partager » (administration) et page du destinataire (filtres figés, onglets accordés, Exigences comprises) |
 | `newosb-mentions.js`, `mentions_catalog.js` | Moteur et catalogue normatif des mentions (BEE LN 04/05/2026, BEE LR 18/06/2025) |
 | `auth.js` | Écran de mot de passe (barrière visuelle uniquement) |

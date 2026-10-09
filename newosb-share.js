@@ -85,8 +85,9 @@
     }
     Object.assign(share, { status: 'loading', message: usePopup ? 'Connexion Google ouverte. Chargement des données…' : 'Connexion à la source de données…', progress: null });
     emit();
+    window.NEWOSB_GAME?.open({ title: 'Chargement de l’Observatoire partagé', delay: 300 });
     try {
-      const res = await engine.connectShare(share.src, share.token, (loaded, total) => { if (attempt !== share.attempt) return; share.progress = { loaded, total }; emit(); });
+      const res = await engine.connectShare(share.src, share.token, (loaded, total) => { if (attempt !== share.attempt) return; share.progress = { loaded, total }; window.NEWOSB_GAME?.progress(loaded, total); emit(); });
       if (attempt !== share.attempt) return;
       share.info = res.share || {};
       share.info.tabs = (share.info.tabs || []).filter(t => SHAREABLE.includes(t));
@@ -95,11 +96,13 @@
       document.documentElement.classList.toggle('newosb-share-anonymized', !!share.info.anonymized);
       Object.assign(share, { status: 'ready', message: '' });
       emit();
+      window.NEWOSB_GAME?.done(`${(share.info.operationCount || 0).toLocaleString('fr-FR')} opérations chargées`);
       if (share.info.tabs.includes('requirements')) startRequirements(false);
     } catch (err) {
       if (attempt !== share.attempt) return;
       const denied = !!err?.authError;
       Object.assign(share, { status: denied ? 'denied' : 'error', message: frenchMessage(String(err?.message || err || 'Erreur inconnue.')) });
+      window.NEWOSB_GAME?.fail(share.message);
       emit();
     }
   }
