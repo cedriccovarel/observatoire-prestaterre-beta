@@ -597,6 +597,7 @@ const MAP_GEOJSON_URLS = [
   const exportFallbackBtn = document.getElementById('exportFallbackBtn');
   const printPdfBtn = document.getElementById('printPdfBtn');
   const exportSvgBtn = document.getElementById('exportSvgBtn');
+  const exportPptxBtn = document.getElementById('exportPptxBtn');
   const openCaptureBtn = document.getElementById('openCaptureBtn');
   const presentationBtn = document.getElementById('presentationBtn');
   const exportWorkbookBtn = document.getElementById('exportWorkbookBtn');
@@ -3302,7 +3303,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       <div class="tunnel-phase-desc">${phases.map(p=>`<div>${esc(p.desc)}</div>`).join('')}</div>
       <div class="tunnel-dotted"></div>
       <div class="tunnel-bubbles" style="--tunnel-steps:${state.tunnel.statuses.length}">${state.tunnel.statuses.map((item,i)=>`<div class="tunnel-status ${colors[i]||'green1'} ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}" title="Afficher les opérations correspondantes"`:''}><div class="status-bubble ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${frSmart(item.value)}${item.key==='compliant'?'<sup>*</sup>':''}</div><div class="status-label ${dataRuntime.connected?'data-clickable data-status-label-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${esc(item.label)}</div><div class="status-pct ${dataRuntime.connected?'data-clickable':''}" ${dataRuntime.connected?`data-data-status-key="${esc(item.key)}"`:''}>${fr(tunnelPercent(item.value),1)} %</div>${item.key==='compliant'?`<div class="sold-note">* dont ${frSmart(state.tunnel.sold)} soldés</div>`:''}</div>`).join('')}</div>
-      <div class="tunnel-footer"><div class="period-box"><b>${esc(state.tunnel.period)}</b><span>PÉRIODE D’ÉTUDE</span></div><div class="cancelled-box">Sur la période <b>${frSmart(state.tunnel.cancelled)}</b> dossiers ont été annulés ou abandonnés</div></div>`;
+      <div class="tunnel-footer"><div class="period-box"><b>${esc(state.tunnel.period)}</b><span>PÉRIODE D’ÉTUDE</span></div><div class="cancelled-box"><span>Sur la période <b>${frSmart(state.tunnel.cancelled)}</b> dossiers ont été annulés ou abandonnés</span></div></div>`;
   }
 
   function renderMapSlide() {
@@ -6604,6 +6605,51 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   }
 
 
+  // Export PPTX fidèle : chaque slide affichée est convertie en objets PowerPoint natifs
+  // (textes modifiables, formes, images et SVG d'origine) par obslide-pptx.js.
+  async function exportPptxFile({ currentOnly = false, onProgress = null } = {}) {
+    const api = window.ObslidePptx;
+    if (!api) throw new Error('Le module d’export PPTX n’est pas chargé. Recharge la page.');
+    const pptx = api.createPresentation({ title: 'Observatoire du bâtiment durable — Prestaterre' });
+    const originalTab = activeTab;
+    const orderedTabs = currentOnly ? [activeTab] : tabs.map(tab => tab.dataset.tab);
+    try {
+      for (let i = 0; i < orderedTabs.length; i++) {
+        if (activeTab !== orderedTabs[i]) activateTab(orderedTabs[i], { scroll: false });
+        if (tabType(activeTab) === 'map') {
+          if (!mapGeoJSON) await ensureMapGeoJSON();
+          if (state.map.level === 'region') drawRegionMap(); else drawDepartmentMap();
+        }
+        await waitForSlideAssets();
+        await waitForPaintFrames(2);
+        if (onProgress) onProgress(i + 1, orderedTabs.length);
+        await api.addSlideFromElement(pptx, slide);
+      }
+    } finally {
+      if (activeTab !== originalTab) activateTab(originalTab, { scroll: false });
+    }
+    const stem = currentOnly ? exportFileStem() : 'Obslide';
+    await api.save(pptx, `${stem}_${new Date().toISOString().slice(0, 10)}.pptx`);
+    return orderedTabs.length;
+  }
+
+  if (exportPptxBtn) {
+    exportPptxBtn.addEventListener('click', async (event) => {
+      const currentOnly = event.shiftKey;
+      try {
+        exportPptxBtn.disabled = true;
+        const count = await exportPptxFile({ currentOnly, onProgress: (i, n) => { exportPptxBtn.textContent = `PPTX ${i}/${n}…`; } });
+        toast(`PPTX exporté : ${count} slide${count > 1 ? 's' : ''}, textes modifiables.`);
+      } catch (err) {
+        console.error(err);
+        toast(err.message || 'Échec de l’export PPTX.');
+      } finally {
+        exportPptxBtn.disabled = false;
+        exportPptxBtn.textContent = 'PPTX';
+      }
+    });
+  }
+
   if (openCaptureBtn) {
     openCaptureBtn.addEventListener('click', async () => {
       try {
@@ -6626,6 +6672,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       setTab(name){ const tab=tabs.find(t=>t.dataset.tab===name); if(!tab) throw new Error('Onglet inconnu'); activateTab(name, { scroll:false }); return name; },
       async png(){ return reliableSlidePngBlob(); },
       async workbookPdf(){ return exportWorkbookPdfBlob(); },
+      async pptx(options){ return exportPptxFile(options); },
       tabs(){ return tabs.map(t=>t.dataset.tab); }
     };
   }

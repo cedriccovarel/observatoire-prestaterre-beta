@@ -458,7 +458,7 @@
     const editor=presentationEditor(slide);
     const controls=slide?`<div class="obs-pres-slide-actions">${slide.type!=='cover'?`<button type="button" class="obs-card-action" data-pres-duplicate="${attr(slide.id)}">Dupliquer</button><button type="button" class="obs-card-action" data-pres-move="up" data-pres-id="${attr(slide.id)}">Monter</button><button type="button" class="obs-card-action" data-pres-move="down" data-pres-id="${attr(slide.id)}">Descendre</button>`:''}<button type="button" class="obs-card-action" data-pres-fullscreen="1">Plein écran</button><button type="button" class="obs-card-action" data-pres-export="png" data-pres-id="${attr(slide.id)}">PNG 4K</button><button type="button" class="obs-card-action" data-pres-export="svg" data-pres-id="${attr(slide.id)}">SVG</button><button type="button" class="obs-card-action danger" data-pres-delete="${attr(slide.id)}">Supprimer</button></div>`:`<div class="obs-pres-slide-actions"><button type="button" class="obs-card-action" data-pres-cover="1">Créer une couverture</button></div>`;
     return `${pageHead('presentation',right)}
-      <div class="obs-pres-help">Les textes restent éditables dans l’Observatoire Prestaterre. Le bouton Google Slides reproduit fidèlement chaque slide dans Drive, graphiques et mises en page compris. Le rendu est envoyé comme visuel haute définition afin d’éviter toute déformation des graphiques. Le PPTX reste disponible comme export secondaire.</div>
+      <div class="obs-pres-help">Les textes restent éditables dans l’Observatoire Prestaterre. Le bouton Google Slides reproduit fidèlement chaque slide dans Drive, graphiques et mises en page compris. Le rendu est envoyé comme visuel haute définition afin d’éviter toute déformation des graphiques. Le PPTX reproduit fidèlement l’écran, textes modifiables, images et SVG d’origine.</div>
       <div class="obs-presentation-layout">
         <aside class="obs-presentation-side">
           <div class="obs-pres-side-head"><h3>Slides</h3><div class="obs-pres-side-actions"><button type="button" class="obs-card-action" data-pres-cover="1">+ Couverture</button><button type="button" class="obs-card-action danger" data-pres-clear="1">Vider</button></div></div>
@@ -663,7 +663,31 @@
     }finally{const b=pageEl.querySelector('[data-pres-google-slides]');if(b){b.disabled=false;b.textContent='Google Slides ↗';}}
   }
   function pptxFontName(cssFont){return String(cssFont||'Arial').split(',')[0].replace(/["']/g,'').trim()||'Arial';}
+  // V6.16 : export PPTX fidèle à l'écran (obslide-pptx.js) — chaque slide affichée devient des objets
+  // PowerPoint natifs : textes modifiables, formes, images et SVG d'origine. L'ancien export
+  // (visuel collé en image) reste en secours si le moteur est indisponible.
   async function exportPresentationPptx(){
+    if(!state.presentationSlides.length)return;
+    const api=window.ObslidePptx;
+    if(!api||typeof window.PptxGenJS!=='function')return legacyExportPresentationPptx();
+    const button=pageEl.querySelector('[data-pres-export-pptx]');if(button){button.disabled=true;button.textContent='PPTX…';}
+    try{
+      const pptx=api.createPresentation({title:'Observatoire Prestaterre – Présentation'});
+      for(const model of state.presentationSlides){
+        const wrap=document.createElement('div');
+        wrap.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:-99999;';
+        wrap.innerHTML=presentationSlideMarkup(model);document.body.appendChild(wrap);
+        const node=wrap.querySelector('.obs-pres-stage');node.removeAttribute('id');node.style.width='1280px';node.style.height='720px';node.style.minWidth='0';
+        try{await api.addSlideFromElement(pptx,node,{ignoreSelector:'.obs-pres-head-tools,[data-add-presentation],.obs-card-action,.obs-table-pager,.obs-view-toggle'});}
+        finally{wrap.remove();}
+      }
+      await api.save(pptx,`Observatoire_Prestaterre_Presentation_${new Date().toISOString().slice(0,10)}.pptx`);
+    }catch(err){
+      console.error('Export PPTX fidèle',err);
+      if(confirm('Export PPTX fidèle impossible ('+(err?.message||err)+'). Utiliser l’export simplifié (visuels en image) ?'))await legacyExportPresentationPptx();
+    }finally{const b=pageEl.querySelector('[data-pres-export-pptx]');if(b){b.disabled=false;b.textContent='PPTX';}}
+  }
+  async function legacyExportPresentationPptx(){
     if(!state.presentationSlides.length)return;
     if(typeof window.PptxGenJS!=='function'){alert('Le module PPTX est indisponible. Recharge la page puis réessaie.');return;}
     const Pptx=window.PptxGenJS,pptx=new Pptx();pptx.layout='LAYOUT_WIDE';pptx.author='Prestaterre Certifications';pptx.subject='Observatoire Prestaterre';pptx.title='Observatoire Prestaterre – Présentation';pptx.company='Prestaterre Certifications';pptx.lang='fr-FR';pptx.theme={headFontFace:'Arial',bodyFontFace:'Arial',lang:'fr-FR'};

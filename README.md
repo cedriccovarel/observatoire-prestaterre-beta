@@ -1,4 +1,4 @@
-# Observatoire Prestaterre — V6.15
+# Observatoire Prestaterre — V6.16
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 
@@ -16,6 +16,7 @@ Observatoire du bâtiment durable de Prestaterre Certification : site statique (
 | `generator.html` | Générateur de rapports / slides |
 | `newosb-rules.js` | Règles de lecture des données (nombres, épaisseurs, R, avancement) — partagées par tout le site |
 | `app.js` | Moteur de données et générateur de slides (V29) |
+| `obslide-pptx.js` | Export PPTX fidèle à l’écran (textes modifiables, formes, images et SVG d’origine), utilisé par le générateur et l’onglet Présentation |
 | `newosb-core.js` | Dictionnaire, contrôles qualité, provenance |
 | `newosb.js` | Interface de l'Observatoire |
 | `privacy.js` | Mode anonymisé |

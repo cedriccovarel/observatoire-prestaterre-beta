@@ -652,8 +652,29 @@ test('l’Observatoire et le générateur chargent la même version d’app.js',
 test('tous les fichiers référencés existent', () => { for (const h of [index, gen]) for (const f of [...scripts(h), ...[...h.matchAll(/href="([^"?#:]+\.(?:css|png))/g)].map(m => m[1])]) assert(fs.existsSync(path.join(ROOT, f)), f); });
 test('un seul script Apps Script OPERATIONS à la racine (pas de doGet en double)', () => assert(!fs.existsSync(path.join(ROOT, 'Code.gs'))));
 test('plus de copie périmée du script dans app.js', () => assert(!/NEWOSB V05\.22\\n \* Source OPERATIONS/.test(read('app.js'))));
-test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
+test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'obslide-pptx.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
 test('l’avancement n’est plus déduit de « État du dossier » ni du statut commercial', () => { const a = read('app.js'); assert(!a.includes('dataRawValue(r,fields.status)||dataRawValue(r,fields.dossierState)||affairStage')); });
+
+section('8. Export PPTX fidèle (obslide-pptx.js)');
+const pptxEngine = (() => { const fakeCanvas = { getContext: () => ({ _v: '#000000', set fillStyle(v) { if (/^#[0-9a-f]{6}$/i.test(v)) this._v = v.toLowerCase(); }, get fillStyle() { return this._v; } }) }; // couleurs nommées non résolues : canvas minimal
+  const ctx = { window: {}, URL, TextEncoder, document: { createElement: () => fakeCanvas } }; vm.createContext(ctx); vm.runInContext(read('obslide-pptx.js'), ctx, { filename: 'obslide-pptx.js' }); return ctx.window.ObslidePptx; })();
+test('générateur : JSZip, PptxGenJS puis le moteur, avant app.js ; Observatoire : moteur avant newosb.js', () => {
+  const g = scripts(gen); assert(g.indexOf('jszip.min.js') >= 0 && g.indexOf('jszip.min.js') < g.indexOf('pptxgen.min.js') && g.indexOf('pptxgen.min.js') < g.indexOf('obslide-pptx.js') && g.indexOf('obslide-pptx.js') < g.indexOf('app.js'));
+  const i = scripts(index); assert(i.indexOf('pptxgen.min.js') < i.indexOf('obslide-pptx.js') && i.indexOf('obslide-pptx.js') < i.indexOf('newosb.js'));
+});
+test('bouton PPTX du générateur relié à l’export fidèle', () => { assert(gen.includes('id="exportPptxBtn"')); const a = read('app.js'); assert(a.includes("getElementById('exportPptxBtn')") && a.includes('api.addSlideFromElement(pptx, slide)') && a.includes('api.save(pptx')); });
+test('l’onglet Présentation utilise l’export fidèle, l’ancien export reste en secours', () => { const n = read('newosb.js'); assert(n.includes('api.addSlideFromElement(pptx,node') && n.includes('async function legacyExportPresentationPptx()')); });
+test('aucune réduction automatique du texte (normAutofit) ni zone au gabarit exact', () => { const m = read('obslide-pptx.js'); assert(!/fit:\s*'shrink'/.test(m)); assert(/fit: 'none'/.test(m)); });
+test('dégradé CSS → dégradé PowerPoint natif (angle et arrêts)', () => {
+  const x = pptxEngine._internals.nativeGradientXml('linear-gradient(90deg, rgb(7, 80, 74), rgb(6, 64, 43))', 1);
+  assert(x.includes('<a:lin ang="0"') && x.includes('val="07504A"') && x.includes('pos="100000"'));
+  const down = pptxEngine._internals.nativeGradientXml('linear-gradient(rgb(255, 255, 255) 0%, rgb(246, 250, 248) 100%)', 1);
+  assert(down.includes('<a:lin ang="5400000"'));
+  const radial = pptxEngine._internals.nativeGradientXml('radial-gradient(circle at 30% 30%, rgb(13, 108, 93), rgb(7, 59, 63) 72%)', 1);
+  assert(radial.includes('path="circle"') && radial.includes('l="30000"') && radial.includes('pos="72000"'));
+});
+test('clip-path polygon (chevrons du tunnel) converti en tracé', () => { const d = pptxEngine._internals.clipPathD('polygon(0px 0px, 92% 0px, 100% 50%, 92% 100%, 0px 100%, 8% 50%)', 100, 50); assert.strictEqual(d, 'M0.000 0.000 L92.000 0.000 L100.000 25.000 L92.000 50.000 L0.000 50.000 L8.000 25.000 Z'); });
+test('découpage des listes CSS sans casser les parenthèses', () => { assert.deepStrictEqual(Array.from(pptxEngine._internals.splitTopLevel('rgba(0, 0, 0, 0.1) 0px 2px, linear-gradient(red, blue)')), ['rgba(0, 0, 0, 0.1) 0px 2px', 'linear-gradient(red, blue)']); });
 
 (async () => {
   for (const [name, fn] of asyncTests) {

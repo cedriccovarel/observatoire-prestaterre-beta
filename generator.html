@@ -7,7 +7,7 @@
   <title>Générateur de slides - Observatoire</title>
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
   <link rel="apple-touch-icon" href="assets/favicon.png" />
-  <link rel="stylesheet" href="style.css?v=29.7.21" />
+  <link rel="stylesheet" href="style.css?v=29.7.22" />
   <link rel="stylesheet" href="privacy.css?v=5.0.0" />
 </head>
 <body class="auth-locked">
@@ -53,6 +53,7 @@
       <button id="presentationBtn" class="btn btn-secondary" type="button" title="Afficher les slides en plein écran avec les onglets">Présentation</button>
       <button id="exportBtn" class="btn btn-primary" type="button" title="Export PNG 4K">PNG 4K</button>
       <button id="exportSvgBtn" class="btn btn-secondary" type="button" title="Export SVG">SVG</button>
+      <button id="exportPptxBtn" class="btn btn-secondary" type="button" title="Export PowerPoint fidèle à l’écran : textes modifiables, images et SVG d’origine. Maj+clic : slide active uniquement">PPTX</button>
       <button id="exportWorkbookBtn" class="btn btn-secondary" type="button" title="Ouvrir le dialogue d’impression pour imprimer ou enregistrer tout le classeur en PDF">Export classeur</button>
       <input id="loadSaveInput" type="file" accept="application/json,.json" hidden />
     </div>
@@ -155,6 +156,9 @@
   <script src="privacy.js?v=6.15.0"></script>
   <script src="newosb-rules.js?v=6.14.0"></script>
   <script src="newosb-bridge.js?v=6.15.0"></script>
-  <script src="app.js?v=29.7.25-newosb6.15.0"></script>
+  <script src="jszip.min.js?v=3.10.1"></script>
+  <script src="pptxgen.min.js?v=4.0.0"></script>
+  <script src="obslide-pptx.js?v=1.1.0"></script>
+  <script src="app.js?v=29.7.26-newosb6.16.0"></script>
 </body>
 </html>

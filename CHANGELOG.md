@@ -1,5 +1,17 @@
 # Historique
 
+## V6.16
+
+**Export PPTX fidèle à l’écran (générateur de slides et onglet Présentation)**
+- Nouveau moteur `obslide-pptx.js` : chaque slide affichée est convertie en objets PowerPoint natifs à partir des positions mesurées par le navigateur. Textes modifiables (coupures de lignes, interlignes, alignements, gras, couleurs, espacement des lettres, troncature « … » reproduits), formes natives (arrondis, ellipses, bordures, pointillés, ombres, anneaux), dégradés natifs `<a:gradFill>` modifiables, images PNG/JPG/SVG d’origine, SVG des graphiques et cartes en vectoriel avec PNG de secours en double résolution (utilisé par Google Slides) ; les textes des SVG (étiquettes, valeurs, axes) deviennent des zones de texte modifiables.
+- Cas gérés : pseudo-éléments `::before`/`::after`, `clip-path` (chevrons du tunnel), triangles CSS (flèches DPE), secteurs `conic-gradient` (anneaux), dégradés radiaux, filtres d’image, `object-fit`, débordements masqués, ordre d’empilement (`z-index`).
+- Générateur : bouton **PPTX** (toutes les slides ; Maj+clic : slide active). Onglet Présentation de l’Observatoire : le bouton PPTX utilise le même moteur ; l’ancien export (visuel collé en image) reste proposé en secours en cas d’erreur.
+- Corrige les défauts de l’export précédent : zones de texte au gabarit exact du mot avec réduction automatique (`normAutofit`) — textes rétrécis, recoupés ou décalés dans PowerPoint / Google Slides —, bulles et étiquettes décalées des tracés, cadres décalés de leur contenu, PNG de secours en basse résolution.
+
+**Correctifs du générateur**
+- Tunnel de certification : l’icône de la phase « Exécution » s’affichait en carré blanc (filtre CSS appliqué à une vignette opaque).
+- Tunnel de certification : espaces manquants dans « Sur la période 69 dossiers ont été annulés… ».
+
 ## V6.15
 
 **Liens de partage à durée limitée**
