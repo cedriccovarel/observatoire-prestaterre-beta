@@ -422,7 +422,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         check(stillAllowed, 'destinataire : un onglet non accordé ne s’ouvre pas, même en forçant le bouton');
         await p2.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
         await p2.click('#obsNav [data-page="requirements"]'); await p2.waitForTimeout(400);
-        const reqTxt = await p2.textContent('#obsPage'); const reqSt = await p2.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
+        const reqTxt = (await p2.textContent('#obsPage')) + ' ' + (await p2.evaluate(() => document.querySelector('.obs-req-filter-host')?.textContent || '')); const reqSt = await p2.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
         check(reqSt.connected && reqSt.count === 4 && /PÉRIMÈTRE PARTAGÉ/.test(reqTxt) && /Filtres figés/.test(reqTxt) && !(await p2.$('[data-req-filter-check]')) && !(await p2.$('#reqSourceKey')), `Exigences partagées : 4 évaluations des opérations du lien, sans clé ni URL, filtres verrouillés (${reqSt.count}${reqSt.error ? ' · ' + reqSt.error : ''})`);
         check(/Compatibilité/.test(reqTxt), 'Exigences partagées : encart de compatibilité avec les mentions affiché');
         await p2.click('#obsNav [data-page="operations"]'); await p2.waitForTimeout(400);

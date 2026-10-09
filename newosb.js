@@ -1929,13 +1929,52 @@
     decorateAuditButtons();
     const requirementsMode=state.page==='requirements';
     const isolatedMode=requirementsMode||state.page==='presentation';
-    const filterWrap=document.querySelector('.obs-filterbar-wrap'); if(filterWrap)filterWrap.hidden=isolatedMode;
+    const filterWrap=document.querySelector('.obs-filterbar-wrap'); if(filterWrap){filterWrap.hidden=state.page==='presentation';filterWrap.classList.toggle('is-requirements',requirementsMode);}
+    placeRequirementFilters(requirementsMode);
     const topSearch=searchEl?.closest('.obs-search'); if(topSearch)topSearch.hidden=isolatedMode;
     if(demoBanner) demoBanner.hidden=isolatedMode ? true : runtime().connected;
     if(!isolatedMode){ countEl.textContent=fmt(filteredOperations().length); renderFilterDependencies(); }
+    updateFilterPanelBadge(requirementsMode);
     restoreUiScroll(scrollSnapshot);
     if(state.page==='territories') hydrateTerritoryMap(token);
     if(requirementsMode) window.NEWOSB_REQUIREMENTS?.afterRender?.();
+  }
+
+  // V6.21 : panneau de filtres vertical à droite, repliable. Sur l'onglet Exigences, il accueille les
+  // filtres de cet onglet (les événements sont transmis au module Exigences).
+  const FILTER_PANEL_KEY='newosb_filters_panel_collapsed';
+  const mainEl=document.querySelector('.obs-main');
+  let reqFilterHost=null;
+  function applyFilterPanel(collapsed){
+    if(!mainEl)return;
+    mainEl.classList.toggle('filters-collapsed',collapsed);
+    const btn=document.querySelector('[data-filter-panel-toggle]');
+    if(btn){btn.setAttribute('aria-expanded',collapsed?'false':'true');btn.title=collapsed?'Afficher les filtres':'Replier les filtres';const ic=btn.querySelector('.obs-filter-toggle-icon');if(ic)ic.textContent=collapsed?'‹':'›';}
+  }
+  function setupFilterPanel(){
+    const wrap=document.querySelector('.obs-filterbar-wrap');
+    if(!wrap||wrap.dataset.panel==='1')return;
+    wrap.dataset.panel='1';
+    wrap.insertAdjacentHTML('afterbegin','<div class="obs-filter-panel-head"><button type="button" class="obs-filter-toggle" data-filter-panel-toggle aria-expanded="true" aria-controls="obsFilters"><span class="obs-filter-toggle-icon" aria-hidden="true">›</span><b>Filtres</b><i data-filter-active-count hidden></i></button></div>');
+    reqFilterHost=document.createElement('div');reqFilterHost.className='obs-req-filter-host';reqFilterHost.hidden=true;wrap.appendChild(reqFilterHost);
+    const fwd={click:'handleClick',change:'handleChange',input:'handleInput',keyup:'handleKeyup'};
+    Object.keys(fwd).forEach(t=>reqFilterHost.addEventListener(t,e=>{window.NEWOSB_REQUIREMENTS?.[fwd[t]]?.(e);}));
+    reqFilterHost.addEventListener('pointerdown',e=>{if(e.target.closest?.('[data-req-filter-search]'))e.stopPropagation();});
+    wrap.addEventListener('click',e=>{if(!e.target.closest('[data-filter-panel-toggle]'))return;const collapsed=!mainEl.classList.contains('filters-collapsed');applyFilterPanel(collapsed);try{localStorage.setItem(FILTER_PANEL_KEY,collapsed?'1':'0');}catch{}});
+    let stored=null;try{stored=localStorage.getItem(FILTER_PANEL_KEY);}catch{}
+    applyFilterPanel(stored===null?window.innerWidth<1180:stored==='1');
+  }
+  function placeRequirementFilters(active){
+    if(!reqFilterHost)return;
+    reqFilterHost.innerHTML='';
+    reqFilterHost.hidden=!active;
+    if(!active)return;
+    pageEl.querySelectorAll('.req-filterbar,.req-share-lock,.req-active').forEach(el=>reqFilterHost.appendChild(el));
+  }
+  function updateFilterPanelBadge(requirementsMode){
+    const badge=document.querySelector('[data-filter-active-count]');if(!badge)return;
+    const n=requirementsMode?(reqFilterHost?reqFilterHost.querySelectorAll('.req-check-filter.has-selection').length:0):Object.keys(state.filters).filter(k=>globalFilterValues(k).length).length+state.crossFilters.length;
+    badge.hidden=!n;badge.textContent=String(n);badge.title=`${n} filtre${n>1?'s':''} actif${n>1?'s':''}`;
   }
 
   function filterOptions(){
@@ -3065,6 +3104,7 @@
   if(searchEl) searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';
   loadPresentationState();
   loadSidebarState();
+  setupFilterPanel();
   window.NEWOSB_PRIVACY?.bindControls?.();
   updateSourceStatus(); renderFilters(); renderPage();
   setTimeout(()=>{updateSourceStatus();renderFilters();renderPage();},400);

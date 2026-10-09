@@ -1303,27 +1303,50 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .req-source-legacy>summary{cursor:pointer;color:#587269;font-weight:700}
 .req-source-legacy>.req-source-card{margin-top:10px;box-shadow:none}
 
-/* V6.20 — filtres compacts : pastilles sur une ou deux lignes (Observatoire et onglet Exigences) */
-.obs-filterbar-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:7px 20px 8px}
-.obs-filterbar-wrap>.obs-filter-summary{display:flex;align-items:center;gap:10px;margin:0;flex:0 0 auto;order:2}
-.obs-filterbar-wrap>.obs-filter-summary>div{display:flex;align-items:baseline;gap:5px;white-space:nowrap}
-.obs-filterbar-wrap>.obs-filters{order:1;flex:1 1 560px;min-width:0}
-.obs-filterbar-wrap>.obs-filter-dependencies{order:3;flex:1 1 100%}
-.obs-filterbar-wrap>.obs-filter-dependencies:empty{display:none}
-.obs-filters,.req-filterbar.req-filterbar-checks{display:flex!important;flex-wrap:wrap;gap:6px;align-items:center;grid-template-columns:none}
-.obs-check-filter,.req-check-filter{flex:0 0 auto;min-height:0;min-width:0;border-radius:999px;background:#f6f9f7}
-.obs-check-filter>summary,.req-check-filter>summary{display:flex;align-items:center;gap:6px;min-height:28px;padding:3px 10px 3px 12px;grid-template-columns:none}
-.obs-check-filter>summary>span,.req-check-filter>summary>span{font-size:11.5px;font-weight:700;text-transform:none;letter-spacing:0;color:#3f5b52;white-space:nowrap}
-.obs-check-filter>summary>b,.req-check-filter>summary>b{display:none;margin:0}
-.obs-check-filter.has-selection>summary>b,.req-check-filter.has-selection>summary>b{display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:800;color:#fff;background:#06402b;border-radius:999px;padding:2px 8px;line-height:1.35}
-.obs-check-filter>summary:after,.req-check-filter>summary:after{grid-column:auto;grid-row:auto;font-size:11px;line-height:1;margin-left:1px}
-.obs-check-filter.has-selection,.req-check-filter.has-selection{background:#e8f4ed;border-color:#8fc3a8}
-.obs-check-filter[open],.req-check-filter[open]{border-color:#16864f;background:#fff}
-.obs-check-filter .obs-check-menu,.req-check-filter .req-check-menu{min-width:280px;width:max-content;max-width:360px}
-.obs-check-filter:nth-last-child(-n+3) .obs-check-menu,.req-check-filter:nth-last-child(-n+4) .req-check-menu{left:auto;right:-1px}
-.obs-filters>.obs-share-lock{flex:1 1 100%}
-.req-filterbar.req-filterbar-checks{padding:8px 10px;gap:6px;border-radius:12px}
-.req-reset-filters{min-height:28px;border-radius:999px;padding:3px 12px;font-size:11px}
-.req-reset-filters:disabled{display:none}
-@media(max-width:820px){.obs-filterbar-wrap{padding:7px 12px}.obs-filterbar-wrap>.obs-filters{flex-basis:100%}.obs-check-filter .obs-check-menu,.req-check-filter .req-check-menu{width:auto;max-width:none;min-width:0}}
 .obs-filterbar-wrap[hidden]{display:none!important}
+
+/* V6.21 — panneau de filtres vertical à droite, repliable (Observatoire et onglet Exigences) */
+.obs-main{display:grid!important;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr);overflow:hidden}
+.obs-main>.obs-demo-banner{grid-column:1;grid-row:1}
+.obs-main>.obs-page{grid-column:1;grid-row:2;min-height:0}
+.obs-main>.obs-filterbar-wrap{grid-column:2;grid-row:1/3;width:300px;min-height:0;display:flex;flex-direction:column;gap:10px;padding:12px 14px 16px;border-bottom:0;border-left:1px solid var(--obs-line);background:#fbfcfb;overflow:auto;transition:width .18s ease}
+.obs-filterbar-wrap[hidden]{display:none!important}
+.obs-filter-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.obs-filter-toggle{display:flex;align-items:center;gap:8px;border:0;background:none;font:inherit;font-size:14px;font-weight:850;color:var(--obs-green);cursor:pointer;padding:4px 2px}
+.obs-filter-toggle-icon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid var(--obs-line);background:#fff;font-size:13px}
+.obs-filter-toggle i{font-style:normal;font-size:10px;font-weight:900;color:#fff;background:#16864f;border-radius:999px;padding:2px 7px}
+.obs-filter-toggle i[hidden]{display:none}
+.obs-filterbar-wrap>.obs-filter-summary{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:8px 10px;border:1px solid var(--obs-line);border-radius:10px;background:#fff}
+.obs-filterbar-wrap>.obs-filter-summary b{font-size:18px}
+.obs-filterbar-wrap>.obs-filter-dependencies:empty{display:none}
+.obs-filters,.obs-req-filter-host .req-filterbar.req-filterbar-checks{display:flex!important;flex-direction:column;align-items:stretch;gap:6px;flex-wrap:nowrap;grid-template-columns:none;padding:0;margin:0;border:0;background:none;box-shadow:none}
+.obs-check-filter,.obs-req-filter-host .req-check-filter{width:100%;min-height:0;border-radius:10px;background:#fff}
+.obs-check-filter>summary,.obs-req-filter-host .req-check-filter>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:36px;padding:6px 10px;grid-template-columns:none}
+.obs-check-filter>summary>span,.obs-req-filter-host .req-check-filter>summary>span{font-size:12px;font-weight:750;text-transform:none;letter-spacing:0;color:#2f4d43;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.obs-check-filter>summary>b,.obs-req-filter-host .req-check-filter>summary>b{display:none;margin:0 0 0 auto}
+.obs-check-filter.has-selection>summary>b,.obs-req-filter-host .req-check-filter.has-selection>summary>b{display:inline-block;max-width:135px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:800;color:#fff;background:#06402b;border-radius:999px;padding:2px 8px;line-height:1.35}
+.obs-check-filter>summary:after,.obs-req-filter-host .req-check-filter>summary:after{grid-column:auto;grid-row:auto;font-size:12px;line-height:1}
+.obs-check-filter.has-selection,.obs-req-filter-host .req-check-filter.has-selection{background:#eef7f2;border-color:#8fc3a8}
+.obs-check-filter[open],.obs-req-filter-host .req-check-filter[open]{border-color:#16864f}
+.obs-filterbar-wrap .obs-check-menu,.obs-req-filter-host .req-check-menu{position:static!important;width:auto!important;min-width:0;max-width:none;max-height:280px;margin:0 6px 8px;box-shadow:none;border-color:#e1ebe6;left:auto;right:auto;top:auto}
+.obs-req-filter-host{display:flex;flex-direction:column;gap:8px}
+.obs-req-filter-host[hidden],.obs-filterbar-wrap.is-requirements>.obs-filters,.obs-filterbar-wrap.is-requirements>.obs-filter-summary,.obs-filterbar-wrap.is-requirements>.obs-filter-dependencies{display:none!important}
+.obs-req-filter-host .req-reset-filters{width:100%;min-height:34px;border-radius:10px}
+.obs-req-filter-host .req-reset-filters:disabled{display:none}
+.obs-req-filter-host .req-active{margin:0}
+.obs-filters>.obs-share-lock{flex-direction:column;align-items:stretch}
+/* Replié : fine bande « Filtres » */
+.obs-main.filters-collapsed>.obs-filterbar-wrap{width:46px;padding:10px 6px;overflow:hidden}
+.obs-main.filters-collapsed>.obs-filterbar-wrap>*:not(.obs-filter-panel-head){display:none!important}
+.obs-main.filters-collapsed .obs-filter-panel-head{flex-direction:column}
+.obs-main.filters-collapsed .obs-filter-toggle{flex-direction:column;gap:10px}
+.obs-main.filters-collapsed .obs-filter-toggle b{writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.06em}
+@media(max-width:820px){
+  .obs-main{display:block!important}
+  .obs-main>.obs-filterbar-wrap{position:fixed;top:0;right:0;bottom:0;z-index:95;width:min(88vw,340px);box-shadow:-18px 0 40px rgba(6,64,43,.18)}
+  .obs-main.filters-collapsed>.obs-filterbar-wrap{top:96px;bottom:auto;height:auto;width:46px;border:1px solid var(--obs-line);border-right:0;border-radius:12px 0 0 12px;box-shadow:-6px 6px 18px rgba(6,64,43,.14)}
+}
+.obs-check-filter.has-selection>summary,.obs-req-filter-host .req-check-filter.has-selection>summary{flex-wrap:wrap;row-gap:4px}
+.obs-check-filter.has-selection>summary>span,.obs-req-filter-host .req-check-filter.has-selection>summary>span{flex:1 1 auto}
+.obs-check-filter.has-selection>summary:after,.obs-req-filter-host .req-check-filter.has-selection>summary:after{order:2}
+.obs-check-filter.has-selection>summary>b,.obs-req-filter-host .req-check-filter.has-selection>summary>b{order:3;max-width:100%;margin:0}

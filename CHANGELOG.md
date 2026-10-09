@@ -1,9 +1,11 @@
 # Historique
 
-## V6.20
+## V6.21
 
-**Filtres compacts**
-- Barre de filtres de l’Observatoire et de l’onglet Exigences en pastilles sur une ou deux lignes (au lieu de trois rangées de cases) : seul le nom du filtre s’affiche ; quand un filtre est actif, sa valeur apparaît dans une étiquette verte. Le nombre d’opérations et « Réinitialiser » passent sur la même ligne. Les menus à cases à cocher et la recherche dans chaque filtre sont inchangés.
+**Filtres dans un panneau vertical à droite, repliable**
+- Les filtres ne sont plus au-dessus des pages : ils sont dans un panneau à droite (nombre d’opérations, « Réinitialiser », un filtre par ligne ; le menu à cases s’ouvre sur place). Un filtre actif affiche sa valeur dans une étiquette verte.
+- Bouton « › Filtres » pour replier le panneau en une fine bande (badge = nombre de filtres actifs) et « ‹ » pour le rouvrir ; le choix est retenu dans le navigateur. Replié par défaut sur les écrans de moins de 1 180 px ; sur téléphone, le panneau s’ouvre par-dessus la page.
+- L’onglet Exigences utilise le même panneau pour ses propres filtres (y compris les filtres figés d’un lien de partage).
 
 ## V6.19
 
