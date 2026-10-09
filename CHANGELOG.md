@@ -1,5 +1,12 @@
 # Historique
 
+## V6.19
+
+**Filtre « Type de programme » dans tous les menus issus d’OPERATIONS**
+- Nouveau filtre global (barre de filtres, après « Référentiel ») : Vue d’ensemble, Territoires, Acteurs, Certification, Labels, Solutions, Énergie, Carbone, Croiser, Projets & opérations, Qualité ; il se combine avec les autres filtres et peut être figé dans un lien de partage. Le type figure aussi dans la fiche projet (Identité du projet).
+- Le script OPERATIONS ajoute à chaque ligne deux colonnes calculées : « Type de programme (calculé) » et « Type de programme : origine ». Rapprochement avec RAPPORT par **code interne d’opération**, puis par **numéro de contrat** (si RAPPORT contient une colonne « Numéro du contrat ») ; à défaut, le nom présent dans OPERATIONS (« Nom du programme (client) » ou « Nom de l’opération ») est classé avec le même dictionnaire, selon le référentiel. Une colonne « Type de programme » saisie dans OPERATIONS l’emporte.
+- Calcul fait par le script avant toute anonymisation : un lien anonymisé conserve le filtre sans transmettre de nom. Index RAPPORT mis en cache 10 minutes.
+
 ## V6.18
 
 **Exigences : nouveau filtre « Type de programme »**

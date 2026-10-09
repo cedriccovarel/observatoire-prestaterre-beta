@@ -42,6 +42,10 @@
     compliant:'#06402b', unknown:'#c9d1cd', cancelled:'#dc5b4d'
   };
   const CHRONOLOGY_STATUS_COLORS = {...STATUS_COLORS,lostAffair:'#9c3f3f',abandonedAffair:'#c96c45',cancelledAffair:'#dc5b4d'};
+  // V6.19 : type de programme (colonnes calculées par Code_Operations.gs), dans l'ordre de la liste Prestaterre.
+  const PROGRAM_TYPES=['Bureaux','Commerces','Hôtelier','Scolaire et enseignement',"Logement collectif (immeubles d'appartements)",'Logement individuel (maisons, lotissements)','Résidences gérées (étudiantes, seniors, tourisme)','Santé et médico-social (cliniques, EHPAD, centres médicaux)','Locaux d’activité et industrie','Logistique (entrepôts, plateformes de distribution)','Équipements publics (culturels, sportifs, administratifs)','Non déterminé'];
+  const PROGRAM_TYPE_MISSING='Non disponible (script à mettre à jour)';
+  const programTypeOrder=v=>{const i=PROGRAM_TYPES.indexOf(v);return i<0?99:i;};
   const ANALYTIC_PAGES = new Set(['territories','stakeholders','certification','performance','solutions','energy','carbon','crossdata','operations','quality','dictionary']);
   const PRESENTATION_STORAGE_KEY = 'newosb_v0518_presentation';
   const pageMeta = {
@@ -65,7 +69,7 @@
   const state = {
     page:'overview',
     search:'',
-    filters:{year:[],createdYear:[],referential:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[]},
+    filters:{year:[],createdYear:[],referential:[],programType:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[]},
     crossFilters:[],
     activeOperation:null,
     drawerTab:'summary',
@@ -283,6 +287,7 @@
         year:globalFilterValues('year'),
         createdYear:globalFilterValues('createdYear'),
         referential:globalFilterValues('referential'),
+        programType:globalFilterValues('programType'),
         moaGroup:globalFilterValues('moaGroup'),
         status:globalFilterValues('status'),
         moa:globalFilterValues('moa'),
@@ -1050,6 +1055,7 @@
       if(!globalFilterMatch('year',String(o.year))) return false;
       if(!globalFilterMatch('createdYear',String(o.createdYear))) return false;
       if(!globalFilterMatch('referential',o.referential)) return false;
+      if(!globalFilterMatch('programType',o.programType||PROGRAM_TYPE_MISSING)) return false;
       if(!globalFilterMatch('moaGroup',o.moaGroup||'Non précisé')) return false;
       if(!globalFilterMatch('status',o.status)) return false;
       if(!globalFilterMatch('moa',o.moa)) return false;
@@ -1936,7 +1942,7 @@
     const ops=baseOperations(), selectedRegions=globalFilterValues('region');
     const depOps=selectedRegions.length?ops.filter(o=>selectedRegions.some(r=>norm(operationRegion(o))===norm(r))):ops;
     return {
-      year:uniq(ops.map(o=>o.year)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), createdYear:uniq(ops.map(o=>o.createdYear)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
+      year:uniq(ops.map(o=>o.year)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), createdYear:uniq(ops.map(o=>o.createdYear)).filter(v=>String(v).trim()!=='').sort((a,b)=>Number(a)-Number(b)), referential:uniq(ops.map(o=>o.referential)), programType:uniq(ops.map(o=>o.programType||PROGRAM_TYPE_MISSING)).sort((a,b)=>programTypeOrder(a)-programTypeOrder(b)), moaGroup:uniq(ops.map(o=>o.moaGroup||'Non précisé')),
       status:[...PROGRESS_ORDER,'unknown'].filter(k=>ops.some(o=>o.status===k)), moa:uniq(ops.map(o=>o.moa)), region:uniq(ops.map(o=>operationRegion(o))), department:uniq(depOps.map(o=>o.department)).sort((a,b)=>String(a).localeCompare(String(b),'fr',{numeric:true})),
       profile:uniq(ops.map(o=>o.profile||'Non précisé')), socialZone:uniq(ops.map(o=>o.socialZone||'Non précisé'))
     };
@@ -1968,7 +1974,7 @@
     if(SHARE){ filtersEl.innerHTML=shareReady()?SHARE.lockedFiltersHtml(baseOperations().length):''; return; }
     const scrollSnapshot=captureUiScroll();
     const options=filterOptions();
-    const defs=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
+    const defs=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['programType','Type de programme',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
     filtersEl.innerHTML=defs.map(([key,label,labeller])=>{
       const values=options[key]||[],selected=globalFilterValues(key),query=norm(state.filterSearch?.[key]||'');
       const placeholder=`Rechercher dans ${String(label).toLowerCase()}…`;
@@ -2237,7 +2243,7 @@
   }
   function projectGeneralHtml(project,op){
     const cert=op||project;
-    return `<div class="p10-dashboard"><div class="p10-dashboard-main"><div class="p10-pair"><article class="p10-card">${projectUxHeading('Identit\u00e9 du projet','source')}<dl class="p10-data-list">${projectUxDatum('Code projet',project.code)}${projectUxDatum('Ma\u00eetre d\u2019ouvrage',project.moa)}${projectUxDatum('Groupe MOA',privacy()?.enabled?.()&&project.moaGroup?privacy().moa(project.moaGroup):project.moaGroup)}${projectUxDatum('Ann\u00e9e de construction',op?.constructionYear)}${projectUxDatum('Ann\u00e9e de certification',cert.year)}${projectUxDatum('R\u00e9f\u00e9rentiel',cert.referential)}</dl></article>${projectUxTimelineHtml(project,op)}</div><div class="p10-pair">${projectUxEnvelopeHtml(op)}${projectUxCvcHtml(op)}</div><article class="p10-card p10-performance-card">${projectUxHeading('Performances \u00e9nerg\u00e9tiques','chart','energy')}<div class="p10-performance-grid">${projectUxCompareChart(op)}${projectUxDpeHtml(op)}</div></article>${projectUxWindowsHtml(op)}${projectUxTagsHtml(project,op)}</div><aside class="p10-dashboard-aside">${projectUxSynthesisHtml(project,op)}<article class="p10-card p10-cert-card">${projectUxHeading('Certification','check')}<dl class="p10-data-list">${projectUxDatum('Mention / label',projectUxValue(cert,'mentions')||cert.mentions)}${projectUxDatum('Performance',projectUxValue(cert,'performance')||cert.performance)}${projectUxDatum('Profil',projectUxValue(cert,'profile')||cert.profile)}${projectUxDatum('Version du r\u00e9f\u00e9rentiel',projectUxText(cert?.version)||projectUxRawHeader(cert,'Version')||projectUxRawHeader(cert,'Version du r\u00e9f\u00e9rentiel applicable: Version'))}</dl></article></aside></div>${projectUxRequirementsHtml(project)}`;
+    return `<div class="p10-dashboard"><div class="p10-dashboard-main"><div class="p10-pair"><article class="p10-card">${projectUxHeading('Identit\u00e9 du projet','source')}<dl class="p10-data-list">${projectUxDatum('Code projet',project.code)}${projectUxDatum('Type de programme',project.programType)}${projectUxDatum('Ma\u00eetre d\u2019ouvrage',project.moa)}${projectUxDatum('Groupe MOA',privacy()?.enabled?.()&&project.moaGroup?privacy().moa(project.moaGroup):project.moaGroup)}${projectUxDatum('Ann\u00e9e de construction',op?.constructionYear)}${projectUxDatum('Ann\u00e9e de certification',cert.year)}${projectUxDatum('R\u00e9f\u00e9rentiel',cert.referential)}</dl></article>${projectUxTimelineHtml(project,op)}</div><div class="p10-pair">${projectUxEnvelopeHtml(op)}${projectUxCvcHtml(op)}</div><article class="p10-card p10-performance-card">${projectUxHeading('Performances \u00e9nerg\u00e9tiques','chart','energy')}<div class="p10-performance-grid">${projectUxCompareChart(op)}${projectUxDpeHtml(op)}</div></article>${projectUxWindowsHtml(op)}${projectUxTagsHtml(project,op)}</div><aside class="p10-dashboard-aside">${projectUxSynthesisHtml(project,op)}<article class="p10-card p10-cert-card">${projectUxHeading('Certification','check')}<dl class="p10-data-list">${projectUxDatum('Mention / label',projectUxValue(cert,'mentions')||cert.mentions)}${projectUxDatum('Performance',projectUxValue(cert,'performance')||cert.performance)}${projectUxDatum('Profil',projectUxValue(cert,'profile')||cert.profile)}${projectUxDatum('Version du r\u00e9f\u00e9rentiel',projectUxText(cert?.version)||projectUxRawHeader(cert,'Version')||projectUxRawHeader(cert,'Version du r\u00e9f\u00e9rentiel applicable: Version'))}</dl></article></aside></div>${projectUxRequirementsHtml(project)}`;
   }
   // V6.14 : rappel des exigences sélectionnées (source Exigences / RAPPORT), par code opération uniquement.
   // Données lues via l'API figée NEWOSB_REQUIREMENTS.getOperationRequirements, indépendante des filtres de l'onglet Exigences.
@@ -3027,7 +3033,7 @@
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 
   // V6.15 : périmètre affiché, pour la création d'un lien de partage (newosb-share.js).
-  const SHARE_FILTER_LABELS=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
+  const SHARE_FILTER_LABELS=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['programType','Type de programme'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
   function shareScope(){
     const ops=[...filteredOperations(),...filteredExcludedOperations()];
     return {

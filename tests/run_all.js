@@ -758,6 +758,34 @@ test('le script transmet type et nom du programme ; lien anonymisé : type conse
   assert.strictEqual(row.programName, ''); assert.strictEqual(row.programType, 'Scolaire et enseignement'); assert(!JSON.stringify(row).includes('Lilas'));
   assert.strictEqual(JSON.stringify(gs.newosbBridgeRequest({ mode: 'ping', share: tok }).share.reqFilters), '{"programType":["Scolaire et enseignement"]}');
 });
+
+test('OPERATIONS : type de programme ajouté à chaque ligne (RAPPORT par code, puis par n° de contrat, sinon nom de l’opération)', () => {
+  const H3 = [...RH, 'Évaluation: Opération: Nom du programme (client)', 'Évaluation: Opération: Numéro du contrat'];
+  const M3 = [H3,
+    ['1.1.1 - Ex', 'EVA-1', 'Promoteur A', 'OP-1', TN, '04/05/2026', 'IDF', '75', '1.1.1', '', 'En cours', '', 'Crèche des Lilas', ''],
+    ['1.1.1 - Ex', 'EVA-3', 'Bailleur B', '', TN, '04/05/2026', 'IDF', '75', '1.1.1', '', 'En cours', '', 'Gymnase municipal', 'CT-OP-3']];
+  const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY }, extraSheets: { RAPPORT: M3 } });
+  const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.deepStrictEqual(m.headers.slice(-2).join('|'), 'Type de programme (calculé)|Type de programme : origine');
+  const c = gs.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
+  const by = Object.fromEntries(c.rows.filter(r => r[0]).map(r => [r[0], r.slice(-2)]));
+  assert.strictEqual(by['OP-1'][0], 'Scolaire et enseignement'); assert(/code opération/.test(by['OP-1'][1]));
+  assert.strictEqual(by['OP-3'][0], 'Équipements publics (culturels, sportifs, administratifs)'); assert(/contrat/.test(by['OP-3'][1]));
+  assert.strictEqual(by['OP-2'][0], "Logement collectif (immeubles d'appartements)"); assert(/OPERATIONS/.test(by['OP-2'][1]));
+  assert(c.rows.every(r => r.length === m.headers.length));
+  const anon = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, NEWOSB_ANONYMIZED_ONLY: '1' }, extraSheets: { RAPPORT: M3 } });
+  const ca = anon.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
+  assert(ca.rows.some(r => r[r.length - 2] === 'Scolaire et enseignement')); assert(!JSON.stringify(ca.rows).includes('Lilas'));
+  const tok = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['overview'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + 86400000 }).token;
+  const sm = gs.newosbBridgeRequest({ mode: 'meta', share: tok }); const sc = gs.newosbBridgeRequest({ mode: 'chunk', share: tok, offset: 0, limit: 10 });
+  assert.strictEqual(sm.headers.slice(-2)[0], 'Type de programme (calculé)'); assert.strictEqual(sc.rows[0][sc.rows[0].length - 2], 'Scolaire et enseignement');
+  const none = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY } }); const cn = none.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
+  assert(cn.rows.every(r => r[r.length - 2]), 'sans RAPPORT : type déduit des seules données OPERATIONS');
+});
+test('Observatoire : filtre global « Type de programme » (menus issus d’OPERATIONS) et fiche projet', () => {
+  const n = read('newosb.js'), a = read('app.js');
+  assert(n.includes("['programType','Type de programme',v=>v]") && n.includes("globalFilterMatch('programType',o.programType||PROGRAM_TYPE_MISSING)") && n.includes("projectUxDatum('Type de programme',project.programType)"));
+  assert(a.includes("programType:['type de programme (calculé)','type de programme (calcule)']"));
+});
 atest('onglet Exigences : filtre « Type de programme » (ordre de la liste, cumul avec les autres filtres)', async () => {
   const m = reqModule(R1); await m.connect(); const all = m.api.auditInfo().filteredRows;
   m.check('programType', "Logement collectif (immeubles d'appartements)"); assert.strictEqual(m.api.auditInfo().filteredRows, all - 0);

@@ -74,6 +74,8 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(rt.connected && rt.count === 13, `13 projets chargés : 10 codes internes + 3 propositions sans code, non fusionnées malgré un nom identique (obtenu : ${rt.count})`);
       check(rt.progress && rt.progress.header === 'Opération: Évaluation: Statut' && rt.progress.column === 'BC', `avancement lu dans « Opération: Évaluation: Statut », colonne BC (obtenu : ${rt.progress && rt.progress.column})`);
       const fb = await page.textContent('#dataFeedback'); check(/colonne BC/.test(fb), 'message de connexion : « colonne BC » affiché — ' + fb);
+      const pt = await page.evaluate(() => { const opts = [...document.querySelectorAll('[data-global-filter-check="programType"]')].map(i => i.value); const types = [...new Set(window.NEWOSB_ENGINE.getOperations().map(o => o.programType))]; return { opts, types }; });
+      check(pt.opts.length > 0 && pt.types.every(t => t && !/Non disponible/.test(t)) && pt.opts.includes("Logement collectif (immeubles d'appartements)"), `filtre global « Type de programme » alimenté par le script (${pt.opts.join(' | ')})`);
       const ops = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => [o.code, o.status, o.progressState]));
       const st = Object.fromEntries(ops.map(o => [o[0], o[1]]));
       check(st['OP-3'] === 'complete' && st['OP-6'] === 'visit' && st['OP-7'] === 'compliant', '« Dossier complet », « Visite réalisée », « Évaluation conforme » reconnus');

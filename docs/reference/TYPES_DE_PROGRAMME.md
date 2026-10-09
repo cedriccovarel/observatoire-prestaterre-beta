@@ -1,4 +1,4 @@
-# Types de programme (onglet Exigences) — V6.18
+# Types de programme (onglet Exigences et filtre global) — V6.19
 
 Le type est déduit par le script Apps Script (bloc « LECTURE RAPPORT », identique dans `Code_Operations.gs` et `Code_Exigences.gs`) à partir de :
 
@@ -50,3 +50,7 @@ Pour ajouter un synonyme : compléter la liste `terms` de la catégorie dans `NE
 | Logement | Logement collectif | 2 938 |
 | Logement | Logement individuel | 68 |
 | Logement | Résidences gérées | 55 |
+
+## Filtre global de l’Observatoire (V6.19)
+
+Pour chaque ligne OPERATIONS, le script calcule le type dans cet ordre : colonne « Type de programme » d’OPERATIONS (si saisie) → RAPPORT par code interne d’opération → RAPPORT par numéro de contrat → nom présent dans OPERATIONS (« Nom du programme (client) », sinon « Nom de l’opération ») avec le référentiel de la ligne. L’origine retenue est indiquée dans la colonne « Type de programme : origine ».

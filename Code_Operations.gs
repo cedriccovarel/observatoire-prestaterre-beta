@@ -45,7 +45,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.18',
+  VERSION: '06.19',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -163,7 +163,7 @@ function newosbApiRequest_(params) {
       version: OBSERVATOIRE_CONFIG.VERSION,
       format: 'matrix-chunks-v2',
       generatedAt: new Date().toISOString(),
-      headers: meta.headers,
+      headers: newosbProgramTypeHeaders_(meta.headers),
       totalRows: meta.totalRows,
       lastRow: meta.lastRow,
       lastColumn: meta.lastColumn,
@@ -198,7 +198,8 @@ function newosbApiRequest_(params) {
     const requestedLimit = clampInteger_(params.limit, 1, OBSERVATOIRE_CONFIG.MAX_CHUNK_SIZE, OBSERVATOIRE_CONFIG.DEFAULT_CHUNK_SIZE);
     const meta = { sheet: sheet, lastColumn: lastColumn, totalRows: totalRows, firstDataRow: firstDataRow };
     const chunk = getRowsChunk_(sheet, meta, offset, requestedLimit);
-    if (newosbAnonymizedOnly_()) chunk.rows = newosbScrubMatrix_(fallbackMeta.headers, chunk.rows);
+    chunk.rows = newosbProgramTypeRows_(fallbackMeta.headers, chunk.rows);
+    if (newosbAnonymizedOnly_()) chunk.rows = newosbScrubMatrix_(newosbProgramTypeHeaders_(fallbackMeta.headers), chunk.rows);
     return {
       ok: true,
       service: 'NEWOSB OPERATIONS',
@@ -1010,7 +1011,7 @@ function newosbShareRequest_(access, params) {
   const matches = newosbShareMatches_(access, meta);
   if (mode === 'meta') {
     base.format = 'matrix-chunks-v2';
-    base.headers = meta.headers;
+    base.headers = newosbProgramTypeHeaders_(meta.headers);
     base.totalRows = matches.length;
     base.lastColumn = meta.lastColumn;
     base.headerRow = meta.headerRow;
@@ -1028,7 +1029,8 @@ function newosbShareRequest_(access, params) {
     const block = meta.sheet.getRange(first, 1, last - first + 1, meta.lastColumn).getDisplayValues();
     rows = slice.map(function(r) { return block[r - first]; });
   }
-  if (base.share.anonymized) rows = newosbScrubMatrix_(meta.headers, rows);
+  rows = newosbProgramTypeRows_(meta.headers, rows);
+  if (base.share.anonymized) rows = newosbScrubMatrix_(newosbProgramTypeHeaders_(meta.headers), rows);
   return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, format: 'matrix-chunk-v2', offset: offset, count: rows.length, physicalCount: slice.length, totalRows: matches.length, done: offset + slice.length >= matches.length, rows: rows, durationMs: Date.now() - started };
 }
 
@@ -1336,6 +1338,95 @@ function testerGoogleSlides() {
   return p.getUrl();
 }
 
+
+// -----------------------------------------------------------------------------
+// V6.19 - Type de programme sur les lignes OPERATIONS (filtre global de l'Observatoire)
+// -----------------------------------------------------------------------------
+// Deux colonnes calculees sont ajoutees a chaque ligne transmise :
+// « Type de programme (calcule) » et « Type de programme : origine ».
+// Rapprochement avec RAPPORT par code interne d'operation, puis par numero de contrat ;
+// a defaut, classement du nom present dans OPERATIONS (meme dictionnaire que l'onglet Exigences).
+// Le calcul est fait avant toute anonymisation : le nom du programme n'est jamais transmis en plus.
+const NEWOSB_PT_HEADERS = ['Type de programme (calculé)', 'Type de programme : origine'];
+const NEWOSB_PT_OPS_ALIASES = {
+  code: ['Opération: Code interne', 'Operation: Code interne', 'Code interne', 'Code opération', 'Code operation'],
+  contract: ['Numéro du contrat', 'Contrat: Numéro du contrat', 'Numero du contrat'],
+  programName: ['Nom du programme (client)', 'Opération: Nom du programme (client)'],
+  name: ["Nom de l'opération", 'Nom de l operation', 'Nom opération', "Nom de l'opération (interne)"],
+  referential: ['Référentiel', 'Référentiel: Nom du référentiel', 'Opération: Référentiel: Nom du référentiel'],
+  typeInput: ['Type de programme', 'Opération: Type de programme']
+};
+
+function newosbPtCol_(headers, aliases) {
+  const norm = (headers || []).map(newosbExigencesNorm_);
+  for (let i = 0; i < aliases.length; i++) { const k = norm.lastIndexOf(newosbExigencesNorm_(aliases[i])); if (k >= 0) return k; }
+  return -1;
+}
+
+// Index RAPPORT : code d'operation / numero de contrat -> type de programme (mis en cache 10 min).
+function newosbProgramTypeIndex_() {
+  const cache = (function() { try { return CacheService.getScriptCache(); } catch (e) { return null; } })();
+  if (cache) {
+    try {
+      const n = Number(cache.get('newosb_pt_n') || -1);
+      if (n >= 0) { let text = ''; for (let i = 0; i < n; i++) { const part = cache.get('newosb_pt_' + i); if (part == null) { text = null; break; } text += part; } if (text !== null) return JSON.parse(text || '{"code":{},"contract":{}}'); }
+    } catch (e) {}
+  }
+  const index = { code: {}, contract: {} };
+  let ctx = null;
+  try { ctx = newosbRapportContext_(); } catch (e) { return index; }
+  const cols = ctx.cols, first = NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW, count = ctx.rowCount;
+  const read = function(idx) { return idx >= 0 ? ctx.sheet.getRange(first, idx + 1, count, 1).getDisplayValues().map(function(r) { return String(r[0] || '').trim(); }) : null; };
+  const codes = read(cols.operationCode), contracts = read(cols.contractNumber), names = read(cols.programName), refs = read(cols.referential), typed = read(cols.programTypeInput);
+  if (!codes && !contracts) return index;
+  const seen = {};
+  for (let i = 0; i < count; i++) {
+    const code = codes ? newosbShareNormCode_(codes[i]) : '', contract = contracts ? newosbShareNormCode_(contracts[i]) : '';
+    if (!code && !contract) continue;
+    const key = code + '|' + contract;
+    const name = names ? names[i] : '', typedValue = typed ? typed[i] : '';
+    if (seen[key] && !typedValue && !(name && !seen[key].hasName)) continue;
+    const found = newosbExigencesProgramTypeInput_(typedValue) || newosbExigencesProgramType_(name, refs ? refs[i] : '');
+    const entry = { t: found.type, s: typedValue && found.source.indexOf('saisie') === 0 ? 'RAPPORT : type saisi' : (name ? 'RAPPORT : nom du programme' : 'RAPPORT : référentiel') };
+    seen[key] = { hasName: !!name };
+    if (code) index.code[code] = entry;
+    if (contract) index.contract[contract] = entry;
+  }
+  if (cache) {
+    try {
+      const text = JSON.stringify(index), size = 90000, n = Math.ceil(text.length / size);
+      if (n <= 40) { for (let i = 0; i < n; i++) cache.put('newosb_pt_' + i, text.slice(i * size, (i + 1) * size), 600); cache.put('newosb_pt_n', String(n), 600); }
+    } catch (e) {}
+  }
+  return index;
+}
+
+function newosbProgramTypeHeaders_(headers) {
+  return (headers || []).concat(NEWOSB_PT_HEADERS);
+}
+
+function newosbProgramTypeRows_(headers, rows) {
+  if (!rows || !rows.length) return rows || [];
+  const c = {};
+  Object.keys(NEWOSB_PT_OPS_ALIASES).forEach(function(k) { c[k] = newosbPtCol_(headers, NEWOSB_PT_OPS_ALIASES[k]); });
+  const index = newosbProgramTypeIndex_();
+  return rows.map(function(row) {
+    const v = function(i) { return i >= 0 ? String(row[i] == null ? '' : row[i]).trim() : ''; };
+    let found = null, origin = '';
+    const typed = newosbExigencesProgramTypeInput_(v(c.typeInput));
+    if (typed) { found = typed; origin = 'OPERATIONS : type saisi'; }
+    const code = newosbShareNormCode_(v(c.code)), contract = newosbShareNormCode_(v(c.contract));
+    if (!found && code && index.code[code]) { found = { type: index.code[code].t }; origin = index.code[code].s + ' (code opération)'; }
+    if (!found && contract && index.contract[contract]) { found = { type: index.contract[contract].t }; origin = index.contract[contract].s + ' (n° de contrat)'; }
+    if (!found) {
+      const name = v(c.programName) || v(c.name);
+      found = newosbExigencesProgramType_(name, v(c.referential));
+      origin = name ? 'OPERATIONS : nom de l’opération' : 'OPERATIONS : référentiel';
+    }
+    return row.concat([found.type, origin]);
+  });
+}
+
 // -----------------------------------------------------------------------------
 // V6.15 - Lecture de RAPPORT pour les liens de partage qui incluent l'onglet Exigences.
 // Seule la lecture est reprise de Code_Exigences.gs ; l'acces reste controle par le jeton du lien.
@@ -1482,6 +1573,13 @@ const NEWOSB_EXIGENCES_ALIASES = {
     'Mention',
     'Mentions',
     'Mention '
+  ],
+  contractNumber: [
+    'Évaluation: Opération: Numéro du contrat',
+    'Evaluation: Operation: Numero du contrat',
+    'Évaluation: Contrat: Numéro du contrat',
+    'Opération: Numéro du contrat',
+    'Numéro du contrat'
   ],
   programTypeInput: [
     'Évaluation: Opération: Type de programme',

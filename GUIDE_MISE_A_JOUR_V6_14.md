@@ -88,6 +88,10 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.19 — Filtre « Type de programme » sur tout l’Observatoire
+
+Coller le nouveau **`Code_Operations.gs`** (06.19) puis **Nouvelle version** du déploiement. Rien d’autre : le type est calculé par le script (RAPPORT par code d’opération ou n° de contrat, sinon nom de l’opération). Sans mise à jour du script, le filtre affiche « Non disponible (script à mettre à jour) ».
+
 ## V6.18 — Filtre « Type de programme » (onglet Exigences)
 
 1. Script OPERATIONS : coller le nouveau **`Code_Operations.gs`** (06.18) puis **Nouvelle version** du déploiement. Si tu utilises encore la source Exigences séparée, faire de même avec **`Code_Exigences.gs`**.

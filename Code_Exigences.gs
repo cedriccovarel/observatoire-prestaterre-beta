@@ -310,6 +310,13 @@ const NEWOSB_EXIGENCES_ALIASES = {
     'Mentions',
     'Mention '
   ],
+  contractNumber: [
+    'Évaluation: Opération: Numéro du contrat',
+    'Evaluation: Operation: Numero du contrat',
+    'Évaluation: Contrat: Numéro du contrat',
+    'Opération: Numéro du contrat',
+    'Numéro du contrat'
+  ],
   programTypeInput: [
     'Évaluation: Opération: Type de programme',
     'Evaluation: Operation: Type de programme',
