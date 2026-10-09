@@ -88,6 +88,46 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.15 — Liens de partage à durée limitée
+
+### Mise à jour (10 min)
+
+1. Script OPERATIONS : remplacer le contenu par le nouveau **`Code_Operations.gs`** (version 06.15), enregistrer, puis **Déployer → Gérer les déploiements → crayon → Nouvelle version → Déployer**. L’URL `/exec` ne change pas. Le script Exigences ne change pas.
+2. Site : publier les fichiers de la V6.15 (dont le nouveau `newosb-share.js`), puis recharger une fois avec Ctrl + F5.
+3. Au premier lien créé, le script ajoute un onglet **masqué** `OBSERVATOIRE_PARTAGES` dans le classeur OPERATIONS. Ne pas le modifier à la main (il ne contient que des empreintes de jetons, jamais les liens eux-mêmes).
+4. **Destinataires extérieurs** : le déploiement doit être accessible à « **Tout le monde** » (Déployer → Gérer les déploiements → « Qui a accès »). Avec « Toute personne de votre domaine », seuls les comptes Google de votre organisation peuvent ouvrir un lien. La clé reste obligatoire pour tout le reste : « Tout le monde » ne donne accès à aucune donnée sans clé ou lien valide.
+
+### Créer un lien
+
+1. Connecter l’Observatoire (bouton Données, clé OPERATIONS), appliquer les filtres voulus.
+2. **⤴ Partager** : nommer le lien, cocher les onglets accessibles, choisir l’onglet d’ouverture et la durée, cocher « Anonymiser » si besoin, puis **Créer le lien**.
+3. **Copier le lien** tout de suite : il n’est affiché qu’une fois. Pour le retrouver plus tard, il faut en créer un nouveau.
+
+Exigences et Présentation ne sont pas partageables (source et clé distinctes, exports Google Slides).
+
+### Gérer les liens
+
+La même fenêtre liste les liens : statut, expiration, nombre d’ouvertures, dernier accès. **Prolonger** fixe une nouvelle durée à partir de maintenant ; **Révoquer** coupe l’accès immédiatement (au prochain chargement de la page). Changer la clé `NEWOSB_ACCESS_KEY` ne révoque pas les liens : utiliser **Révoquer**.
+
+### Ce qui est garanti, et ce qui ne l’est pas
+
+| Garanti par le script, à chaque requête | Restriction d’affichage seulement |
+|---|---|
+| Jeton valide, non révoqué, non expiré | Choix des onglets visibles |
+| Seules les opérations du périmètre sont transmises | Filtres verrouillés dans l’interface |
+| Données pseudonymisées si le lien est anonymisé | |
+| Aucun accès à l’administration des liens, à Google Slides ni à la lecture complète | |
+
+Toute personne qui possède le lien voit le périmètre jusqu’à son expiration : le transmettre comme un document confidentiel. Le nom du lien est affiché tel quel au destinataire (ne pas y mettre de nom de MOA pour un lien anonymisé).
+
+### Vérifier
+
+| Test | Résultat attendu |
+|---|---|
+| Ouvrir le lien dans une fenêtre de navigation privée | Pas de mot de passe ; panneau « Périmètre figé » ; seuls les onglets choisis |
+| Révoquer le lien puis recharger la page du destinataire | « Accès impossible — Ce lien de partage a été révoqué » ; aucune donnée |
+| Lien anonymisé | Aucun nom de MOA ni d’opération, aucune adresse |
+
 ## Retour arrière
 
-Apps Script : Gérer les déploiements → Modifier → choisir la version précédente. GitHub : Revert du commit V6.14. Attention : revenir à l’ancien `Code_Exigences.gs` ré-expose RAPPORT sans contrôle.
+Apps Script : Gérer les déploiements → Modifier → choisir la version précédente (revenir avant la V6.15 rend tous les liens de partage inutilisables). GitHub : Revert du commit V6.14. Attention : revenir à l’ancien `Code_Exigences.gs` ré-expose RAPPORT sans contrôle.

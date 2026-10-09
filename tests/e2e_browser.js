@@ -348,6 +348,94 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(popup && /docs\.google\.com\/presentation/.test(popup.url()), 'Google Slides : la présentation s’ouvre dans la fenêtre du pont (' + (popup && popup.url()) + ')');
       check(errors.length === 0, 'aucune erreur JavaScript pendant les exports' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close(); }
+    console.log('\nH. Liens de partage à durée limitée (V6.15)');
+    { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
+      await page.evaluate(() => { const i = [...document.querySelectorAll('[data-global-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
+      const adminCount = await page.textContent('#obsFilterCount');
+      const pagesBefore = context.pages().length;
+      const popupP = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+      await page.click('#obsShareBtn');
+      const popup = await popupP;
+      const listed = await page.waitForFunction(() => /Aucun lien créé/.test(document.querySelector('#obsShareModal')?.textContent || ''), null, { timeout: 30000 }).then(() => true, () => false);
+      check(listed && (popup || pagesBefore > 1), 'Partager : fenêtre Google ouverte (ou réutilisée) pendant le clic, liste des liens lue par le pont');
+      const scopeTxt = await page.textContent('.obs-share-scope');
+      check(/\b3\b\s*opérations/.test(scopeTxt) && /Promoteur A/.test(scopeTxt), `Partager : périmètre figé = sélection affichée (${adminCount} opérations, MOA Promoteur A)`);
+      await page.check('[data-share-tab][value="carbon"]');
+      await page.fill('[data-share-label]', 'Vue Promoteur A');
+      await page.selectOption('[data-share-duration]', '7');
+      await page.click('[data-share-create]');
+      await page.waitForSelector('[data-share-link]', { timeout: 30000 }).catch(() => {});
+      const link = await page.$eval('[data-share-link]', i => i.value).catch(() => '');
+      check(/#partage=[A-Za-z0-9]{43}&src=https%3A%2F%2Fscript\.google\.com/.test(link), 'lien créé : jeton dans le fragment (#), source Apps Script jointe');
+      const token = (link.match(/partage=([A-Za-z0-9]+)/) || [])[1] || '';
+      const sheetTxt = JSON.stringify(gs.sheets.OBSERVATOIRE_PARTAGES?.data || []);
+      check(token && !sheetTxt.includes(token) && sheetTxt.includes('OP-1') && sheetTxt.includes('OP-7') && !sheetTxt.includes('OP-3'), 'serveur : empreinte seule, périmètre = codes réels de la sélection');
+      const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+      check(token && !stored.includes(token), 'le jeton n’est enregistré ni dans localStorage ni dans sessionStorage');
+      await page.check('[data-share-anonymized]');
+      await page.fill('[data-share-label]', '');
+      await page.click('[data-share-create]');
+      await page.waitForFunction(old => { const v = document.querySelector('[data-share-link]')?.value; return v && v !== old; }, link, { timeout: 30000 }).catch(() => {});
+      const anonLink = await page.$eval('[data-share-link]', i => i.value).catch(() => '');
+      const rows = await page.$$eval('.obs-share-table tbody tr', trs => trs.length).catch(() => 0);
+      check(rows === 2, `liste des liens : ${rows} liens affichés`);
+      check(errors.length === 0, 'administration : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
+
+      const openShared = async (url, viewport) => {
+        const ctx2 = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
+        await ctx2.route('https://script.google.com/**', async route => {
+          const u = new URL(route.request().url()); const run = u.pathname.match(/\/__run\/(\w+)$/);
+          if (run) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(gs[run[1]](JSON.parse(route.request().postData() || '{}'))) });
+          const out = gs.doGet({ parameter: Object.fromEntries(u.searchParams.entries()) });
+          if (out.html !== undefined) return route.fulfill({ contentType: 'text/html', body: out.html.replace('<script>', SHIM + '<script>') });
+          return route.fulfill({ contentType: 'application/json', body: out.text });
+        });
+        const p2 = await ctx2.newPage(); const errs = []; p2.on('pageerror', e => errs.push(e.message));
+        await p2.goto(url);
+        await p2.waitForFunction(() => document.documentElement.classList.contains('newosb-share-ready') || /Accès impossible|invalide/.test(document.getElementById('obsPage')?.textContent || ''), null, { timeout: 40000 }).catch(() => {});
+        return { p2, ctx2, errs };
+      };
+      { const { p2, ctx2, errs } = await openShared(link);
+        check(await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready')), 'destinataire : Observatoire chargé sans mot de passe ni clé');
+        check(await p2.evaluate(() => !document.querySelector('#authScreen') || getComputedStyle(document.querySelector('#authScreen')).display === 'none'), 'destinataire : écran de mot de passe absent');
+        const codes = await p2.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => o.code).sort().join(','));
+        check(codes === 'OP-1,OP-2,OP-7', `destinataire : uniquement les opérations du périmètre (${codes})`);
+        const nav = await p2.$$eval('#obsNav [data-page]', bs => bs.filter(b => getComputedStyle(b).display !== 'none').map(b => b.dataset.page).join(','));
+        check(nav === 'overview,carbon', `destinataire : seuls les onglets accordés sont visibles (${nav})`);
+        const hiddenCtl = await p2.evaluate(() => ['#obsSourceBtn', '#obsResetFilters', '#obsShareBtn', '#obsGeneratorBtn', '#obsRefreshBtn'].every(s => { const el = document.querySelector(s); return !el || getComputedStyle(el).display === 'none'; }));
+        check(hiddenCtl, 'destinataire : boutons Données, Réinitialiser, Partager, Générateur et Actualiser masqués');
+        const lockTxt = await p2.textContent('#obsFilters');
+        check(/Périmètre figé/.test(lockTxt) && /Vue Promoteur A/.test(lockTxt) && /3 opérations/.test(lockTxt) && !(await p2.$('#obsFilters [data-global-filter-check]')), 'destinataire : filtres remplacés par le périmètre figé (aucune case modifiable)');
+        await p2.click('#obsNav [data-page="carbon"]');
+        const onCarbon = await p2.evaluate(() => document.querySelector('#obsNav [data-page="carbon"]').classList.contains('is-active') && /Carbone/.test(document.querySelector('#obsPage').textContent));
+        check(onCarbon, 'destinataire : navigation entre les onglets accordés');
+        await p2.evaluate(() => { const b = document.querySelector('#obsNav [data-page="territories"]'); b.hidden = false; b.click(); });
+        const stillAllowed = await p2.evaluate(() => !document.querySelector('#obsNav [data-page="territories"]').classList.contains('is-active'));
+        check(stillAllowed, 'destinataire : un onglet non accordé ne s’ouvre pas, même en forçant le bouton');
+        const auth = await p2.evaluate(() => sessionStorage.getItem('prestaterre-observatoire-v21-auth'));
+        check(auth === null, 'destinataire : l’accès n’ouvre pas l’Observatoire complet (aucune session mémorisée)');
+        check(errs.length === 0, 'destinataire : aucune erreur JavaScript' + (errs.length ? ' : ' + errs.join(' | ') : ''));
+        await ctx2.close(); }
+      { const { p2, ctx2, errs } = await openShared(anonLink, { width: 390, height: 844 });
+        const body = await p2.evaluate(() => document.body.innerText);
+        const ok = await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready'));
+        check(ok && !/Promoteur A|Les Jardins|33400/.test(body), 'lien anonymisé : ni MOA, ni nom d’opération, ni code postal dans la page' + (ok ? ' ' + (body.match(/.{0,60}(Promoteur A|Les Jardins|33400).{0,60}/) || [''])[0] : ' (non chargé)'));
+        check(await p2.evaluate(() => getComputedStyle(document.querySelector('.obs-privacy-dock')).display === 'none'), 'lien anonymisé : interrupteur d’anonymisation masqué (mode imposé)');
+        check(await p2.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'lien partagé lisible sur téléphone (pas de défilement horizontal)');
+        check(errs.length === 0, 'lien anonymisé : aucune erreur JavaScript' + (errs.length ? ' : ' + errs.join(' | ') : ''));
+        await ctx2.close(); }
+      const list = gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares;
+      gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: list.find(s => !s.anonymized).id });
+      { const { p2, ctx2 } = await openShared(link);
+        const txt = await p2.textContent('#obsPage'); const n = await p2.evaluate(() => window.NEWOSB_ENGINE.getOperations().length);
+        check(/Accès impossible/.test(txt) && /révoqué/.test(txt) && !(await p2.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected)), `lien révoqué : accès refusé, aucune donnée réelle — ${txt.slice(0, 200)}`);
+        await ctx2.close(); }
+      gs.sheets.OBSERVATOIRE_PARTAGES.data.slice(1).forEach(r => { r[4] = String(Date.now() - 1000); });
+      { const { p2, ctx2 } = await openShared(anonLink);
+        const txt = await p2.textContent('#obsPage');
+        check(/Accès impossible/.test(txt) && /expiré/.test(txt), 'lien expiré : accès refusé avec un message clair — ' + txt.slice(0, 200));
+        await ctx2.close(); }
+      await context.close(); }
   } finally { await browser.close(); server.close(); }
   console.log(`\n${passed} vérifications navigateur réussies, ${failed} en échec.`);
   process.exit(failed ? 1 : 0);

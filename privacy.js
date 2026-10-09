@@ -56,8 +56,11 @@
     }
     throw new Error('Pseudonymisation : collisions répétées');
   }
-  function enabled(){ try{return localStorage.getItem(STORAGE_KEY)==='1';}catch{return false;} }
+  // V6.15 : un lien de partage anonymisé impose le mode anonymisé, sans modifier le réglage du navigateur.
+  function forced(){ return !!(window.NEWOSB_SHARE&&window.NEWOSB_SHARE.forcePrivacy); }
+  function enabled(){ if(forced())return true; try{return localStorage.getItem(STORAGE_KEY)==='1';}catch{return false;} }
   function setEnabled(on){
+    if(forced())return;
     try{localStorage.setItem(STORAGE_KEY,on?'1':'0');}catch{}
     try{window.dispatchEvent(new CustomEvent(EVENT_NAME,{detail:{enabled:Boolean(on)}}));}catch{}
   }
@@ -124,7 +127,7 @@
   function syncControls(){
     const on=enabled();
     document.documentElement.classList.toggle('newosb-anonymized',on);
-    document.querySelectorAll('[data-privacy-toggle]').forEach(input=>{ input.checked=on; input.setAttribute('aria-checked',on?'true':'false'); });
+    document.querySelectorAll('[data-privacy-toggle]').forEach(input=>{ input.checked=on; input.disabled=forced(); input.setAttribute('aria-checked',on?'true':'false'); });
     document.querySelectorAll('[data-privacy-state]').forEach(el=>{el.textContent=on?'ACTIF':'INACTIF';});
   }
   function bindControls(){

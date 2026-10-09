@@ -1,5 +1,5 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.14 (script OPERATIONS, version API 06.14)
+ * PRESTATERRE OBSERVATOIRE - V6.15 (script OPERATIONS, version API 06.15)
  *
  * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
  * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
@@ -12,6 +12,10 @@
  * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
  * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration
  * (genererCleAccesObservatoire() peut creer une cle aleatoire, lisible ensuite dans les proprietes).
+ *
+ * Changements V6.15 : liens de partage a duree limitee (onglet masque OBSERVATOIRE_PARTAGES cree
+ *   automatiquement). Un lien ne donne acces qu'aux operations de son perimetre, jusqu'a sa date
+ *   d'expiration ; il est revocable a tout moment depuis l'Observatoire. Voir newosbShareAdmin_.
  *
  * Changements V6.14 :
  * - plus aucune donnee du classeur par GET direct, JSON ou JSONP : seul un ping minimal est public ;
@@ -37,7 +41,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.14',
+  VERSION: '06.15',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -86,6 +90,15 @@ function doGet(e) {
 function newosbBridgeRequest(params) {
   try {
     const input = params || {};
+    // V6.15 : lien de partage. Le jeton remplace la cle et limite les donnees au perimetre fige.
+    if (input.share !== undefined && input.share !== null && String(input.share) !== '') {
+      if (input.key) return { ok: false, authError: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: 'Requete refusee : cle et lien de partage fournis ensemble.' };
+      const shareAccess = newosbShareAccess_(input.share);
+      if (!shareAccess.ok) return { ok: false, authError: true, shareError: true, expired: !!shareAccess.expired, expiresAt: shareAccess.expiresAt || null, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: shareAccess.error };
+      const shareParams = {};
+      Object.keys(input).forEach(function(k) { if (k !== 'share') shareParams[k] = input[k]; });
+      return newosbShareRequest_(shareAccess, shareParams);
+    }
     const access = newosbCheckAccess_(input);
     if (!access.ok) {
       return { ok: false, authError: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: access.error };
@@ -123,6 +136,10 @@ function newosbApiRequest_(params) {
   // External services never block the OPERATIONS connection path.
   if (endpoint === 'zone123') return handleZone123Proxy_();
   if (endpoint === 'communes') return handleCommunesProxy_(params);
+
+  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend') {
+    return newosbShareAdmin_(mode, params);
+  }
 
   if (mode === 'createslides') {
     if (newosbAnonymizedOnly_()) throw new Error('Creation Google Slides desactivee sur un deploiement anonymise.');
@@ -224,7 +241,7 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
 .brand{font-size:12px;font-weight:800;letter-spacing:.11em;color:#0b6b4a;text-transform:uppercase}.title{font-size:22px;font-weight:800;margin:8px 0 10px}.status{font-size:14px;line-height:1.5;color:#52666b}.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#0b8f61;margin-right:8px;box-shadow:0 0 0 5px rgba(11,143,97,.1)}
 .small{margin-top:18px;font-size:12px;color:#7a8a8d}
 </style></head>
-<body><div class="wrap"><div class="card"><div class="brand">Observatoire V6.14</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
+<body><div class="wrap"><div class="card"><div class="brand">Observatoire V${OBSERVATOIRE_CONFIG.VERSION}</div><div class="title"><span class="dot"></span>Connexion Google OPERATIONS</div><div class="status" id="status">Connexion au classeur en cours... Cette fenetre se fermera automatiquement.</div><div class="small">Laisse cette fenetre ouverte pendant le chargement. Si Google demande une autorisation, valide-la ici.</div></div></div>
 <script>
 (function(){
   var TOKEN = '${token}';
@@ -619,6 +636,281 @@ function handleCommunesProxy_(params) {
   } catch (error) {
     return { ok: false, version: OBSERVATOIRE_CONFIG.VERSION, error: String(error && error.message ? error.message : error) };
   }
+}
+
+// -----------------------------------------------------------------------------
+// V6.15 - Liens de partage a duree limitee
+// -----------------------------------------------------------------------------
+// Un lien de partage donne acces, sans la cle d'acces, a un perimetre fige d'operations
+// (liste des codes internes calculee par l'Observatoire au moment de la creation).
+// Le controle est fait ici, cote serveur, a chaque requete : jeton connu, non revoque, non expire.
+// Seules les lignes du perimetre sont lues et transmises ; un lien « anonymise » recoit des
+// donnees pseudonymisees par le serveur. Le jeton n'est jamais stocke : seule son empreinte
+// SHA-256 est conservee dans l'onglet masque OBSERVATOIRE_PARTAGES.
+const NEWOSB_SHARE_CONFIG = {
+  SHEET: 'OBSERVATOIRE_PARTAGES',
+  HEADERS: ['Identifiant', 'Empreinte du jeton', 'Nom', 'Cree le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Onglets', 'Anonymise', 'Colonne code', 'Perimetre', 'Operations', 'Dernier acces (ms)', "Nombre d'acces", "Page d'ouverture"],
+  CODE_CELLS: 8,
+  CODE_CELL_CHARS: 45000,
+  MAX_CODES: 20000,
+  MIN_MINUTES: 60,
+  MAX_DAYS: 366,
+  TABS: ['overview', 'territories', 'stakeholders', 'certification', 'performance', 'solutions', 'energy', 'carbon', 'crossdata', 'operations', 'quality', 'dictionary'],
+  FAILURE_LIMIT: 60
+};
+
+function newosbShareColumns_() {
+  const out = NEWOSB_SHARE_CONFIG.HEADERS.slice();
+  for (let i = 1; i <= NEWOSB_SHARE_CONFIG.CODE_CELLS; i++) out.push('Codes ' + i);
+  return out;
+}
+
+function newosbShareSheet_(create) {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(NEWOSB_SHARE_CONFIG.SHEET);
+  if (!sheet && create) {
+    sheet = ss.insertSheet(NEWOSB_SHARE_CONFIG.SHEET);
+    const cols = newosbShareColumns_();
+    sheet.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]);
+    try { sheet.hideSheet(); } catch (e) {}
+    try { sheet.protect().setDescription('Liens de partage de l Observatoire (gere par le script)').setWarningOnly(true); } catch (e) {}
+  }
+  return sheet || null;
+}
+
+function newosbShareHash_(token) {
+  const bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, 'newosb-share|' + String(token || ''));
+  return bytes.map(function(b) { const h = ((b + 256) % 256).toString(16); return h.length < 2 ? '0' + h : h; }).join('');
+}
+
+function newosbShareNewToken_() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const a = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid() + Date.now());
+  const b = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Math.random());
+  let out = '';
+  a.concat(b).slice(0, 43).forEach(function(x) { out += alphabet.charAt(((x % 256) + 256) % alphabet.length); });
+  return out;
+}
+
+function newosbShareNormCode_(value) {
+  return String(value == null ? '' : value).replace(/[​-‍﻿]/g, '').replace(/[ \s]+/g, ' ').trim().toUpperCase();
+}
+
+// Texte libre ecrit dans la feuille : jamais interprete comme une formule.
+function newosbShareText_(value, max) {
+  return String(value == null ? '' : value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/^[=+\-@\s]+/, '').slice(0, max);
+}
+
+function newosbShareRecords_(sheet) {
+  if (!sheet) return [];
+  const last = sheet.getLastRow();
+  const width = NEWOSB_SHARE_CONFIG.HEADERS.length;
+  if (last < 2) return [];
+  return sheet.getRange(2, 1, last - 1, width).getValues().map(function(r, i) {
+    return {
+      row: i + 2,
+      id: String(r[0] || ''),
+      hash: String(r[1] || ''),
+      label: String(r[2] || ''),
+      createdAt: Number(r[3]) || 0,
+      expiresAt: Number(r[4]) || 0,
+      revokedAt: Number(r[5]) || 0,
+      tabs: String(r[6] || '').split(',').filter(function(t) { return NEWOSB_SHARE_CONFIG.TABS.indexOf(t) >= 0; }),
+      anonymized: String(r[7]) === '1',
+      codeHeader: String(r[8] || ''),
+      summary: String(r[9] || ''),
+      operationCount: Number(r[10]) || 0,
+      lastAccessAt: Number(r[11]) || 0,
+      accessCount: Number(r[12]) || 0,
+      landing: String(r[13] || '')
+    };
+  }).filter(function(rec) { return rec.id && rec.hash; });
+}
+
+function newosbShareCodes_(sheet, rec) {
+  const start = NEWOSB_SHARE_CONFIG.HEADERS.length + 1;
+  const parts = sheet.getRange(rec.row, start, 1, NEWOSB_SHARE_CONFIG.CODE_CELLS).getValues()[0];
+  const text = parts.map(function(p) { return String(p || '').replace(/^~/, ''); }).join('');
+  if (!text) return [];
+  const list = JSON.parse(text);
+  return Array.isArray(list) ? list.map(newosbShareNormCode_).filter(Boolean) : [];
+}
+
+function newosbShareStatus_(rec, now) {
+  if (rec.revokedAt) return 'revoked';
+  if (!rec.expiresAt || rec.expiresAt <= now) return 'expired';
+  return 'active';
+}
+
+function newosbSharePublic_(rec, now) {
+  return {
+    id: rec.id, label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, revokedAt: rec.revokedAt,
+    status: newosbShareStatus_(rec, now), tabs: rec.tabs, anonymized: rec.anonymized || newosbAnonymizedOnly_(),
+    summary: rec.summary, operationCount: rec.operationCount, lastAccessAt: rec.lastAccessAt, accessCount: rec.accessCount, landing: rec.landing
+  };
+}
+
+function newosbShareExpiry_(value, now) {
+  const t = Number(value);
+  if (!Number.isFinite(t)) throw new Error("Date d'expiration invalide.");
+  if (t < now + NEWOSB_SHARE_CONFIG.MIN_MINUTES * 60000) throw new Error("La date d'expiration doit etre au moins une heure apres maintenant.");
+  if (t > now + NEWOSB_SHARE_CONFIG.MAX_DAYS * 86400000) throw new Error("Duree maximale d'un lien : " + NEWOSB_SHARE_CONFIG.MAX_DAYS + ' jours.');
+  return Math.round(t);
+}
+
+function newosbShareLock_() {
+  try { const lock = LockService.getScriptLock(); if (lock.tryLock(10000)) return lock; } catch (e) {}
+  return null;
+}
+
+// Administration (cle d'acces deja verifiee par newosbBridgeRequest).
+function newosbShareAdmin_(mode, params) {
+  const now = Date.now();
+  if (mode === 'sharelist') {
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, now: now, anonymizedOnly: newosbAnonymizedOnly_(), shares: newosbShareRecords_(newosbShareSheet_(false)).map(function(r) { return newosbSharePublic_(r, now); }).reverse() };
+  }
+  if (mode === 'sharecreate') {
+    const tabs = (Array.isArray(params.tabs) ? params.tabs : []).map(String).filter(function(t, i, all) { return NEWOSB_SHARE_CONFIG.TABS.indexOf(t) >= 0 && all.indexOf(t) === i; });
+    if (!tabs.length) throw new Error('Choisis au moins un onglet a partager.');
+    const codes = (Array.isArray(params.codes) ? params.codes : []).map(newosbShareNormCode_).filter(function(c, i, all) { return c && c.length <= 80 && all.indexOf(c) === i; });
+    if (!codes.length) throw new Error("Le perimetre ne contient aucune operation avec un code interne : rien a partager.");
+    if (codes.length > NEWOSB_SHARE_CONFIG.MAX_CODES) throw new Error('Perimetre trop large (' + codes.length + ' operations, maximum ' + NEWOSB_SHARE_CONFIG.MAX_CODES + ').');
+    const meta = getSheetMeta_();
+    const codeHeader = String(params.codeHeader || '');
+    if (newosbShareCodeIndex_(meta.headers, codeHeader) < 0) throw new Error('Colonne du code interne introuvable dans OPERATIONS : ' + codeHeader);
+    const json = JSON.stringify(codes);
+    const size = NEWOSB_SHARE_CONFIG.CODE_CELL_CHARS;
+    if (json.length > size * NEWOSB_SHARE_CONFIG.CODE_CELLS) throw new Error('Perimetre trop volumineux pour un lien.');
+    const slices = [];
+    for (let i = 0; i < NEWOSB_SHARE_CONFIG.CODE_CELLS; i++) { const s = json.slice(i * size, (i + 1) * size); slices.push(s ? '~' + s : ''); }
+    const token = newosbShareNewToken_();
+    const hash = newosbShareHash_(token);
+    const id = hash.slice(0, 10);
+    const expiresAt = newosbShareExpiry_(params.expiresAt, now);
+    const anonymized = !!params.anonymized || newosbAnonymizedOnly_();
+    const landing = tabs.indexOf(String(params.landing || '')) >= 0 ? String(params.landing) : tabs[0];
+    const label = newosbShareText_(params.label, 120) || 'Observatoire partage';
+    const summary = newosbShareText_(params.summary, 2000);
+    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing].concat(slices);
+    const lock = newosbShareLock_();
+    try {
+      const sheet = newosbShareSheet_(true);
+      const target = sheet.getLastRow() + 1;
+      sheet.getRange(target, 1, 1, row.length).setNumberFormat('@').setValues([row]);
+    } finally { if (lock) lock.releaseLock(); }
+    const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing };
+    // Le jeton n'est renvoye qu'une fois, a la creation ; seule son empreinte est conservee.
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: newosbSharePublic_(rec, now) };
+  }
+  if (mode === 'sharerevoke' || mode === 'shareextend') {
+    const id = String(params.id || '');
+    const lock = newosbShareLock_();
+    try {
+      const sheet = newosbShareSheet_(false);
+      const rec = newosbShareRecords_(sheet).filter(function(r) { return r.id === id; })[0];
+      if (!rec) throw new Error('Lien de partage introuvable.');
+      if (mode === 'sharerevoke') { if (!rec.revokedAt) { rec.revokedAt = now; sheet.getRange(rec.row, 6).setNumberFormat('@').setValue(String(now)); } }
+      else {
+        if (rec.revokedAt) throw new Error('Un lien revoque ne peut pas etre prolonge : cree un nouveau lien.');
+        rec.expiresAt = newosbShareExpiry_(params.expiresAt, now);
+        sheet.getRange(rec.row, 5).setNumberFormat('@').setValue(String(rec.expiresAt));
+      }
+      return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: newosbSharePublic_(rec, now) };
+    } finally { if (lock) lock.releaseLock(); }
+  }
+  throw new Error('Action de partage inconnue.');
+}
+
+// Verification d'un jeton de partage (aucune cle d'acces).
+function newosbShareAccess_(token) {
+  const text = String(token || '');
+  if (!/^[A-Za-z0-9]{32,64}$/.test(text)) return { ok: false, error: 'Lien de partage invalide.' };
+  try { if (Number(CacheService.getScriptCache().get('newosb_share_failures') || 0) >= NEWOSB_SHARE_CONFIG.FAILURE_LIMIT) return { ok: false, error: 'Trop de tentatives avec des liens invalides : reessaie dans quelques minutes.' }; } catch (e) {}
+  const hash = newosbShareHash_(text);
+  const sheet = newosbShareSheet_(false);
+  const rec = newosbShareRecords_(sheet).filter(function(r) { return newosbSafeEqual_(r.hash, hash); })[0];
+  if (!rec) {
+    try { const c = CacheService.getScriptCache(); c.put('newosb_share_failures', String(Number(c.get('newosb_share_failures') || 0) + 1), 600); } catch (e) {}
+    return { ok: false, error: 'Lien de partage invalide ou supprime.' };
+  }
+  const status = newosbShareStatus_(rec, Date.now());
+  if (status === 'revoked') return { ok: false, error: 'Ce lien de partage a ete revoque.' };
+  if (status === 'expired') return { ok: false, expired: true, expiresAt: rec.expiresAt, error: 'Ce lien de partage a expire.' };
+  return { ok: true, sheet: sheet, record: rec };
+}
+
+// Index de la colonne du code interne ; « Nom [2] » designe la 2e occurrence d'un en-tete en double
+// (convention de l'Observatoire : la derniere occurrence garde le nom simple).
+function newosbShareCodeIndex_(headers, codeHeader) {
+  const list = (headers || []).map(function(h) { return String(h || '').trim(); });
+  const name = String(codeHeader || '').trim();
+  if (!name) return -1;
+  const m = name.match(/^(.*) \[(\d+)\]$/);
+  if (m) {
+    let seen = 0;
+    for (let i = 0; i < list.length; i++) if (list[i] === m[1]) { seen += 1; if (seen === Number(m[2])) return i; }
+  }
+  return list.lastIndexOf(name);
+}
+
+function newosbShareMatches_(access, meta) {
+  const rec = access.record;
+  const col = newosbShareCodeIndex_(meta.headers, rec.codeHeader);
+  if (col < 0) throw new Error('Colonne du code interne introuvable : le lien ne peut plus etre lu. Cree un nouveau lien.');
+  const wanted = {};
+  newosbShareCodes_(access.sheet, rec).forEach(function(c) { wanted[c] = true; });
+  if (!meta.totalRows) return [];
+  const values = meta.sheet.getRange(meta.firstDataRow, col + 1, meta.totalRows, 1).getDisplayValues();
+  const rows = [];
+  values.forEach(function(v, i) { if (wanted[newosbShareNormCode_(v[0])]) rows.push(meta.firstDataRow + i); });
+  return rows;
+}
+
+function newosbShareInfo_(rec) {
+  return { label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, tabs: rec.tabs, landing: rec.landing, anonymized: rec.anonymized || newosbAnonymizedOnly_(), summary: rec.summary, operationCount: rec.operationCount };
+}
+
+// Requetes autorisees avec un jeton de partage : ping, meta, chunk (lignes du perimetre uniquement), zonage et communes.
+function newosbShareRequest_(access, params) {
+  const started = Date.now();
+  const rec = access.record;
+  const mode = String(params.mode || '').toLowerCase();
+  const endpoint = String(params.endpoint || '').toLowerCase();
+  if (endpoint === 'zone123') return handleZone123Proxy_();
+  if (endpoint === 'communes') return handleCommunesProxy_(params);
+  const base = { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, share: newosbShareInfo_(rec) };
+  if (mode === 'ping') {
+    const lock = newosbShareLock_();
+    try { access.sheet.getRange(rec.row, 12, 1, 2).setNumberFormat('@').setValues([[String(Date.now()), String(rec.accessCount + 1)]]); } catch (e) {} finally { if (lock) lock.releaseLock(); }
+    base.transport = 'popup-bridge-ready';
+    base.anonymizedOnly = base.share.anonymized;
+    return base;
+  }
+  if (mode !== 'meta' && mode !== 'chunk') throw new Error("Action non autorisee avec un lien de partage.");
+  const meta = getSheetMeta_();
+  const matches = newosbShareMatches_(access, meta);
+  if (mode === 'meta') {
+    base.format = 'matrix-chunks-v2';
+    base.headers = meta.headers;
+    base.totalRows = matches.length;
+    base.lastColumn = meta.lastColumn;
+    base.headerRow = meta.headerRow;
+    base.firstDataRow = 1;
+    base.chunkSize = OBSERVATOIRE_CONFIG.DEFAULT_CHUNK_SIZE;
+    base.durationMs = Date.now() - started;
+    return base;
+  }
+  const offset = clampInteger_(params.offset, 0, matches.length, 0);
+  const limit = clampInteger_(params.limit, 1, OBSERVATOIRE_CONFIG.MAX_CHUNK_SIZE, OBSERVATOIRE_CONFIG.DEFAULT_CHUNK_SIZE);
+  const slice = matches.slice(offset, offset + limit);
+  let rows = [];
+  if (slice.length) {
+    const first = slice[0], last = slice[slice.length - 1];
+    const block = meta.sheet.getRange(first, 1, last - first + 1, meta.lastColumn).getDisplayValues();
+    rows = slice.map(function(r) { return block[r - first]; });
+  }
+  if (base.share.anonymized) rows = newosbScrubMatrix_(meta.headers, rows);
+  return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, format: 'matrix-chunk-v2', offset: offset, count: rows.length, physicalCount: slice.length, totalRows: matches.length, done: offset + slice.length >= matches.length, rows: rows, durationMs: Date.now() - started };
 }
 
 /**

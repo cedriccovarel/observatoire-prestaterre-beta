@@ -19,6 +19,9 @@
   const layoutEl = document.querySelector('.obs-layout');
   const sidebarToggle = document.getElementById('obsSidebarToggle');
   const SIDEBAR_STORAGE_KEY = 'newosb_sidebar_collapsed';
+  // V6.15 : page ouverte par un lien de partage (newosb-share.js) — filtres figés, onglets limités.
+  const SHARE = window.NEWOSB_SHARE?.active ? window.NEWOSB_SHARE : null;
+  const shareReady = () => !!SHARE && SHARE.status === 'ready';
 
   if (!engine || !pageEl) {
     console.error('NEWOSB: moteur V29.7.13 indisponible.');
@@ -696,7 +699,7 @@
     await pptx.writeFile({fileName:fn});
   }
   function decoratePresentationButtons(){
-    if(state.page==='presentation') return;
+    if(state.page==='presentation' || SHARE) return;
     pageEl.querySelectorAll('.obs-card').forEach(card=>{
       const head=card.querySelector('.obs-card-head');
       if(!head || head.querySelector('.obs-pres-head-tools')) return;
@@ -1903,6 +1906,13 @@
   }
 
   function renderPage(options={}){
+    if(SHARE && !shareReady()){
+      pageEl.innerHTML=SHARE.gateHtml();
+      const fw=document.querySelector('.obs-filterbar-wrap'); if(fw)fw.hidden=true;
+      const ts=searchEl?.closest('.obs-search'); if(ts)ts.hidden=true;
+      if(demoBanner) demoBanner.hidden=true;
+      return;
+    }
     const scrollSnapshot=captureUiScroll();
     const renderers={overview:renderOverview,territories:renderTerritories,stakeholders:renderStakeholders,certification:renderCertification,performance:renderPerformance,requirements:()=>window.NEWOSB_REQUIREMENTS?.render?.()||'<div class="obs-empty">Module Exigences indisponible.</div>',solutions:renderSolutions,energy:renderEnergy,carbon:renderCarbon,crossdata:renderCrossData,presentation:renderPresentation,operations:renderOperations,quality:renderQuality,dictionary:renderDictionary,reports:renderReports};
     state.renderToken++;
@@ -1955,6 +1965,7 @@
     return `${vals.length} sélectionnés`;
   }
   function renderFilters(){
+    if(SHARE){ filtersEl.innerHTML=shareReady()?SHARE.lockedFiltersHtml(baseOperations().length):''; return; }
     const scrollSnapshot=captureUiScroll();
     const options=filterOptions();
     const defs=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
@@ -1981,12 +1992,14 @@
     const rt=runtime();
     sourceDot.classList.toggle('is-on',rt.connected);
     sourceLabel.textContent=rt.connected?`${fmt(rt.count)} projets`:'Données';
-    demoBanner.hidden=rt.connected;
+    demoBanner.hidden=rt.connected||!!SHARE;
     updateDataModalWording();
   }
 
   function changePage(page){
-    if(!pageMeta[page])page='overview'; state.page=page;
+    if(!pageMeta[page])page='overview';
+    if(SHARE && !SHARE.allowedPage(page)) page=SHARE.landingPage();
+    state.page=page;
     document.querySelectorAll('#obsNav [data-page]').forEach(b=>b.classList.toggle('is-active',b.dataset.page===page));
     renderPage();
   }
@@ -2230,6 +2243,7 @@
   // Données lues via l'API figée NEWOSB_REQUIREMENTS.getOperationRequirements, indépendante des filtres de l'onglet Exigences.
   const PROJECT_REQ_TARGETS={'1':'Cible 1 · \u00c9co-conception & management du projet','2':'Cible 2 · Le b\u00e2timent dans son environnement','3':'Cible 3 · Sobri\u00e9t\u00e9 et efficacit\u00e9 du b\u00e2timent','4':'Cible 4 · Usages & qualit\u00e9 de vie'};
   function projectUxRequirementsHtml(project){
+    if(SHARE) return '';
     const api=window.NEWOSB_REQUIREMENTS;
     const title=projectUxHeading('Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration','check');
     const wrap=(body,cls='')=>`<section class="p10-card p10-req-card ${cls}" aria-label="Exigences s\u00e9lectionn\u00e9es pour cette op\u00e9ration" data-project-requirements>${title}${body}<p class="p10-req-note">Une exigence pr\u00e9sente dans RAPPORT est une s\u00e9lection document\u00e9e ; elle ne vaut pas validation.</p></section>`;
@@ -2950,6 +2964,8 @@
     const entityToggle=e.target.closest('[data-operations-entity-toggle]');if(entityToggle){state.operationsEntityView=entityToggle.checked?'groups':'operations';state.operationsPage=1;renderPage();return;}
     const groupCard=e.target.closest('[data-moa-group-card]');if(groupCard){openMoaGroupDrawer(groupCard.dataset.moaGroupCard);return;}const techOp=e.target.closest('[data-tech-op-code]');if(techOp){openTechnicalOperation(techOp.dataset.techOpCode);return;}
     const scatter=e.target.closest('[data-scatter-op]');if(scatter){openTechnicalOperation(scatter.dataset.scatterOp);return;}
+    if(SHARE && e.target.closest('[data-share-popup]')){SHARE.start(true);return;}
+    if(SHARE && e.target.closest('[data-open-generator],[data-open-source],[data-add-presentation]')) return;
     const addPres=e.target.closest('[data-add-presentation]'); if(addPres){ addCurrentCardToPresentation(addPres).catch(err=>{console.error(err);alert('Ajout à la présentation impossible : '+(err?.message||err));}); return; }
     const presSelect=e.target.closest('[data-pres-select]'); if(presSelect){ state.presentationActiveId=presSelect.dataset.presSelect; savePresentationState(); renderPage(); return; }
     const presDelete=e.target.closest('[data-pres-delete]'); if(presDelete){ deletePresentationSlide(presDelete.dataset.presDelete); return; }
@@ -3009,6 +3025,36 @@
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
+
+  // V6.15 : périmètre affiché, pour la création d'un lien de partage (newosb-share.js).
+  const SHARE_FILTER_LABELS=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];
+  function shareScope(){
+    const ops=[...filteredOperations(),...filteredExcludedOperations()];
+    return {
+      displayCodes:ops.map(o=>String(o.code||'').trim()),
+      parts:SHARE_FILTER_LABELS.map(([key,label])=>({key,label,values:globalFilterValues(key).map(v=>key==='status'?(STATUS_LABELS[v]||v):(key==='department'?`${v} ${departmentName(v)}`:String(v)))})),
+      cross:state.crossFilters.map(f=>({key:f.key,label:f.label||String(f.value||'')})),
+      search:String(state.search||''),
+      page:state.page,
+      privacy:!!privacy()?.enabled?.()
+    };
+  }
+  window.NEWOSB_APP={shareScope,currentPage:()=>state.page};
+  if(SHARE){
+    window.addEventListener('newosb:sharestate',()=>{
+      if(shareReady()){
+        document.querySelectorAll('#obsNav [data-page]').forEach(b=>{b.hidden=!SHARE.allowedPage(b.dataset.page);});
+        state.page=SHARE.allowedPage(state.page)&&state.page!=='overview'?state.page:SHARE.landingPage();
+        document.querySelectorAll('#obsNav [data-page]').forEach(b=>b.classList.toggle('is-active',b.dataset.page===state.page));
+        const fw=document.querySelector('.obs-filterbar-wrap'); if(fw)fw.hidden=false;
+        const ts=searchEl?.closest('.obs-search'); if(ts)ts.hidden=false;
+        updateSourceStatus();renderFilters();
+      }
+      renderPage();
+    });
+    document.querySelectorAll('#obsNav [data-page]').forEach(b=>{b.hidden=true;});
+    setTimeout(()=>SHARE.start(false),0);
+  }
 
   if(searchEl) searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';
   loadPresentationState();

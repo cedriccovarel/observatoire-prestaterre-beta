@@ -6,15 +6,29 @@ const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = r
 function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache = true }) {
   const props = { ...properties };
   const cacheStore = {};
-  const sheet = {
-    getLastRow: () => matrix.length,
-    getLastColumn: () => Math.max(...matrix.map(r => r.length)),
-    getRange: (r, c, nr = 1, nc = 1) => ({
-      getDisplayValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => String((matrix[r - 1 + i] || [])[c - 1 + j] ?? ''))),
-      getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (matrix[r - 1 + i] || [])[c - 1 + j] ?? ''))
-    })
+  // Feuille en mémoire, lecture et écriture (l'onglet OPERATIONS et l'onglet masqué des liens de partage).
+  const makeSheet = data => {
+    const sh = {
+      data, hidden: false, protected: false,
+      getLastRow: () => data.length,
+      getLastColumn: () => Math.max(0, ...data.map(r => r.length)),
+      getRange: (r, c, nr = 1, nc = 1) => {
+        const range = {
+          getDisplayValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => String((data[r - 1 + i] || [])[c - 1 + j] ?? ''))),
+          getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (data[r - 1 + i] || [])[c - 1 + j] ?? '')),
+          setValues: vals => { vals.forEach((row, i) => { while (data.length < r + i) data.push([]); row.forEach((v, j) => { data[r - 1 + i][c - 1 + j] = v; }); }); return range; },
+          setValue: v => range.setValues([[v]]),
+          setNumberFormat: () => range
+        };
+        return range;
+      },
+      hideSheet() { sh.hidden = true; return sh; },
+      protect() { sh.protected = true; return { setDescription() { return this; }, setWarningOnly() { return this; } }; }
+    };
+    return sh;
   };
-  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => (n === sheetName ? sheet : null), getSpreadsheetTimeZone: () => 'Europe/Paris' };
+  const sheets = { [sheetName]: makeSheet(matrix) };
+  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet([])), getSpreadsheetTimeZone: () => 'Europe/Paris' };
   const ctx = {
     console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
@@ -28,6 +42,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
       DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (a, v) => Array.from(crypto.createHash('sha256').update(String(v)).digest()).map(b => (b > 127 ? b - 256 : b))
     },
     Logger: { log: (...a) => { logs.push(a.join(' ')); } },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock() {} }) },
     Session: { getScriptTimeZone: () => 'Europe/Paris' }
   };
   const logs = [];
@@ -41,7 +56,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
   const names = ['doGet', 'newosbApiRequest_', 'newosbBridgeRequest', 'buildBridgeHtml_', 'newosbScrubMatrix_', 'newosbColumnRule_', 'newosbAllowedOrigins_', 'configurerSecuriteObservatoire', 'genererCleAccesObservatoire',
     'newosbExigencesBridgeRequest', 'newosbExigencesBridgeHtml_', 'configurerSecuriteExigences', 'genererCleAccesExigences'];
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\n;this.__exports={' + names.map(n => `${n}:typeof ${n}==='function'?${n}:undefined`).join(',') + '};', ctx);
-  return { ...ctx.__exports, props, logs, slidesLog };
+  return { ...ctx.__exports, props, logs, slidesLog, sheets };
 }
 
 // Jeu de données de référence partagé par les tests.

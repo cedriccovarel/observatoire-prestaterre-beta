@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.14 — client du pont Google Apps Script (partagé).
+ * Observatoire Prestaterre — V6.15 — client du pont Google Apps Script (partagé).
  *
  * Utilisé par la source OPERATIONS (app.js) et par la source Exigences (requirements.js).
  * Chaque source crée son propre client : les deux projets Apps Script ont des clés distinctes.
@@ -61,6 +61,10 @@
 
   function create(name) {
     let key = '';
+    // V6.15 : jeton d'un lien de partage, utilisé à la place de la clé (jamais les deux).
+    let share = '';
+    // Fermeture différée de la fenêtre du pont : annulée si la fenêtre est réutilisée entre-temps.
+    let closeTimer = null;
     const st = {
       url: '', host: null, kind: '', token: '', ready: false, readyPromise: null, target: null, targetOrigin: '',
       listener: null, probeTimer: null, pending: new Map(), popupBlocked: false, iframe: null
@@ -133,7 +137,7 @@
     function preparePopup(rawUrl) {
       const url = splitUrl(rawUrl).url;
       if (!url) return null;
-      if (st.url === url && st.kind === 'popup' && st.host && !st.host.closed && st.readyPromise) return st.readyPromise;
+      if (st.url === url && st.kind === 'popup' && st.host && !st.host.closed && st.readyPromise) { clearTimeout(closeTimer); closeTimer = null; return st.readyPromise; }
       destroy('Nouvelle connexion Apps Script.');
       const token = randomToken();
       const popup = window.open(bridgeUrl(url, { bridge: 1, interactive: 1, bridgeToken: token, _ts: Date.now() }), 'newosb_bridge_' + name, 'popup=yes,width=600,height=470,resizable=yes,scrollbars=yes');
@@ -159,7 +163,7 @@
     }
 
     async function request(rawUrl, params = {}, timeoutMs = 90000) {
-      if (!key) throw new AuthError('Clé d’accès non saisie : la source privée ne peut pas être lue.');
+      if (!key && !share) throw new AuthError('Clé d’accès non saisie : la source privée ne peut pas être lue.');
       await ensure(rawUrl, st.kind === 'popup' ? 120000 : 18000);
       if (!st.target || !st.targetOrigin) throw new Error('Pont Apps Script indisponible.');
       return new Promise((resolve, reject) => {
@@ -167,14 +171,15 @@
         const timer = setTimeout(() => { st.pending.delete(id); reject(new Error(`Délai dépassé côté Apps Script (${String(params.mode || params.endpoint || 'requête')}).`)); }, timeoutMs);
         st.pending.set(id, { resolve, reject, timer });
         // Envoi ciblé : uniquement vers l'origine exacte du pont validée au READY, jamais vers « * ».
-        st.target.postMessage({ type: 'NEWOSB_BRIDGE_REQUEST', id, params: { ...params, key }, token: st.token }, st.targetOrigin);
+        st.target.postMessage({ type: 'NEWOSB_BRIDGE_REQUEST', id, params: share ? { ...params, share } : { ...params, key }, token: st.token }, st.targetOrigin);
       });
     }
 
     function closePopupSoon(delay = 500) {
       if (st.kind !== 'popup') return;
       const host = st.host;
-      setTimeout(() => { if (st.host === host) destroy('Fenêtre du pont fermée.'); else { try { host && !host.closed && host.close(); } catch {} } }, delay);
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => { closeTimer = null; if (st.host === host) destroy('Fenêtre du pont fermée.'); else { try { host && !host.closed && host.close(); } catch {} } }, delay);
     }
 
     // Après création d'un document (Google Slides), on réutilise la fenêtre ouverte au clic pour l'afficher.
@@ -189,9 +194,11 @@
 
     return {
       name,
-      setKey(v) { key = String(v || '').trim(); },
-      clearKey() { key = ''; },
-      hasKey() { return !!key; },
+      setKey(v) { key = String(v || '').trim(); share = ''; },
+      clearKey() { key = ''; share = ''; },
+      hasKey() { return !!(key || share); },
+      setShare(v) { share = String(v || '').trim(); key = ''; },
+      isShare() { return !!share; },
       preparePopup, ensure, request, destroy, closePopupSoon, navigatePopup,
       get popupBlocked() { return st.popupBlocked; },
       get kind() { return st.kind; }

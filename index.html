@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#06402B" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <title>Observatoire Prestaterre — V6.14</title>
+  <title>Observatoire Prestaterre — V6.15</title>
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png" />
   <link rel="apple-touch-icon" href="assets/favicon.png" />
   <link rel="stylesheet" href="style.css?v=29.7.21" />
-  <link rel="stylesheet" href="newosb.css?v=6.14.2" />
+  <link rel="stylesheet" href="newosb.css?v=6.15.0" />
   <link rel="stylesheet" href="privacy.css?v=5.0.0" />
   <link rel="stylesheet" href="project-ux.css?v=6.14.0" />
 </head>
@@ -44,7 +44,7 @@
           <img src="assets/prestaterre_logo_green.png" alt="Prestaterre Certification">
           <div class="obs-brand-copy">
             <span>OBSERVATOIRE DU BÂTIMENT DURABLE</span>
-            <strong>Observatoire Prestaterre <em>V6.14</em></strong>
+            <strong>Observatoire Prestaterre <em>V6.15</em></strong>
           </div>
         </div>
         <div class="obs-top-actions">
@@ -54,6 +54,7 @@
           </label>
           <button id="obsSourceBtn" class="obs-btn obs-btn-soft" type="button"><i id="obsSourceDot"></i><span id="obsSourceLabel">Données</span></button>
           <button id="obsRefreshBtn" class="obs-icon-btn" type="button" title="Actualiser les données">↻</button>
+          <button id="obsShareBtn" class="obs-btn obs-btn-soft" type="button" title="Créer un lien de partage à durée limitée vers la vue actuelle (filtres figés)">⤴ Partager</button>
           <button id="obsGeneratorBtn" class="obs-btn obs-btn-primary" type="button">Générateur de rapports ↗</button>
         </div>
       </header>
@@ -84,7 +85,7 @@
             <button data-page="dictionary"><span>?</span>Dictionnaire</button>
           </nav>
           <div class="obs-sidebar-foot">
-            <div class="obs-version">Observatoire Prestaterre <b>V6.14</b><small>Moteur V29.7.13</small></div>
+            <div class="obs-version">Observatoire Prestaterre <b>V6.15</b><small>Moteur V29.7.13</small></div>
             <button id="obsReportsNav" type="button">Rapports & exports ↗</button>
           </div>
         </aside>
@@ -234,11 +235,12 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
     </div>
   </div>
-  <script src="auth.js?v=304"></script>
-  <script src="privacy.js?v=6.14.0"></script>
+  <script src="auth.js?v=305"></script>
+  <script src="privacy.js?v=6.15.0"></script>
   <script src="newosb-rules.js?v=6.14.0"></script>
-  <script src="newosb-bridge.js?v=6.14.0"></script>
-  <script src="app.js?v=29.7.24-newosb6.14.0"></script>
+  <script src="newosb-bridge.js?v=6.15.0"></script>
+  <script src="newosb-share.js?v=6.15.0"></script>
+  <script src="app.js?v=29.7.25-newosb6.15.0"></script>
   <script src="requirements_catalog.js?v=5.0.6"></script>
   <script src="newosb-core.js?v=6.14.0"></script>
   <script src="mentions_catalog.js?v=6.14.2"></script>
@@ -246,6 +248,6 @@
   <script src="requirements.js?v=6.14.2"></script>
   <script src="jszip.min.js?v=3.10.1"></script>
   <script src="pptxgen.min.js?v=4.0.0"></script>
-  <script src="newosb.js?v=6.14.2"></script>
+  <script src="newosb.js?v=6.15.0"></script>
 </body>
 </html>

@@ -10,8 +10,13 @@
   const error = document.getElementById('authError');
   const toggle = document.getElementById('authToggle');
 
-  function grantAccess() {
-    try { sessionStorage.setItem(AUTH_KEY, '1'); } catch (_) {}
+  // V6.15 : une page ouverte par un lien de partage n'affiche pas l'écran de mot de passe ; l'accès
+  // aux données est contrôlé par le script Apps Script (jeton, périmètre, date d'expiration).
+  // Cet accès n'est pas mémorisé : il n'ouvre pas l'Observatoire complet.
+  const SHARE_MODE = /(?:^#|&)partage=/.test(location.hash || '');
+
+  function grantAccess(persist = true) {
+    if (persist) { try { sessionStorage.setItem(AUTH_KEY, '1'); } catch (_) {} }
     body.classList.remove('auth-locked');
     body.classList.add('auth-granted');
     body.style.removeProperty('overflow');
@@ -39,6 +44,11 @@
     const bytes = new TextEncoder().encode(value);
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  if (SHARE_MODE) {
+    grantAccess(false);
+    return;
   }
 
   try {

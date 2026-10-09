@@ -6932,6 +6932,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     // sur le statut commercial ni sur une autre colonne « étape ».
     { const pres=dataResolveProgressField(headers,rows); fields.status=pres.key||pres.header||null; fields.progressFallback=pres.fallback?.key||pres.fallback?.header||null; }
     dataResolveYearFields(headers,fields);
+    dataRuntime.codeHeader=fields.code||'';
     const mapped=rows.map((r,i)=>{
       const affairStage=String(dataRawValue(r,fields.affairStage)||'').trim();
       // V6.13.4 : une ligne sans code interne est une proposition commerciale en cours.
@@ -7285,6 +7286,56 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     throw new Error('Reponse Apps Script non reconnue. Utilise le Code_Operations.gs fourni avec NEWOSB V05.15.');
   }
   async function dataConnect(){const mode=document.getElementById('dataMode').value,tab=document.getElementById('dataTab').value.trim()||'OPERATIONS';let url=document.getElementById('dataUrl').value.trim();dataTakeKeyInput();if(mode==='appsScript'&&url&&window.NEWOSB_BRIDGE){const split=window.NEWOSB_BRIDGE.splitUrl(url);if(split.key&&dataBridge){dataBridge.setKey(split.key);dataUpdateKeyHint();}url=split.url;document.getElementById('dataUrl').value=url;}if(mode==='appsScript'&&url){if(!dataBridge?.hasKey()){const wasApps=dataRuntime.connected&&dataRuntime.mode==='appsScript';if(wasApps)dataClearPrivateData();dataFeedback('Saisis la clé d’accès OPERATIONS (propriété NEWOSB_ACCESS_KEY du script) : elle est gardée en mémoire pendant cette session uniquement.',true);try{localStorage.setItem(DATA_SOURCE_STORAGE_KEY,JSON.stringify({mode,url,tab}));}catch{}return;}const warm=dataPrepareAppsBridgePopup(url);dataFeedback(warm?'Connexion Google ouverte. Chargement de la source...':'Connexion au pont Google Apps Script...');}else dataFeedback('Chargement de la source...');try{let ops=[];dataRuntime.zone123Status=null;if(mode==='demo'){ops=dataBuildDemo();dataRuntime.progressDiagnostics={found:true,header:'(démonstration)',ratio:1,message:'Avancement de démonstration.'};dataRuntime.yearDiagnostics={certification:{header:'(démonstration)'},created:{header:'(démonstration)'}};}else if(mode==='appsScript'){if(!url)throw new Error('Colle l’URL /exec de ton Apps Script.');const json=await dataLoadAppsScript(url,(loaded,total)=>dataFeedback(`Chargement OPERATIONS… ${loaded}/${total} lignes`));if(json&&json.ok===false)throw new Error(json.error||'Erreur Apps Script');dataRuntime.zone123Status=json?.zone123Status||null;const rows=Array.isArray(json)?json:(json.operations||json.data||[]);dataRuntime.sourceHeaders=Array.isArray(json?.headers)?json.headers.map(h=>String(h??'').trim()):Object.keys(rows[0]||{});const diag=dataOperationHeaderDiagnostics(rows);if(rows.length&&!diag.hasIdentity)throw new Error(`Les lignes sont chargees mais les en-tetes OPERATIONS ne sont pas reconnus. Ligne d'en-tetes detectee : ${json?.headerRow||'?'} ; premiere ligne de donnees : ${json?.firstDataRow||'?'} ; exemples : ${(json?.headers||diag.headers).filter(Boolean).slice(0,8).join(' | ')||'aucun'}.`);ops=dataRowsToOperations(rows);dataLocateDiagnosticColumns(Array.isArray(json?.headers)?json.headers:Object.keys(rows[0]||{}));dataRuntime.sourceMeta={headerRow:json?.headerRow||null,firstDataRow:json?.firstDataRow||null,totalRows:Number(json?.totalRows)||null,lastColumn:Number(json?.lastColumn)||null,recognizedCount:diag.recognizedCount,criticalFound:diag.criticalFound};}else{if(!url)throw new Error('Colle l’URL du Google Sheet public.');const res=await fetch(dataGoogleCsvUrl(url,tab),{cache:'no-store'});if(!res.ok)throw new Error(`HTTP ${res.status}`);{const parsed=dataParseCSV(await res.text());dataRuntime.sourceHeaders=Object.keys(parsed[0]||{});const diag=dataOperationHeaderDiagnostics(parsed);if(parsed.length&&!diag.hasIdentity)throw new Error(`En-tetes Google Sheet non reconnus : ${diag.headers.filter(Boolean).slice(0,8).join(' | ')||'aucun'}.`);ops=dataRowsToOperations(parsed);dataLocateDiagnosticColumns(Object.keys(parsed[0]||{}));dataRuntime.sourceMeta={headerRow:1,firstDataRow:2,recognizedCount:diag.recognizedCount,criticalFound:diag.criticalFound};}}if(!ops.length)throw new Error('Aucune opération reconnue dans la source. Vérifie les en-têtes.');dataSnapshotManual();dataRuntime.connected=true;dataRuntime.mode=mode;dataRuntime.sourceUrl=url;dataRuntime.sourceTab=tab;dataRuntime.sourceOperations=ops;dataRuntime.operations=dataPrivacyApply(ops);dataRuntime.filtered=[...dataRuntime.operations];dataRuntime.lastLoadedAt=new Date().toISOString();dataRuntime.filters={};try{localStorage.removeItem(DATA_FILTERS_STORAGE_KEY);}catch{}try{localStorage.setItem(DATA_SOURCE_STORAGE_KEY,JSON.stringify({mode,url,tab}));}catch(storageError){console.warn('NEWOSB : impossible de mémoriser la source localement, la session continue.',storageError);}dataPopulateFilters();dataSyncViews();{const sm=dataRuntime.sourceMeta||{};const metaTxt=sm.headerRow?` · en-tetes ligne ${sm.headerRow} · ${sm.recognizedCount||0} champs reconnus`:'';const pd=dataRuntime.progressDiagnostics;const progressTxt=pd?(pd.found?` · ${pd.message}`:` · ⚠ ${pd.message}`):'';const yd=dataRuntime.yearDiagnostics;const yearTxt=(mode!=='demo'&&yd)?[[yd.certification,'Date de décision de certification'],[yd.created,'Date de création']].filter(([d])=>!d?.header).map(([d,l])=>` · ⚠ colonne « ${l} » ${d?.match==='ambigu'?'ambiguë':'introuvable'}`).join(''):'';dataFeedback(`${ops.length} opérations chargées${metaTxt}.${progressTxt}${yearTxt}`,!!(pd&&!pd.found&&mode!=='demo'));}toast(`${ops.length} opérations connectées.`);try{window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE?.getRuntime?.()}));}catch{}if(mode==='appsScript')dataBridge?.closePopupSoon(600);}catch(err){console.error(err);if(mode==='appsScript'&&err?.authError){dataBridge?.clearKey();dataUpdateKeyHint();if(dataRuntime.connected)dataClearPrivateData();dataFeedback(`Accès refusé par le script OPERATIONS : ${err.message||err} Les données privées ont été retirées de la session.`,true);return;}const stale=dataRuntime.connected&&dataRuntime.lastLoadedAt?` Les données affichées restent celles chargées le ${new Date(dataRuntime.lastLoadedAt).toLocaleString('fr-FR')} : elles ne sont pas à jour.`:'';dataFeedback(`Erreur : ${err.message||err}.${stale}`,true);}}
+  // V6.15 : lecture d'un lien de partage. Le jeton remplace la clé ; le script ne renvoie que les
+  // lignes du périmètre figé (et des données pseudonymisées si le lien est anonymisé). Aucun repli.
+  async function dataConnectShare(url,token,onProgress){
+    if(!dataBridge)throw new Error('Module de pont indisponible (newosb-bridge.js).');
+    dataBridge.setShare(token);
+    try{
+      const json=await dataLoadAppsScript(url,onProgress);
+      if(json&&json.ok===false)throw new Error(json.error||'Erreur Apps Script');
+      if(!json?.shared||!json?.share)throw new Error('Le script OPERATIONS ne reconnaît pas les liens de partage : il doit être mis à jour (Code_Operations.gs V6.15).');
+      if(window.NEWOSB_SHARE)window.NEWOSB_SHARE.forcePrivacy=!!json.share.anonymized;
+      const rows=json.operations||[];
+      dataRuntime.sourceHeaders=Array.isArray(json.headers)?json.headers.map(h=>String(h??'').trim()):Object.keys(rows[0]||{});
+      const ops=rows.length?dataRowsToOperations(rows):[];
+      dataLocateDiagnosticColumns(Array.isArray(json.headers)?json.headers:Object.keys(rows[0]||{}));
+      Object.assign(dataRuntime,{connected:true,mode:'share',sourceUrl:url,sourceTab:'OPERATIONS',zone123Status:null,sourceOperations:ops,operations:dataPrivacyApply(ops),lastLoadedAt:new Date().toISOString(),filters:{}});
+      dataRuntime.filtered=[...dataRuntime.operations];
+      dataRuntime.sourceMeta={headerRow:json.headerRow||null,firstDataRow:null,totalRows:Number(json.totalRows)||0,lastColumn:Number(json.lastColumn)||null,shared:true};
+      try{window.NEWOSB_PRIVACY?.syncControls?.();}catch{}
+      try{window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE?.getRuntime?.()}));}catch{}
+      return {share:json.share,count:ops.length};
+    }catch(err){
+      Object.assign(dataRuntime,{connected:false,sourceOperations:[],operations:[],filtered:[],sourceMeta:null,lastLoadedAt:''});
+      throw err;
+    }finally{dataBridge.closePopupSoon(600);}
+  }
+  function dataShareAdminPrepare(){
+    if(dataRuntime.mode!=='appsScript'||!dataRuntime.connected||!dataRuntime.sourceUrl)throw new Error('Le partage nécessite la source Google Apps Script OPERATIONS connectée (bouton Données).');
+    if(!dataBridge?.hasKey()||dataBridge.isShare())throw new Error('Saisis d’abord la clé d’accès OPERATIONS (bouton Données) : elle n’est conservée que pendant la session.');
+    const warm=dataBridge.preparePopup(dataRuntime.sourceUrl);
+    if(!warm&&dataBridge.popupBlocked)throw new Error('La fenêtre Google Apps Script a été bloquée. Autorise les pop-ups pour ce site puis réessaie.');
+    return {sourceUrl:dataRuntime.sourceUrl,warm};
+  }
+  async function dataShareAdminRequest(prepared,params){
+    const p=prepared||dataShareAdminPrepare();
+    if(p.warm)await p.warm;
+    const res=await dataAppsScriptRequest(p.sourceUrl,params,120000);
+    if(!res||res.ok===false)throw new Error(res?.error||'Erreur Apps Script');
+    if(String(params.mode)!=='shareList'&&!res.share)throw new Error('Le script OPERATIONS ne gère pas encore les liens de partage : remplace Code_Operations.gs par la version V6.15 et crée une nouvelle version du déploiement.');
+    if(String(params.mode)==='shareList'&&!Array.isArray(res.shares))throw new Error('Le script OPERATIONS ne gère pas encore les liens de partage : remplace Code_Operations.gs par la version V6.15 et crée une nouvelle version du déploiement.');
+    return res;
+  }
+  // Codes internes réels du périmètre affiché (les codes affichés peuvent être des pseudonymes).
+  function dataResolveRealCodes(displayCodes){
+    const real=(dataRuntime.sourceOperations&&dataRuntime.sourceOperations.length)?dataRuntime.sourceOperations:dataRuntime.operations;
+    const P=window.NEWOSB_PRIVACY,on=!!P?.enabled?.(),map=new Map();
+    real.forEach(o=>{const c=String(o.code||'').trim();const shown=on?P.operationCode(o.code||o.name):c;if(shown&&!map.has(shown))map.set(shown,c);});
+    const codes=new Set();let missing=0;
+    (displayCodes||[]).forEach(d=>{const c=map.get(String(d||'').trim());if(c&&dataRuntime.codeHeader)codes.add(c);else missing++;});
+    return {codes:[...codes],missing,codeHeader:dataRuntime.codeHeader||''};
+  }
   function dataDisconnect(){dataBridge?.clearKey();dataBridge?.destroy('Source OPERATIONS déconnectée.');dataUpdateKeyHint();const wasConnected=dataRuntime.connected;dataRuntime.connected=false;if(wasConnected)dataRestoreManual();dataRuntime.mode='manual';dataRuntime.sourceUrl='';dataRuntime.sourceTab='OPERATIONS';dataRuntime.zone123Status=null;dataRuntime.sourceOperations=[];dataRuntime.sourceMeta=null;dataRuntime.operations=[];dataRuntime.filtered=[];localStorage.removeItem(DATA_SOURCE_STORAGE_KEY);dataUpdateBadge();dataUpdateFilterUI();renderControls();renderSlide();dataFeedback('Mode manuel restauré.');toast('Mode manuel restauré.');try{window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE?.getRuntime?.()}));}catch{}}
   function dataDepartmentName(code){return DEPARTMENTS.find(d=>d.code===code)?.name||code;}
   function dataOpenExplorer(title,ops,sub=''){dataRuntime.selection=[...ops];dataRuntime.selectionTitle=title;dataRuntime.selectionSub=sub;document.getElementById('dataExplorerTitle').textContent=title;document.getElementById('dataExplorerSub').textContent=sub||`${ops.length} opération${ops.length>1?'s':''}`;document.getElementById('dataExplorerSearch').value='';dataRenderExplorer();dataExplorer.classList.add('is-open');dataExplorer.setAttribute('aria-hidden','false');}
@@ -7404,6 +7455,12 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       return dataAppsScriptRequest(p.sourceUrl,{mode:'createSlides',presentation},180000);
     },
     showGoogleSlidesResult(url){return dataBridge?dataBridge.navigatePopup(url):false;},
+    connectShare:dataConnectShare,
+    prepareShareBridge(url){return dataBridge?dataBridge.preparePopup(url):null;},
+    shareAdminPrepare:dataShareAdminPrepare,
+    shareAdminRequest:dataShareAdminRequest,
+    shareAdminClose(){dataBridge?.closePopupSoon(0);},
+    resolveRealCodes:dataResolveRealCodes,
     cancelGoogleSlides(){dataBridge?.closePopupSoon(0);}
   };
   const newosbSignal=()=>window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE.getRuntime()}));
@@ -7422,7 +7479,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   requestAnimationFrame(fitPreviewSlide);
   // Reconnexion automatique à la dernière source enregistrée à chaque ouverture.
   // V6.14 : pas de reconnexion automatique à une source Apps Script sans clé en mémoire (la clé n'est jamais stockée).
-  { let src=null; try{src=JSON.parse(localStorage.getItem(DATA_SOURCE_STORAGE_KEY)||'null');}catch{}
+  // V6.15 : une page ouverte par un lien de partage ne se connecte jamais à la source mémorisée.
+  if (!window.NEWOSB_SHARE?.active) { let src=null; try{src=JSON.parse(localStorage.getItem(DATA_SOURCE_STORAGE_KEY)||'null');}catch{}
     if (src && (src.mode !== 'appsScript' || dataBridge?.hasKey())) setTimeout(() => dataConnect(), 0);
     else if (src && src.mode === 'appsScript') dataFeedback('Source OPERATIONS mémorisée : saisis la clé d’accès puis « Connecter / actualiser ».'); }
 })();
