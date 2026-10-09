@@ -266,6 +266,23 @@ test('Exigences : RAPPORT dans un autre classeur via NEWOSB_RAPPORT_SPREADSHEET_
   const r = mkShare(gs, { tabs: ['requirements'] }); assert.strictEqual(r.ok, true, r.error); assert.strictEqual(reqRows(gs, r.token).m.rowCount, 3);
   assert.strictEqual(gs.verifierPartageExigences().ok, true);
 });
+
+test('V6.17 : Exigences servies par le script OPERATIONS avec la clé OPERATIONS (une seule connexion)', () => {
+  const gs = opsReqGs();
+  const no = gs.newosbBridgeRequest({ mode: 'reqMeta', key: 'mauvaise-cle-0123456789' }); assert.strictEqual(no.ok, false); assert.strictEqual(no.authError, true); assert(!no.rowCount);
+  const m = gs.newosbBridgeRequest({ mode: 'reqMeta', key: KEY }); assert.strictEqual(m.ok, true, m.error); assert.strictEqual(m.service, 'NEWOSB EXIGENCES'); assert.strictEqual(m.rowCount, RREQ.length - 1);
+  const c = gs.newosbBridgeRequest({ mode: 'reqChunk', key: KEY, offset: 0, limit: 2 }); assert.strictEqual(c.rows.length, 2); assert.strictEqual(c.done, false);
+  const c2 = gs.newosbBridgeRequest({ mode: 'reqChunk', key: KEY, offset: 2, limit: 1500 }); assert.strictEqual(c2.done, true); assert.strictEqual(c.rows.length + c2.rows.length, RREQ.length - 1);
+  assert.strictEqual(c.rows[0].moa, 'Promoteur A');
+  const anon = opsReqGs({ NEWOSB_ANONYMIZED_ONLY: '1' }); const ca = anon.newosbBridgeRequest({ mode: 'reqChunk', key: KEY, offset: 0, limit: 1500 }); assert(!/Promoteur A|EVA-1/.test(JSON.stringify(ca.rows)));
+  const missing = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY } }).newosbBridgeRequest({ mode: 'reqMeta', key: KEY }); assert.strictEqual(missing.ok, false); assert(/NEWOSB_RAPPORT_SPREADSHEET_ID/.test(missing.error));
+});
+test('V6.17 : l’Observatoire charge les exigences par la connexion OPERATIONS, et les retire à la déconnexion', () => {
+  const a = read('app.js'), r = read('requirements.js');
+  assert(a.includes('window.NEWOSB_REQUIREMENTS.loadViaOperations((p,t)=>dataAppsScriptRequest(url,p,t))'));
+  assert(a.includes("function dataClearPrivateData(){if(window.NEWOSB_REQUIREMENTS?.status?.().via==='operations')window.NEWOSB_REQUIREMENTS.disconnect();"));
+  assert(r.includes("async function loadViaOperations(req)") && !/loadViaOperations[\s\S]{0,400}localStorage/.test(r));
+});
 test('lecture de RAPPORT : bloc identique dans Code_Exigences.gs et Code_Operations.gs', () => {
   const block = f => { const t = read(f); const a = t.indexOf('// >>> LECTURE RAPPORT'), b = t.indexOf('// <<< LECTURE RAPPORT'); assert(a >= 0 && b > a, f); return t.slice(a, b); };
   assert.strictEqual(block('Code_Operations.gs'), block('Code_Exigences.gs'));
@@ -648,11 +665,12 @@ section('12. Mini-jeu de chargement « Capte le CO₂ » (newosb-game.js)');
 function gameEnv() { const ctx = { console, Math, Date, setTimeout, clearTimeout, localStorage: { getItem: () => null, setItem() {} } }; ctx.window = ctx; ctx.addEventListener = () => {}; ctx.document = {}; vm.createContext(ctx); vm.runInContext(read('newosb-game.js'), ctx); return ctx.NEWOSB_GAME; }
 const GM = gameEnv();
 const tick = (game, secs, dir) => { for (let t = 0; t < secs; t += 1 / 60) { if (dir) game.input(dir); game.step(1 / 60); } };
-test('carte : tous les couloirs sont reliés, la base est entourée de couloirs, assez de points de CO₂', () => {
-  const { W, H, walkable, bfs, SPAWN, CO2_SPOTS, isBase, BASE } = GM._map; const d = bfs(SPAWN);
+test('carte : rues toutes reliées, 14 îlots de bâtiments variés autour de la base', () => {
+  const { W, H, walkable, bfs, SPAWN, BLOCKS, isBase, nearBase } = GM._map; const d = bfs(SPAWN);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (walkable(x, y)) assert(d[y * W + x] < Infinity, `${x},${y}`);
-  assert(CO2_SPOTS.length >= 30); assert(CO2_SPOTS.every(s => walkable(s.x, s.y) && !isBase(s.x, s.y)));
-  assert(walkable(SPAWN.x, SPAWN.y) && isBase(SPAWN.x, SPAWN.y + 1)); assert(BASE.x1 - BASE.x0 === 2);
+  assert.strictEqual(BLOCKS.length, 14); assert(nearBase(SPAWN.x, SPAWN.y));
+  const g = GM._createGame({ rng: GM._rng(7) }); assert(new Set(g.state.buildings).size >= 8, 'au moins 8 types de bâtiments');
+  assert(g.state.emitters.length === 3 && g.state.emitters.every(e => e.b >= 0 && e.b < 14), 'le CO₂ apparaît dans des bâtiments');
 });
 test('rien ne bouge avant la première touche ; une flèche lance la partie', () => {
   const g = GM._createGame({ rng: GM._rng(1) }); const e0 = JSON.stringify(g.state.enemies.map(e => [e.x, e.y]));
@@ -664,19 +682,26 @@ test('le personnage ne traverse ni les bâtiments ni la base', () => {
   g.input('left'); tick(g, 0.1); tick(g, 3, 'up'); assert.strictEqual(g.state.player.x, 9); assert.strictEqual(g.state.player.y, 1, 'virage au premier couloir libre');
   const { walkable } = GM._map; for (let i = 0; i < 400; i++) { g.input(['up', 'down', 'left', 'right'][i % 4]); g.step(1 / 30); const p = g.state.player; assert(walkable(Math.round(p.x), Math.round(p.y))); }
 });
-test('ramassage limité à 3, dépôt à la base : l’arbre pousse ; 15 CO₂ = un arbre planté et un niveau de plus', () => {
-  const g = GM._createGame({ rng: GM._rng(3) }); const s = g.state; s.enemies = []; g.input('right'); s.co2 = [];
-  s.co2 = [{ x: 12, y: 4 }, { x: 13, y: 4 }, { x: 14, y: 4 }, { x: 15, y: 4 }];
-  tick(g, 1.2, 'right'); assert.strictEqual(s.carried, 3); assert(s.co2.some(c => c.x === 15));
-  tick(g, 1.5, 'left'); assert.strictEqual(s.carried, 0); assert.strictEqual(s.growth, 3); assert.strictEqual(g.treeStage(), 1); assert.strictEqual(s.score, 30);
-  s.carried = 3; s.growth = 12; s.enemies = []; tick(g, 1.2, 'right');
-  assert.strictEqual(s.trees, 1); assert.strictEqual(s.level, 2); assert.strictEqual(s.growth, 0); assert.strictEqual(s.enemies.length, 2); assert.strictEqual(s.greenRoofs.length, 1);
+test('CO₂ capté en longeant un bâtiment émetteur (3 max) ; dépôt en passant devant la base, même sans s’arrêter', () => {
+  const { BLOCKS } = GM._map; const g = GM._createGame({ rng: GM._rng(3) }); const s = g.state; s.enemies = [];
+  const east = BLOCKS.findIndex(b => b.x === 14 && b.y === 2); s.emitters = [{ b: east, amount: 2, born: 0 }, { b: BLOCKS.findIndex(b => b.x === 18 && b.y === 2), amount: 2, born: 0 }];
+  g.input('right'); for (let t = 0; t < 1.8; t += 1 / 30) { g.input('right'); g.step(1 / 30); }
+  assert.strictEqual(s.carried, 3, 'sac plein à 3'); assert.strictEqual(s.emitters.length, 1); assert.strictEqual(s.emitters[0].amount, 1, 'le reste reste dans le bâtiment');
+  for (let t = 0; t < 2.2; t += 1 / 24) { g.input('left'); g.step(1 / 24); }
+  assert.strictEqual(s.carried, 0, 'déposé en passant'); assert.strictEqual(s.growth, 3); assert.strictEqual(g.treeStage(), 1); assert.strictEqual(s.score, 30);
 });
-test('pollueurs : poursuivent le personnage ; un contact fait perdre une vie et le CO₂ transporté ; 3 contacts = partie terminée', () => {
-  const g = GM._createGame({ rng: GM._rng(4) }); const s = g.state; g.input('left'); s.enemies.forEach(e => { e.wait = 0; });
-  const start = Math.abs(s.enemies[0].x - s.player.x) + Math.abs(s.enemies[0].y - s.player.y); s.player.speed = 0; tick(g, 3); 
-  const after = Math.abs(s.enemies[0].x - s.player.x) + Math.abs(s.enemies[0].y - s.player.y); assert(after < start || s.lives < 3, 'se rapproche');
-  for (let n = 0; n < 3 && s.phase !== 'over'; n++) { s.carried = 2; s.invuln = 0; Object.assign(s.enemies[0], { x: s.player.x, y: s.player.y, wait: 0 }); g.step(1 / 60); }
+test('arbre adulte à 15 CO₂ : arbre planté, toit végétalisé, niveau suivant avec un engin de plus (2 au niveau 1)', () => {
+  const g = GM._createGame({ rng: GM._rng(5) }); const s = g.state; assert.strictEqual(s.enemies.length, 2);
+  assert.deepStrictEqual(s.enemies.map(e => e.type.kind).join(','), 'bulldozer,camion');
+  g.input('right'); s.enemies = []; s.carried = 3; s.growth = 12; s.emitters = []; tick(g, 0.2, 'right');
+  assert.strictEqual(s.trees, 1); assert.strictEqual(s.level, 2); assert.strictEqual(s.growth, 0); assert.strictEqual(s.enemies.length, 3); assert.strictEqual(s.greenRoofs.length, 1);
+});
+test('engins de chantier : foncent sur le personnage visible dans leur rue ; un choc coûte une vie et le CO₂ ; 3 chocs = fin', () => {
+  const g = GM._createGame({ rng: GM._rng(4) }); const s = g.state; g.input('left'); s.player.speed = 0;
+  const e = s.enemies[0]; Object.assign(e, { x: 1, y: 4, wait: 0, dir: { dx: 0, dy: 0 } }); s.enemies = [e];
+  Object.assign(s.player, { x: 7, y: 4 }); g.step(1 / 60);
+  assert(e.charging && e.dir.dx === 1, 'fonce vers la droite'); g.step(1 / 60); assert(e.speed > 2.5 * e.type.speed, 'accélère');
+  for (let n = 0; n < 3 && s.phase !== 'over'; n++) { s.carried = 2; s.invuln = 0; Object.assign(e, { x: s.player.x, y: s.player.y, wait: 0 }); g.step(1 / 60); }
   assert.strictEqual(s.lives, 0); assert.strictEqual(s.phase, 'over'); assert.strictEqual(s.carried, 0);
 });
 test('intégration : jeu ouvert pendant les chargements OPERATIONS, Exigences et lien de partage ; jamais sans chargement', () => {

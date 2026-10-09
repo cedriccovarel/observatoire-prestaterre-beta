@@ -1,5 +1,5 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.15 (script OPERATIONS, version API 06.15)
+ * PRESTATERRE OBSERVATOIRE - V6.17 (script OPERATIONS, version API 06.17)
  *
  * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
  * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
@@ -12,6 +12,10 @@
  * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
  * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration
  * (genererCleAccesObservatoire() peut creer une cle aleatoire, lisible ensuite dans les proprietes).
+ *
+ * Changements V6.17 : les Exigences (onglet RAPPORT) sont servies par ce script avec la meme cle
+ *   (modes reqmeta / reqchunk) : une seule URL et une seule cle pour charger l'Observatoire.
+ *   RAPPORT dans un autre classeur : propriete NEWOSB_RAPPORT_SPREADSHEET_ID.
  *
  * Changements V6.15 : liens de partage a duree limitee (onglet masque OBSERVATOIRE_PARTAGES cree
  *   automatiquement). Un lien ne donne acces qu'aux operations de son perimetre, jusqu'a sa date
@@ -41,7 +45,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.15',
+  VERSION: '06.17',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -136,6 +140,11 @@ function newosbApiRequest_(params) {
   // External services never block the OPERATIONS connection path.
   if (endpoint === 'zone123') return handleZone123Proxy_();
   if (endpoint === 'communes') return handleCommunesProxy_(params);
+
+  // V6.17 : les Exigences (onglet RAPPORT) se chargent avec la meme URL et la meme cle qu'OPERATIONS.
+  if (mode === 'reqmeta' || mode === 'reqchunk') {
+    return newosbRapportRequest_(params, mode, { anonymized: newosbAnonymizedOnly_() });
+  }
 
   if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend') {
     return newosbShareAdmin_(mode, params);
@@ -904,7 +913,7 @@ function newosbRapportSpreadsheet_() {
   }
   const ss = getSpreadsheet_();
   if (ss.getSheetByName(NEWOSB_EXIGENCES_CONFIG.SHEET_NAME)) return ss;
-  throw new Error("Partage des Exigences : renseigne la propriete NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant du classeur qui contient l'onglet RAPPORT) dans le projet Apps Script OPERATIONS.");
+  throw new Error("Exigences : renseigne la propriete NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant du classeur qui contient l'onglet RAPPORT) dans le projet Apps Script OPERATIONS.");
 }
 
 function newosbRapportContext_() {
@@ -914,31 +923,49 @@ function newosbRapportContext_() {
 // Lignes RAPPORT du perimetre d'un lien (rattachement par code interne d'operation).
 function newosbShareRapport_(access, params, mode) {
   const rec = access.record;
-  const anonymized = rec.anonymized || newosbAnonymizedOnly_();
-  const base = { ok: true, service: NEWOSB_EXIGENCES_CONFIG.SERVICE, version: OBSERVATOIRE_CONFIG.VERSION, shared: true };
-  const ctx = newosbRapportContext_();
-  if (ctx.cols.operationCode < 0) throw new Error("Colonne « Evaluation: Operation: Code interne » absente de RAPPORT : les exigences ne peuvent pas etre rattachees aux operations partagees.");
   const wanted = {};
   newosbShareCodes_(access.sheet, rec).forEach(function(c) { wanted[c] = true; });
-  const values = ctx.sheet.getRange(NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW, ctx.cols.operationCode + 1, ctx.rowCount, 1).getDisplayValues();
-  const matches = [];
-  values.forEach(function(v, i) { if (wanted[newosbShareNormCode_(v[0])]) matches.push(i); });
+  const out = newosbRapportRequest_(params, mode, { wanted: wanted, anonymized: rec.anonymized || newosbAnonymizedOnly_() });
+  out.shared = true;
+  return out;
+}
+
+// Lecture de RAPPORT par blocs (reqmeta / reqchunk). options.wanted : codes d'operation autorises
+// (lien de partage) ; sans options.wanted, tout RAPPORT (acces avec la cle OPERATIONS).
+function newosbRapportRequest_(params, mode, options) {
+  const opts = options || {};
+  const base = { ok: true, service: NEWOSB_EXIGENCES_CONFIG.SERVICE, version: OBSERVATOIRE_CONFIG.VERSION, via: 'NEWOSB OPERATIONS' };
+  const ctx = newosbRapportContext_();
+  let matches = null;
+  if (opts.wanted) {
+    if (ctx.cols.operationCode < 0) throw new Error("Colonne « Evaluation: Operation: Code interne » absente de RAPPORT : les exigences ne peuvent pas etre rattachees aux operations partagees.");
+    const values = ctx.sheet.getRange(NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW, ctx.cols.operationCode + 1, ctx.rowCount, 1).getDisplayValues();
+    matches = [];
+    values.forEach(function(v, i) { if (opts.wanted[newosbShareNormCode_(v[0])]) matches.push(i); });
+  }
+  const total = matches ? matches.length : ctx.rowCount;
   if (mode === 'reqmeta') {
-    base.rowCount = matches.length;
+    base.rowCount = total;
     base.chunkSize = NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE;
     base.warnings = ctx.warnings;
     return base;
   }
-  const offset = clampInteger_(params.offset, 0, matches.length, 0);
+  const offset = clampInteger_(params.offset, 0, total, 0);
   const limit = clampInteger_(params.limit, 1, NEWOSB_EXIGENCES_CONFIG.MAX_CHUNK_SIZE, NEWOSB_EXIGENCES_CONFIG.CHUNK_SIZE);
-  const slice = matches.slice(offset, offset + limit);
-  let rows = [];
-  if (slice.length) {
-    const keep = {};
-    slice.forEach(function(i) { keep[NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW + i] = true; });
-    rows = newosbExigencesRows_(ctx, slice[0], slice[slice.length - 1] - slice[0] + 1).filter(function(r) { return keep[r.sourceRow]; });
+  let rows = [], physical = 0;
+  if (matches) {
+    const slice = matches.slice(offset, offset + limit);
+    physical = slice.length;
+    if (slice.length) {
+      const keep = {};
+      slice.forEach(function(i) { keep[NEWOSB_EXIGENCES_CONFIG.FIRST_DATA_ROW + i] = true; });
+      rows = newosbExigencesRows_(ctx, slice[0], slice[slice.length - 1] - slice[0] + 1).filter(function(r) { return keep[r.sourceRow]; });
+    }
+  } else {
+    physical = Math.max(0, Math.min(limit, total - offset));
+    rows = newosbExigencesRows_(ctx, offset, limit);
   }
-  if (anonymized) {
+  if (opts.anonymized) {
     const secret = newosbPseudoSecret_();
     rows = rows.map(function(r) {
       const out = {};
@@ -951,7 +978,7 @@ function newosbShareRapport_(access, params, mode) {
       return out;
     });
   }
-  base.offset = offset; base.count = rows.length; base.physicalCount = slice.length; base.done = offset + slice.length >= matches.length; base.rows = rows;
+  base.offset = offset; base.count = rows.length; base.physicalCount = physical; base.done = offset + physical >= total; base.rows = rows;
   return base;
 }
 

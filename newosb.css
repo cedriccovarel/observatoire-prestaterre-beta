@@ -1299,3 +1299,6 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 @media (hover:none),(max-width:760px){.obs-game-dpad{display:grid}}
 @media (max-width:600px){.obs-game{padding:8px}.obs-game-card{padding:10px}.obs-game-head h2{font-size:16px}.obs-game-hud{gap:10px;font-size:11px}.obs-game-msg{font-size:11px}}
 @media (prefers-reduced-motion:reduce){.obs-game-bar i{transition:none}.obs-game.is-loaded .obs-game-enter:not(:disabled){animation:none}}
+.req-source-legacy{grid-column:1/-1;margin-top:8px;font-size:12px}
+.req-source-legacy>summary{cursor:pointer;color:#587269;font-weight:700}
+.req-source-legacy>.req-source-card{margin-top:10px;box-shadow:none}

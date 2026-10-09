@@ -266,7 +266,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.click('button[data-page="operations"]'); await page.waitForTimeout(400);
       await page.evaluate(() => document.querySelector('[data-op-code="OP-1"]').click()); await page.waitForTimeout(400);
       let fiche = await page.evaluate(() => document.querySelector('[data-project-requirements]')?.textContent || '');
-      check(/non connectée/.test(fiche), 'fiche : « Source Exigences non connectée » tant que la source n’est pas chargée');
+      check(/non connectée|indisponible/.test(fiche), 'fiche : état explicite (non connectée / indisponible) tant que les exigences ne sont pas chargées');
       await page.evaluate(() => { const sc = document.querySelector('[data-project-scroll]'); sc.scrollTop = 400; });
       const before = await page.evaluate(() => document.querySelector('[data-project-scroll]').scrollTop);
       // Connexion de la source Exigences (champs URL + clé de l'encart Source, simulés ici car la fiche est au premier plan).
@@ -352,6 +352,9 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
     console.log('\nH. Liens de partage à durée limitée (V6.15)');
     { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { extraSheets: { RAPPORT } });
       await page.evaluate(() => { const i = [...document.querySelectorAll('[data-global-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
+      await page.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
+      const viaSt = await page.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
+      check(viaSt.via === 'operations' && viaSt.connected && viaSt.count > 0, `une seule connexion : les exigences sont chargées avec l’URL et la clé OPERATIONS (${viaSt.count} évaluations${viaSt.error ? ' · ' + viaSt.error : ''})`);
       const adminCount = await page.textContent('#obsFilterCount');
       const pagesBefore = context.pages().length;
       const popupP = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
@@ -483,7 +486,8 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await startLoad();
       await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
       await page.evaluate(() => window.__load);
-      check(await page.evaluate(() => document.getElementById('obsGame').hidden), 'sans avoir joué : l’Observatoire s’affiche dès la fin du chargement');
+      const autoClosed = await page.waitForFunction(() => document.getElementById('obsGame').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+      check(autoClosed, 'sans avoir joué : l’Observatoire s’affiche dès la fin du chargement');
       await startLoad();
       await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
       await page.keyboard.press('Escape');

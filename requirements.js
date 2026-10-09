@@ -20,6 +20,7 @@
     compat:{context:'',manualMention:'',values:{},size:'',openBouquet:false,openDiag:false,openFields:false},
     // V6.15 : page ouverte par un lien de partage — source et filtres figés.
     share:null,
+    via:'',
     focusSelector:''
   };
   // URL mémorisée sans aucune clé. Une ancienne URL « …?key=… » (V6.13) est nettoyée et la clé
@@ -114,13 +115,14 @@
     if(!bridge){state.error='Module de pont indisponible (newosb-bridge.js).';state.errorKind='config';emit();return;}
     if(!bridge.hasKey()){clearPrivateData();state.url=url;state.error='Saisis la clé d’accès de la source Exigences (propriété NEWOSB_ACCESS_KEY de son projet Apps Script).';state.errorKind='auth';emit();return;}
     const token=++loadToken;
+    state.via='';
     state.url=url;try{localStorage.setItem(STORAGE_KEY,url);}catch{}
     state.loading=true;state.error='';state.errorKind='';state.loadProgress='Connexion…';emit();
     window.NEWOSB_GAME?.open({title:'Chargement des exigences (RAPPORT)'});
     try{
       const ping=await bridge.request(url,{mode:'ping'},120000);
       if(ping?.service&&ping.service!=='NEWOSB EXIGENCES')throw new Error('Cette URL n’est pas celle du script Exigences (service « '+ping.service+' »).');
-      const got=await fetchAll(url,'meta','chunk',token);
+      const got=await fetchAll((p,t)=>bridge.request(url,p,t),'meta','chunk',token);
       if(!got)return;
       const {rows,meta}=got;
       resetIndexes();state.rows=rows;state.connected=true;state.loadedAt=new Date().toISOString();state.error='';state.errorKind='';state.warnings=Array.isArray(meta?.warnings)?meta.warnings.slice(0,12).map(String):[];
@@ -139,8 +141,9 @@
   }
   let loadToken=0;
   // Lecture par blocs (meta puis chunk). Renvoie null si un chargement plus récent a pris le relais.
-  async function fetchAll(url,metaMode,chunkMode,token){
-    const meta=await bridge.request(url,{mode:metaMode},120000);
+  async function fetchAll(req,metaMode,chunkMode,token){
+    const meta=await req({mode:metaMode},120000);
+    if(metaMode==='reqMeta'&&meta?.service!=='NEWOSB EXIGENCES')throw new Error('Le script OPERATIONS doit être mis à jour (Code_Operations.gs V6.17) pour charger les exigences avec la même connexion.');
     const total=Math.max(0,Number(meta?.rowCount)||0),limit=Math.max(200,Math.min(3000,Number(meta?.chunkSize)||1500)),out=[];
     if(!total)throw new Error(state.share?'Aucune ligne RAPPORT n’est rattachée aux opérations de ce lien.':'L’onglet RAPPORT ne contient aucune ligne de données.');
     const offsets=[];for(let o=0;o<total;o+=limit)offsets.push(o);
@@ -148,7 +151,7 @@
       if(token!==loadToken)return null;
       state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
       if(!state.share)window.NEWOSB_GAME?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`);
-      const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>bridge.request(url,{mode:chunkMode,offset,limit},120000)));
+      const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>req({mode:chunkMode,offset,limit},120000)));
       chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
     }
     if(token!==loadToken)return null;
@@ -167,7 +170,7 @@
     Object.keys(state.filters).forEach(k=>{const v=frozenFilters&&Array.isArray(frozenFilters[k])?frozenFilters[k]:[];state.filters[k]=v.map(String);});
     state.loading=true;state.error='';state.errorKind='';state.loadProgress='Chargement des exigences…';emit();
     try{
-      const got=await fetchAll(url,'reqMeta','reqChunk',token);
+      const got=await fetchAll((p,t)=>bridge.request(url,p,t),'reqMeta','reqChunk',token);
       if(!got)return;
       resetIndexes();state.rows=got.rows;state.connected=true;state.loadedAt=new Date().toISOString();state.warnings=[];
       if(!state.mentionFocus)state.mentionFocus=topMentions(filteredRows(),1)[0]?.name||'';
@@ -178,12 +181,34 @@
       state.error=String(e?.message||e);
     }finally{if(token===loadToken){state.loading=false;state.loadProgress='';bridge.closePopupSoon(600);emit();}}
   }
+  // V6.17 : exigences chargées par le script OPERATIONS, avec sa connexion et sa clé (une seule source à
+  // connecter). « req » est la fonction de requête du pont OPERATIONS (la clé n'est jamais lue ici).
+  async function loadViaOperations(req){
+    if(typeof req!=='function'||state.share)return false;
+    const token=++loadToken;
+    state.via='operations';
+    state.loading=true;state.error='';state.errorKind='';state.loadProgress='Chargement des exigences…';emit();
+    try{
+      const got=await fetchAll(req,'reqMeta','reqChunk',token);
+      if(!got)return false;
+      resetIndexes();state.rows=got.rows;state.connected=true;state.loadedAt=new Date().toISOString();state.warnings=Array.isArray(got.meta?.warnings)?got.meta.warnings.slice(0,12).map(String):[];
+      if(!state.mentionFocus)state.mentionFocus=topMentions(state.rows,1)[0]?.name||'';
+      return true;
+    }catch(e){
+      if(token!==loadToken)return false;
+      clearPrivateData();
+      state.errorKind=e?.authError?'auth':'error';
+      const msg=String(e?.message||e);
+      state.error=/NEWOSB_RAPPORT_SPREADSHEET_ID/.test(msg)?'Le script OPERATIONS ne trouve pas l’onglet RAPPORT. Dans son projet Apps Script, ajoute la propriété NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant du classeur qui contient RAPPORT), puis exécute verifierPartageExigences.':msg;
+      return false;
+    }finally{if(token===loadToken){state.loading=false;state.loadProgress='';emit();}}
+  }
   // Filtres de l'onglet tels qu'affichés, pour figer un lien de partage.
   function shareFilters(){const out={};Object.keys(state.filters).forEach(k=>{const v=filterValues(k);if(v.length)out[k]=v.slice();});return out;}
   const FILTER_LABELS={year:'Année',referential:'Référentiel',moaGroup:'Groupe MOA',status:'Avancement',moa:'Maître d’ouvrage',region:'Région',department:'Département',profile:'Profil',socialZone:'Zonage',nature:'Nature',mention:'Mention',moaSector:'Secteur MOA',theme:'Thème',period:'Période réf.'};
   function disconnect(){
     loadToken++;bridge?.clearKey();bridge?.destroy('Source Exigences déconnectée.');
-    clearPrivateData();state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
+    clearPrivateData();state.via='';state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
     emit();
   }
   function forgetSource(){disconnect();state.url='';try{localStorage.removeItem(STORAGE_KEY);}catch{}emit();}
@@ -366,6 +391,12 @@
       const retry=state.error&&state.errorKind!=='auth'?'<button type="button" data-req-share-retry="1">Ouvrir la connexion Google</button>':'';
       return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>EXIGENCES · PÉRIMÈTRE PARTAGÉ</span><h2>Exigences des opérations partagées</h2><p role="status" aria-live="polite">${esc(state.loading?(state.loadProgress||'Chargement…'):state.connected?`${fmt(evaluations(state.rows).length)} évaluations · ${fmt(occurrenceRows(state.rows).length)} occurrences`:(state.error||'Chargement…'))}</p></div>${retry?`<div class="req-source-controls">${retry}</div>`:''}</article>`;
     }
+    const legacyActive=!state.via&&(state.connected||state.loading||(state.error&&state.url&&bridge?.hasKey?.()));
+    if(legacyActive)return legacySourceCard();
+    const status=state.loading?(state.loadProgress||'Chargement…'):state.connected?`${fmt(evaluations(state.rows).length)} évaluations · ${fmt(occurrenceRows(state.rows).length)} occurrences · chargées avec la source OPERATIONS${state.loadedAt?` le ${new Date(state.loadedAt).toLocaleString('fr-FR')}`:''}`:'Les exigences se chargent automatiquement avec la source OPERATIONS (bouton Données) : une seule URL et une seule clé.';
+    return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>SOURCE EXIGENCES · AVEC OPERATIONS</span><h2>Google Sheet · onglet RAPPORT</h2><p role="status" aria-live="polite">${esc(status)}</p></div>${state.error&&state.via?`<div class="req-source-error" role="alert">${esc(state.error)}</div>`:''}<details class="req-source-legacy"><summary>Utiliser une source Exigences séparée (ancien fonctionnement : URL et clé Exigences)</summary>${legacySourceCard()}</details></article>`;
+  }
+  function legacySourceCard(){
     const keyOk=bridge?.hasKey?.();
     return `<article class="req-source-card ${state.connected?'is-connected':''}"><div class="req-source-copy"><span>SOURCE EXIGENCES · PRIVÉE</span><h2>Google Sheet · onglet RAPPORT</h2><p role="status" aria-live="polite">${esc(sourceStatusText())}</p></div><div class="req-source-controls"><input id="reqSourceUrl" type="url" value="${attr(state.url)}" placeholder="https://script.google.com/macros/s/…/exec" aria-label="URL /exec du script Exigences" autocomplete="off"><input id="reqSourceKey" type="password" value="" placeholder="${keyOk?'Clé d’accès en mémoire · ressaisir pour changer':'Clé d’accès Exigences'}" aria-label="Clé d’accès de la source Exigences (gardée en mémoire pendant la session)" autocomplete="off" spellcheck="false"><button type="button" data-req-connect="1">${state.connected?'Actualiser':'Connecter'}</button>${(state.connected||keyOk||state.loading)?'<button class="soft" type="button" data-req-disconnect="1">Déconnecter</button>':''}${state.url&&!state.connected&&!state.loading?'<button class="soft" type="button" data-req-forget="1">Oublier l’URL</button>':''}<a class="req-code-link" href="Code_Exigences.gs" download>Code_Exigences.gs ↓</a></div>${state.error?`<div class="req-source-error" role="alert">${esc(state.error)}</div>`:''}${state.migratedKey?'<div class="req-source-note">La clé figurant dans l’ancienne URL mémorisée a été retirée du stockage du navigateur ; elle n’est conservée qu’en mémoire pour cette session.</div>':''}${state.connected&&state.warnings.length?`<details class="req-source-warnings"><summary>${fmt(state.warnings.length)} remarque${state.warnings.length>1?'s':''} du script</summary><ul>${state.warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></details>`:''}<small>La clé est demandée à chaque session : elle n’est enregistrée ni dans l’URL, ni dans le navigateur. Le script vérifie la clé avant toute lecture de RAPPORT. Le mode anonymisé masque l’affichage mais ne protège pas la source.</small></article>`;
   }
@@ -666,7 +697,7 @@
   function render(){
     const source=sourceCard();
     if(!state.connected&&state.share)return source;
-    if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Connecter le Google Sheet des exigences</h2><p>Cette rubrique repart exclusivement de l’onglet <b>RAPPORT</b>. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger Code_Exigences.gs</a></div>${infoModal()}`;
+    if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Exigences non chargées</h2><p>Connecte la source OPERATIONS (bouton <b>Données</b>) : les exigences de l’onglet <b>RAPPORT</b> sont chargées en même temps, avec la même URL et la même clé. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger Code_Exigences.gs</a></div>${infoModal()}`;
     const rows=filteredRows(), occ=occurrenceRows(rows), evs=evaluations(rows), refs=uniq(evs.map(r=>r.referential)), years=uniq(evs.map(r=>r.year).filter(Boolean)).sort((a,b)=>a-b), neuf=evs.filter(r=>r.nature==='Neuf').length,reno=evs.filter(r=>r.nature==='Rénovation').length;
     return `${source}${filtersHtml()}<div class="req-page-title"><div><span>ANALYSE DES EXIGENCES</span><h1>${filterValues('profile').length===1?`Profil ${esc(filterValues('profile')[0].replace(/^Profil\s+/i,''))}`:filterValues('profile').length>1?`${filterValues('profile').length} profils sélectionnés`:'Toutes évaluations'}</h1><p>Retraitement dynamique de RAPPORT · filtres par profil, région et département · fiches référentiel 2026 accessibles avec le bouton <b>i</b>.</p></div><div class="req-page-meta">${years.length?`${years[0]}–${years[years.length-1]}`:'—'}<small>${refs.length} référentiel${refs.length>1?'s':''}</small></div></div>
     <div class="obs-grid-kpi req-kpis"><article class="obs-kpi"><span>Dossiers analysés</span><strong>${fmt(evs.length)}</strong><small>évaluations uniques</small></article><article class="obs-kpi"><span>Exigences sélectionnées</span><strong>${fmt(occ.length)}</strong><small>occurrences distinctes</small></article><article class="obs-kpi"><span>Neuf</span><strong>${fmt(neuf)}</strong><small>${fmt(pct(neuf,evs.length),1)} % du panel</small></article><article class="obs-kpi"><span>Rénovation</span><strong>${fmt(reno)}</strong><small>${fmt(pct(reno,evs.length),1)} % du panel</small></article></div>
@@ -739,11 +770,11 @@
   function handleKeyup(e){
     if(e.key==='Enter'&&e.target.matches?.('#reqSourceKey,#reqSourceUrl')){document.querySelector('[data-req-connect]')?.click();return true;}
     const fs=e.target.closest('[data-req-filter-search]');return fs?applyRequirementFilterSearch(fs):false;}
-  function status(){return {connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,errorKind:state.errorKind,loadedAt:state.loadedAt,hasKey:!!bridge?.hasKey?.()};}
+  function status(){return {via:state.via||'',connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,errorKind:state.errorKind,loadedAt:state.loadedAt,hasKey:!!bridge?.hasKey?.()};}
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
   window.addEventListener('newosb:privacychange',emit);
   // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,shareFilters,disconnect,status,auditInfo,getOperationRequirements,
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,loadViaOperations,shareFilters,disconnect,status,auditInfo,getOperationRequirements,
     // Accès de test / diagnostic, sans exposer l'état mutable.
     _compatSnapshot(){const m=compatModel();return m.error?{error:m.error}:{context:m.ctx?.key||'',contexts:m.bouquets.contexts.map(c=>({key:c.key,operations:c.operations,top:c.top.map(i=>({code:i.code,operations:i.operations,frequency:i.frequency}))})),ranked:(m.analysis?.ranked||[]).map(r=>({id:r.id,pct:r.pct,covered:r.covered,required:r.required})),results:(m.analysis?.results||[]).map(r=>({id:r.id,status:r.status,pct:r.pct,covered:r.covered,required:r.required})),manual:state.compat.manualMention};}};
 })();

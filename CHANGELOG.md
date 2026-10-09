@@ -1,5 +1,19 @@
 # Historique
 
+## V6.17
+
+**Une seule connexion : opérations et exigences avec la même URL et la même clé**
+- Le script OPERATIONS sert aussi l’onglet RAPPORT (modes `reqMeta` / `reqChunk`, clé OPERATIONS vérifiée à chaque requête ; données pseudonymisées si `NEWOSB_ANONYMIZED_ONLY`). À la connexion OPERATIONS (bouton Données), les exigences sont chargées dans la foulée : plus besoin de saisir l’URL et la clé Exigences.
+- Si RAPPORT est dans un autre classeur : propriété `NEWOSB_RAPPORT_SPREADSHEET_ID` du projet OPERATIONS (déjà utilisée par les liens de partage). Sans elle, l’onglet Exigences l’explique.
+- L’ancienne source Exigences séparée reste disponible (encart repliable « Utiliser une source Exigences séparée »). La déconnexion OPERATIONS retire aussi les exigences chargées par elle.
+
+**Mini-jeu « Capte le CO₂ » : nouvelle version**
+- Correctif : le dépôt du CO₂ à la base ne se déclenchait que si le personnage s’arrêtait pile au centre d’une case ; il se fait maintenant en passant devant la base (cases de dépôt surlignées quand on transporte du CO₂).
+- Bâtiments variés : logements collectifs, maisons, tours, bureaux, usine, école, commerce, hôpital (disposition tirée au hasard à chaque partie).
+- Le CO₂ s’échappe au hasard des bâtiments (bulle « CO2 », « CO2x2 » pour l’usine) ; on le capte en longeant le bâtiment.
+- Adversaires : engins de chantier polluants (bulldozer, camion-benne, toupie béton, pelleteuse) avec fumées d’échappement ; ils roulent dans les rues, ne tournent qu’aux carrefours et foncent (gyrophare) quand ils voient le personnage dans leur rue. 2 engins au niveau 1, un de plus à chaque arbre planté.
+- Le jeu reste ouvert jusqu’à la fin du chargement des exigences.
+
 ## V6.16
 
 **Mini-jeu pendant le chargement des données : « Capte le CO₂ »**

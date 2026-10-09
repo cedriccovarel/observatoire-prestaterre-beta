@@ -2252,7 +2252,7 @@
     const code=String(project?.code||'').trim();
     if(!code)return info('Ce projet n\u2019a pas de code op\u00e9ration : aucun rapprochement avec la source Exigences n\u2019est possible.','is-muted');
     const data=api.getOperationRequirements(code,{pseudonymized:Boolean(privacy()?.enabled?.())});
-    if(data.state==='disconnected')return info('Source Exigences non connect\u00e9e pour cette session : les exigences de l\u2019op\u00e9ration ne peuvent pas \u00eatre affich\u00e9es. Connecte-la depuis l\u2019onglet <b>Exigences</b> (URL du script et cl\u00e9 d\u2019acc\u00e8s).','is-muted');
+    if(data.state==='disconnected')return info('Source Exigences non connect\u00e9e pour cette session : les exigences de l\u2019op\u00e9ration ne peuvent pas \u00eatre affich\u00e9es. Elle se charge avec la source OPERATIONS (bouton <b>Donn\u00e9es</b>).','is-muted');
     if(data.state==='loading')return info('Chargement de la source Exigences\u2026','is-loading');
     if(data.state==='unauthorized')return info(`Source Exigences : acc\u00e8s non autoris\u00e9. ${esc(data.error||'')}`,'is-error');
     if(data.state==='error')return info(`Source Exigences indisponible : ${esc(data.error||'erreur inconnue')}. Aucune conclusion n\u2019est tir\u00e9e sur les exigences de cette op\u00e9ration.`,'is-error');

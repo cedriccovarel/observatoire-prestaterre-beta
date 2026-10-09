@@ -88,6 +88,12 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.17 — Une seule connexion pour les opérations et les exigences
+
+1. Script OPERATIONS : remplacer le code par le nouveau **`Code_Operations.gs`** (version 06.17), puis **Déployer → Gérer les déploiements → crayon → Nouvelle version**.
+2. Si RAPPORT est dans un autre classeur que OPERATIONS et que ce n’est pas déjà fait : propriété `NEWOSB_RAPPORT_SPREADSHEET_ID` dans le projet OPERATIONS, puis `verifierPartageExigences` (voir la section V6.15).
+3. Dans l’Observatoire : bouton **Données** → URL et clé OPERATIONS → Connecter. Les exigences se chargent ensuite toutes seules (onglet Exigences : « Source Exigences · avec OPERATIONS »). La clé et l’URL Exigences ne sont plus nécessaires ; le script Exigences peut rester en place (source séparée facultative).
+
 ## V6.15 — Liens de partage à durée limitée
 
 ### Mise à jour (10 min)
