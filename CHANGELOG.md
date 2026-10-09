@@ -1,5 +1,10 @@
 # Historique
 
+## V6.20
+
+**Filtres compacts**
+- Barre de filtres de l’Observatoire et de l’onglet Exigences en pastilles sur une ou deux lignes (au lieu de trois rangées de cases) : seul le nom du filtre s’affiche ; quand un filtre est actif, sa valeur apparaît dans une étiquette verte. Le nombre d’opérations et « Réinitialiser » passent sur la même ligne. Les menus à cases à cocher et la recherche dans chaque filtre sont inchangés.
+
 ## V6.19
 
 **Filtre « Type de programme » dans tous les menus issus d’OPERATIONS**
