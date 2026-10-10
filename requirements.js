@@ -777,11 +777,13 @@
   function handleKeyup(e){
     if(e.key==='Enter'&&e.target.matches?.('#reqSourceKey,#reqSourceUrl')){document.querySelector('[data-req-connect]')?.click();return true;}
     const fs=e.target.closest('[data-req-filter-search]');return fs?applyRequirementFilterSearch(fs):false;}
+  // Mémorise le menu de filtre ouvert d'un clic (panneau de droite), pour le garder ouvert aux réaffichages.
+  function setOpenFilter(key,open){if(open)state.openFilter=String(key||'');else if(!key||state.openFilter===key)state.openFilter='';}
   function status(){return {via:state.via||'',connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,errorKind:state.errorKind,loadedAt:state.loadedAt,hasKey:!!bridge?.hasKey?.()};}
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
   window.addEventListener('newosb:privacychange',emit);
   // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,loadViaOperations,shareFilters,disconnect,status,auditInfo,getOperationRequirements,
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,loadViaOperations,shareFilters,setOpenFilter,disconnect,status,auditInfo,getOperationRequirements,
     // Accès de test / diagnostic, sans exposer l'état mutable.
     _compatSnapshot(){const m=compatModel();return m.error?{error:m.error}:{context:m.ctx?.key||'',contexts:m.bouquets.contexts.map(c=>({key:c.key,operations:c.operations,top:c.top.map(i=>({code:i.code,operations:i.operations,frequency:i.frequency}))})),ranked:(m.analysis?.ranked||[]).map(r=>({id:r.id,pct:r.pct,covered:r.covered,required:r.required})),results:(m.analysis?.results||[]).map(r=>({id:r.id,status:r.status,pct:r.pct,covered:r.covered,required:r.required})),manual:state.compat.manualMention};}};
 })();

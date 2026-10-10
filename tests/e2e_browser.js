@@ -357,6 +357,21 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
       const viaSt = await page.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
       check(viaSt.via === 'operations' && viaSt.connected && viaSt.count > 0, `une seule connexion : les exigences sont chargées avec l’URL et la clé OPERATIONS (${viaSt.count} évaluations${viaSt.error ? ' · ' + viaSt.error : ''})`);
+      const keepOpen = await page.evaluate(async () => {
+        const find = sel => [...document.querySelectorAll(sel)].find(d => /Type de programme/.test(d.textContent));
+        find('#obsFilters details').querySelector('summary').click(); await new Promise(r => setTimeout(r, 50));
+        window.dispatchEvent(new CustomEvent('newosb:datachange')); await new Promise(r => setTimeout(r, 50));
+        const globalOpen = !!find('#obsFilters details')?.open;
+        document.querySelector('#obsNav [data-page="requirements"]').click(); await new Promise(r => setTimeout(r, 200));
+        find('.obs-req-filter-host details').querySelector('summary').click(); await new Promise(r => setTimeout(r, 50));
+        window.dispatchEvent(new CustomEvent('newosb:requirementschange')); await new Promise(r => setTimeout(r, 100));
+        const reqOpen = !!find('.obs-req-filter-host details')?.open;
+        const opts = find('.obs-req-filter-host details')?.querySelectorAll('[data-req-filter-check]').length || 0;
+        document.querySelector('#obsNav [data-page="overview"]').click(); await new Promise(r => setTimeout(r, 100));
+        return { globalOpen, reqOpen, opts };
+      });
+      check(keepOpen.globalOpen && keepOpen.reqOpen && keepOpen.opts > 0, `menu « Type de programme » : reste ouvert quand les filtres sont redessinés (global ${keepOpen.globalOpen}, Exigences ${keepOpen.reqOpen}, ${keepOpen.opts} choix)`);
+      await page.evaluate(() => document.querySelectorAll('details[open]').forEach(d => { d.open = false; }));
       const adminCount = await page.textContent('#obsFilterCount');
       const pagesBefore = context.pages().length;
       const popupP = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);

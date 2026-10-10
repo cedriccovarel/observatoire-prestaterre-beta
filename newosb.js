@@ -1951,7 +1951,11 @@
     const btn=document.querySelector('[data-filter-panel-toggle]');
     if(btn){btn.setAttribute('aria-expanded',collapsed?'false':'true');btn.title=collapsed?'Afficher les filtres':'Replier les filtres';const ic=btn.querySelector('.obs-filter-toggle-icon');if(ic)ic.textContent=collapsed?'‹':'›';}
   }
+  function trackGlobalFilterToggle(){
+    filtersEl?.addEventListener('toggle',e=>{const d=e.target;if(!d?.matches?.('.obs-check-filter'))return;const key=d.querySelector('[data-global-filter-search]')?.dataset.globalFilterSearch||'';if(d.open)state.openGlobalFilter=key;else if(state.openGlobalFilter===key)state.openGlobalFilter='';},true);
+  }
   function setupFilterPanel(){
+    trackGlobalFilterToggle();
     const wrap=document.querySelector('.obs-filterbar-wrap');
     if(!wrap||wrap.dataset.panel==='1')return;
     wrap.dataset.panel='1';
@@ -1959,6 +1963,8 @@
     reqFilterHost=document.createElement('div');reqFilterHost.className='obs-req-filter-host';reqFilterHost.hidden=true;wrap.appendChild(reqFilterHost);
     const fwd={click:'handleClick',change:'handleChange',input:'handleInput',keyup:'handleKeyup'};
     Object.keys(fwd).forEach(t=>reqFilterHost.addEventListener(t,e=>{window.NEWOSB_REQUIREMENTS?.[fwd[t]]?.(e);}));
+    // Un menu ouvert d'un clic reste ouvert si les filtres sont redessinés (chargement en arrière-plan, etc.).
+    reqFilterHost.addEventListener('toggle',e=>{const d=e.target;if(!d?.matches?.('.req-check-filter'))return;const key=d.querySelector('[data-req-filter-search]')?.dataset.reqFilterSearch||'';window.NEWOSB_REQUIREMENTS?.setOpenFilter?.(d.open?key:'',d.open);},true);
     reqFilterHost.addEventListener('pointerdown',e=>{if(e.target.closest?.('[data-req-filter-search]'))e.stopPropagation();});
     wrap.addEventListener('click',e=>{if(!e.target.closest('[data-filter-panel-toggle]'))return;const collapsed=!mainEl.classList.contains('filters-collapsed');applyFilterPanel(collapsed);try{localStorage.setItem(FILTER_PANEL_KEY,collapsed?'1':'0');}catch{}});
     let stored=null;try{stored=localStorage.getItem(FILTER_PANEL_KEY);}catch{}

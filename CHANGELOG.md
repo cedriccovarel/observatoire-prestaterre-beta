@@ -1,5 +1,9 @@
 # Historique
 
+## V6.21.1
+
+- Correctif : un menu de filtre ouvert d’un clic (panneau de droite, Observatoire et onglet Exigences) se refermait dès que les filtres étaient redessinés — par exemple pendant le chargement des exigences en arrière-plan, qui rafraîchit la page à chaque bloc. Le menu ouvert est maintenant mémorisé et reste ouvert.
+
 ## V6.21
 
 **Filtres dans un panneau vertical à droite, repliable**
