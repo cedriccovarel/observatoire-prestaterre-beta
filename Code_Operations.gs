@@ -45,7 +45,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.19',
+  VERSION: '06.22',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -146,7 +146,7 @@ function newosbApiRequest_(params) {
     return newosbRapportRequest_(params, mode, { anonymized: newosbAnonymizedOnly_() });
   }
 
-  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend') {
+  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend' || mode === 'visitorrevoke' || mode === 'visitorextend') {
     return newosbShareAdmin_(mode, params);
   }
 
@@ -669,14 +669,22 @@ const NEWOSB_SHARE_CONFIG = {
   RAPPORT_PROPERTY: 'NEWOSB_RAPPORT_SPREADSHEET_ID',
   REQ_FILTER_KEYS: ['year', 'referential', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone', 'period', 'nature', 'mention', 'moaSector', 'theme', 'programType'],
   REQ_PRIVATE_KEYS: ['moa', 'moaGroup'],
-  FAILURE_LIMIT: 60
+  FAILURE_LIMIT: 60,
+  // V6.22 : colonnes ajoutees apres les codes (les liens deja crees restent lisibles).
+  EXTRA_HEADERS: ['Filtres autorises'],
+  GLOBAL_FILTER_KEYS: ['year', 'createdYear', 'referential', 'programType', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone'],
+  // V6.22 : destinataires identifies (nom, prenom, societe), revocables et prolongeables un par un.
+  VISITOR_SHEET: 'OBSERVATOIRE_PARTAGES_VISITEURS',
+  VISITOR_HEADERS: ['Identifiant', 'Empreinte du jeton', 'Lien', 'Nom', 'Prenom', 'Societe', 'Enregistre le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Dernier acces (ms)', "Nombre d'acces"],
+  MAX_VISITORS: 500
 };
 
 function newosbShareColumns_() {
   const out = NEWOSB_SHARE_CONFIG.HEADERS.slice();
   for (let i = 1; i <= NEWOSB_SHARE_CONFIG.CODE_CELLS; i++) out.push('Codes ' + i);
-  return out;
+  return out.concat(NEWOSB_SHARE_CONFIG.EXTRA_HEADERS);
 }
+const NEWOSB_SHARE_EXTRA_COL_ = NEWOSB_SHARE_CONFIG.HEADERS.length + NEWOSB_SHARE_CONFIG.CODE_CELLS; // index 0
 
 function newosbShareSheet_(create) {
   const ss = getSpreadsheet_();
@@ -717,7 +725,7 @@ function newosbShareText_(value, max) {
 function newosbShareRecords_(sheet) {
   if (!sheet) return [];
   const last = sheet.getLastRow();
-  const width = NEWOSB_SHARE_CONFIG.HEADERS.length;
+  const width = NEWOSB_SHARE_EXTRA_COL_ + NEWOSB_SHARE_CONFIG.EXTRA_HEADERS.length;
   if (last < 2) return [];
   return sheet.getRange(2, 1, last - 1, width).getValues().map(function(r, i) {
     return {
@@ -736,7 +744,8 @@ function newosbShareRecords_(sheet) {
       lastAccessAt: Number(r[11]) || 0,
       accessCount: Number(r[12]) || 0,
       landing: String(r[13] || ''),
-      reqFilters: newosbShareParseReqFilters_(r[14])
+      reqFilters: newosbShareParseReqFilters_(r[14]),
+      allowedFilters: newosbShareCleanAllowed_(newosbShareParseReqFilters_(r[NEWOSB_SHARE_EXTRA_COL_]))
     };
   }).filter(function(rec) { return rec.id && rec.hash; });
 }
@@ -760,7 +769,8 @@ function newosbSharePublic_(rec, now) {
   return {
     id: rec.id, label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, revokedAt: rec.revokedAt,
     status: newosbShareStatus_(rec, now), tabs: rec.tabs, anonymized: rec.anonymized || newosbAnonymizedOnly_(),
-    summary: rec.summary, operationCount: rec.operationCount, lastAccessAt: rec.lastAccessAt, accessCount: rec.accessCount, landing: rec.landing
+    summary: rec.summary, operationCount: rec.operationCount, lastAccessAt: rec.lastAccessAt, accessCount: rec.accessCount, landing: rec.landing,
+    allowedFilters: rec.allowedFilters || { global: [], req: [] }
   };
 }
 
@@ -781,7 +791,12 @@ function newosbShareLock_() {
 function newosbShareAdmin_(mode, params) {
   const now = Date.now();
   if (mode === 'sharelist') {
-    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, now: now, anonymizedOnly: newosbAnonymizedOnly_(), shares: newosbShareRecords_(newosbShareSheet_(false)).map(function(r) { return newosbSharePublic_(r, now); }).reverse() };
+    const visitors = newosbVisitorRecords_(newosbVisitorSheet_(false));
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, now: now, anonymizedOnly: newosbAnonymizedOnly_(), shares: newosbShareRecords_(newosbShareSheet_(false)).map(function(r) {
+      const pub = newosbSharePublic_(r, now);
+      pub.visitors = visitors.filter(function(v) { return v.shareId === r.id; }).map(function(v) { return newosbVisitorPublic_(v, r, now); }).reverse();
+      return pub;
+    }).reverse() };
   }
   if (mode === 'sharecreate') {
     const tabs = (Array.isArray(params.tabs) ? params.tabs : []).map(String).filter(function(t, i, all) { return NEWOSB_SHARE_CONFIG.TABS.indexOf(t) >= 0 && all.indexOf(t) === i; });
@@ -807,14 +822,17 @@ function newosbShareAdmin_(mode, params) {
     const reqFilters = tabs.indexOf('requirements') >= 0 ? newosbShareCleanReqFilters_(params.reqFilters, anonymized) : {};
     const label = newosbShareText_(params.label, 120) || 'Observatoire partage';
     const summary = newosbShareText_(params.summary, 2000);
-    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices);
+    const allowedFilters = newosbShareCleanAllowed_(params.allowedFilters, tabs);
+    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices).concat(['~' + JSON.stringify(allowedFilters)]);
     const lock = newosbShareLock_();
     try {
       const sheet = newosbShareSheet_(true);
+      const cols = newosbShareColumns_();
+      sheet.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]);
       const target = sheet.getLastRow() + 1;
       sheet.getRange(target, 1, 1, row.length).setNumberFormat('@').setValues([row]);
     } finally { if (lock) lock.releaseLock(); }
-    const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing, reqFilters: reqFilters };
+    const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing, reqFilters: reqFilters, allowedFilters: allowedFilters };
     // Le jeton n'est renvoye qu'une fois, a la creation ; seule son empreinte est conservee.
     return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: newosbSharePublic_(rec, now) };
   }
@@ -834,7 +852,105 @@ function newosbShareAdmin_(mode, params) {
       return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: newosbSharePublic_(rec, now) };
     } finally { if (lock) lock.releaseLock(); }
   }
+  if (mode === 'visitorrevoke' || mode === 'visitorextend') {
+    const id = String(params.id || '');
+    const lock = newosbShareLock_();
+    try {
+      const vsheet = newosbVisitorSheet_(false);
+      const v = newosbVisitorRecords_(vsheet).filter(function(r) { return r.id === id; })[0];
+      if (!v) throw new Error('Destinataire introuvable.');
+      const rec = newosbShareRecords_(newosbShareSheet_(false)).filter(function(r) { return r.id === v.shareId; })[0];
+      if (!rec) throw new Error('Lien de partage introuvable.');
+      if (mode === 'visitorrevoke') { if (!v.revokedAt) { v.revokedAt = now; vsheet.getRange(v.row, 9).setNumberFormat('@').setValue(String(now)); } }
+      else {
+        if (v.revokedAt) throw new Error('Un acces revoque ne peut pas etre prolonge.');
+        if (rec.revokedAt) throw new Error('Le lien est revoque : cree un nouveau lien.');
+        v.expiresAt = newosbShareExpiry_(params.expiresAt, now);
+        vsheet.getRange(v.row, 8).setNumberFormat('@').setValue(String(v.expiresAt));
+      }
+      return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: newosbSharePublic_(rec, now), visitor: newosbVisitorPublic_(v, rec, now) };
+    } finally { if (lock) lock.releaseLock(); }
+  }
   throw new Error('Action de partage inconnue.');
+}
+
+// Filtres que le destinataire peut utiliser (dans le perimetre du lien).
+function newosbShareCleanAllowed_(value, tabs) {
+  const src = value && typeof value === 'object' ? value : {};
+  const pick = function(list, allowed) { return (Array.isArray(list) ? list : []).map(String).filter(function(k, i, all) { return allowed.indexOf(k) >= 0 && all.indexOf(k) === i; }); };
+  const out = { global: pick(src.global, NEWOSB_SHARE_CONFIG.GLOBAL_FILTER_KEYS), req: pick(src.req, NEWOSB_SHARE_CONFIG.REQ_FILTER_KEYS) };
+  if (tabs && tabs.indexOf('requirements') < 0) out.req = [];
+  return out;
+}
+
+// --------------------------------------------------------------- destinataires (V6.22)
+function newosbVisitorSheet_(create) {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(NEWOSB_SHARE_CONFIG.VISITOR_SHEET);
+  if (!sheet && create) {
+    sheet = ss.insertSheet(NEWOSB_SHARE_CONFIG.VISITOR_SHEET);
+    const cols = NEWOSB_SHARE_CONFIG.VISITOR_HEADERS;
+    sheet.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]);
+    try { sheet.hideSheet(); } catch (e) {}
+    try { sheet.protect().setDescription('Destinataires des liens de partage (gere par le script)').setWarningOnly(true); } catch (e) {}
+  }
+  return sheet || null;
+}
+
+function newosbVisitorRecords_(sheet) {
+  if (!sheet) return [];
+  const last = sheet.getLastRow();
+  if (last < 2) return [];
+  return sheet.getRange(2, 1, last - 1, NEWOSB_SHARE_CONFIG.VISITOR_HEADERS.length).getValues().map(function(r, i) {
+    return { row: i + 2, id: String(r[0] || ''), hash: String(r[1] || ''), shareId: String(r[2] || ''), lastName: String(r[3] || ''), firstName: String(r[4] || ''), company: String(r[5] || ''),
+      createdAt: Number(r[6]) || 0, expiresAt: Number(r[7]) || 0, revokedAt: Number(r[8]) || 0, lastAccessAt: Number(r[9]) || 0, accessCount: Number(r[10]) || 0 };
+  }).filter(function(v) { return v.id && v.hash; });
+}
+
+// Expiration individuelle : la plus tardive entre celle du lien et une prolongation propre a la personne.
+function newosbVisitorExpiry_(v, rec) { return Math.max(Number(rec.expiresAt) || 0, Number(v.expiresAt) || 0); }
+
+function newosbVisitorStatus_(v, rec, now) {
+  if (rec.revokedAt || v.revokedAt) return 'revoked';
+  return newosbVisitorExpiry_(v, rec) > now ? 'active' : 'expired';
+}
+
+function newosbVisitorPublic_(v, rec, now) {
+  return { id: v.id, lastName: v.lastName, firstName: v.firstName, company: v.company, createdAt: v.createdAt, expiresAt: newosbVisitorExpiry_(v, rec), extended: (Number(v.expiresAt) || 0) > (Number(rec.expiresAt) || 0), revokedAt: v.revokedAt, status: newosbVisitorStatus_(v, rec, now), lastAccessAt: v.lastAccessAt, accessCount: v.accessCount };
+}
+
+function newosbVisitorRegister_(access, params) {
+  const rec = access.record, now = Date.now();
+  if (newosbShareStatus_(rec, now) !== 'active') throw new Error('Ce lien de partage a expire : il ne permet plus de nouvel acces.');
+  const clean = function(v) { return newosbShareText_(String(v == null ? '' : v).replace(/[<>]/g, ''), 80).trim(); };
+  const lastName = clean(params.lastName), firstName = clean(params.firstName), company = clean(params.company);
+  if (!lastName || !firstName || !company) throw new Error('Nom, prenom et societe sont obligatoires.');
+  const lock = newosbShareLock_();
+  try {
+    const sheet = newosbVisitorSheet_(true);
+    const count = newosbVisitorRecords_(sheet).filter(function(v) { return v.shareId === rec.id; }).length;
+    if (count >= NEWOSB_SHARE_CONFIG.MAX_VISITORS) throw new Error("Nombre maximal de personnes atteint pour ce lien.");
+    const token = newosbShareNewToken_();
+    const hash = newosbShareHash_('visitor|' + token);
+    const id = hash.slice(0, 10);
+    sheet.getRange(sheet.getLastRow() + 1, 1, 1, NEWOSB_SHARE_CONFIG.VISITOR_HEADERS.length).setNumberFormat('@').setValues([[id, hash, rec.id, lastName, firstName, company, String(now), '', '', '', '0']]);
+    const v = { id: id, lastName: lastName, firstName: firstName, company: company, createdAt: now, expiresAt: 0, revokedAt: 0, lastAccessAt: 0, accessCount: 0 };
+    // Le jeton personnel n'est renvoye qu'une fois ; le navigateur du destinataire le garde pour ne pas redemander son identite.
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, visitorToken: token, visitor: newosbVisitorPublic_(v, rec, now) };
+  } finally { if (lock) lock.releaseLock(); }
+}
+
+function newosbVisitorAccess_(access, token) {
+  const text = String(token || '');
+  if (!/^[A-Za-z0-9]{32,64}$/.test(text)) return { ok: false, needIdentity: true, error: 'Identification requise : indique ton nom, ton prenom et ta societe.' };
+  const hash = newosbShareHash_('visitor|' + text);
+  const sheet = newosbVisitorSheet_(false);
+  const v = newosbVisitorRecords_(sheet).filter(function(r) { return r.shareId === access.record.id && newosbSafeEqual_(r.hash, hash); })[0];
+  if (!v) return { ok: false, needIdentity: true, error: 'Identification requise : indique ton nom, ton prenom et ta societe.' };
+  const st = newosbVisitorStatus_(v, access.record, Date.now());
+  if (st === 'revoked') return { ok: false, error: 'Votre acces a ce lien de partage a ete revoque.' };
+  if (st === 'expired') return { ok: false, expired: true, error: 'Votre acces a ce lien de partage a expire.' };
+  return { ok: true, sheet: sheet, visitor: v };
 }
 
 // Verification d'un jeton de partage (aucune cle d'acces).
@@ -851,8 +967,8 @@ function newosbShareAccess_(token) {
   }
   const status = newosbShareStatus_(rec, Date.now());
   if (status === 'revoked') return { ok: false, error: 'Ce lien de partage a ete revoque.' };
-  if (status === 'expired') return { ok: false, expired: true, expiresAt: rec.expiresAt, error: 'Ce lien de partage a expire.' };
-  return { ok: true, sheet: sheet, record: rec };
+  // Lien expire : seules les personnes dont l'acces a ete prolonge individuellement peuvent encore lire.
+  return { ok: true, sheet: sheet, record: rec, expired: status === 'expired' };
 }
 
 // Index de la colonne du code interne ; « Nom [2] » designe la 2e occurrence d'un en-tete en double
@@ -884,7 +1000,7 @@ function newosbShareMatches_(access, meta) {
 
 function newosbShareInfo_(rec) {
   const anonymized = rec.anonymized || newosbAnonymizedOnly_();
-  return { label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, tabs: rec.tabs, landing: rec.landing, anonymized: anonymized, summary: rec.summary, operationCount: rec.operationCount, reqFilters: rec.tabs.indexOf('requirements') >= 0 ? newosbShareCleanReqFilters_(rec.reqFilters, anonymized) : {} };
+  return { label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, tabs: rec.tabs, landing: rec.landing, anonymized: anonymized, summary: rec.summary, operationCount: rec.operationCount, reqFilters: rec.tabs.indexOf('requirements') >= 0 ? newosbShareCleanReqFilters_(rec.reqFilters, anonymized) : {}, allowedFilters: newosbShareCleanAllowed_(rec.allowedFilters, rec.tabs) };
 }
 
 // Filtres de l'onglet Exigences figes a la creation (appliques par le navigateur, a l'interieur des
@@ -994,10 +1110,23 @@ function newosbShareRequest_(access, params) {
   const endpoint = String(params.endpoint || '').toLowerCase();
   if (endpoint === 'zone123') return handleZone123Proxy_();
   if (endpoint === 'communes') return handleCommunesProxy_(params);
+  if (mode === 'register') return newosbVisitorRegister_(access, params);
+  // V6.22 : aucune donnee sans destinataire identifie (jeton personnel), non revoque et non expire.
+  const who = newosbVisitorAccess_(access, params.visitor);
+  if (!who.ok) {
+    if (who.needIdentity && mode === 'ping' && !access.expired) return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, needIdentity: true, share: { label: rec.label, expiresAt: rec.expiresAt } };
+    if (who.needIdentity && access.expired) return { ok: false, authError: true, shareError: true, expired: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: 'Ce lien de partage a expire.' };
+    return { ok: false, authError: true, shareError: true, needIdentity: !!who.needIdentity, expired: !!who.expired, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, error: who.error };
+  }
   const base = { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, share: newosbShareInfo_(rec) };
+  base.share.visitor = newosbVisitorPublic_(who.visitor, rec, Date.now());
+  base.share.expiresAt = base.share.visitor.expiresAt;
   if (mode === 'ping') {
     const lock = newosbShareLock_();
-    try { access.sheet.getRange(rec.row, 12, 1, 2).setNumberFormat('@').setValues([[String(Date.now()), String(rec.accessCount + 1)]]); } catch (e) {} finally { if (lock) lock.releaseLock(); }
+    try {
+      access.sheet.getRange(rec.row, 12, 1, 2).setNumberFormat('@').setValues([[String(Date.now()), String(rec.accessCount + 1)]]);
+      who.sheet.getRange(who.visitor.row, 10, 1, 2).setNumberFormat('@').setValues([[String(Date.now()), String(who.visitor.accessCount + 1)]]);
+    } catch (e) {} finally { if (lock) lock.releaseLock(); }
     base.transport = 'popup-bridge-ready';
     base.anonymizedOnly = base.share.anonymized;
     return base;

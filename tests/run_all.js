@@ -170,11 +170,15 @@ test('mode anonymisé : noms pseudonymisés, montants/CP supprimés, statut et c
   assert.strictEqual(r0[col('Code postal')], ''); assert.strictEqual(r0[col('Montant HT affaire')], ''); assert.strictEqual(r0[col('Opération: Évaluation: Statut')], 'Non démarrée');
 });
 
+// V6.22 : un destinataire doit s'identifier (nom, prénom, société) avant toute donnée ; les tests le font une fois par lien.
+const VISITORS = new WeakMap();
+const visitorOf = (gs, token) => { let m = VISITORS.get(gs); if (!m) { m = {}; VISITORS.set(gs, m); } if (!m[token]) { const r = gs.newosbBridgeRequest({ mode: 'register', share: token, lastName: 'Martin', firstName: 'Claire', company: 'Bailleur Test' }); if (r.ok && r.visitorToken) m[token] = r.visitorToken; } return m[token]; };
+const shareReq = (gs, token, params) => gs.newosbBridgeRequest({ ...params, share: token, visitor: visitorOf(gs, token) });
 section('6 quater. Liens de partage à durée limitée (Code_Operations.gs) — V6.15');
 const CODE_H = 'Opération: Code interne', MOA_H = 'Nom de la société: Nom de la société';
 const DAYMS = 86400000;
 const mkShare = (gs, extra = {}) => gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, label: 'Test partage', tabs: ['overview', 'carbon', 'presentation', 'inconnu'], landing: 'carbon', expiresAt: Date.now() + 7 * DAYMS, anonymized: false, codes: ['OP-1', ' op-3 ', 'OP-1'], codeHeader: CODE_H, summary: 'Référentiel : BEE Logement Neuf', ...extra });
-const shareRows = (gs, token) => { const m = gs.newosbBridgeRequest({ mode: 'meta', share: token }); assert.strictEqual(m.ok, true, m.error); const c = gs.newosbBridgeRequest({ mode: 'chunk', share: token, offset: 0, limit: 500, totalRows: 9999, firstDataRow: 1, lastColumn: m.lastColumn }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
+const shareRows = (gs, token) => { const m = shareReq(gs, token, { mode: 'meta' }); assert.strictEqual(m.ok, true, m.error); const c = shareReq(gs, token, { mode: 'chunk', offset: 0, limit: 500, totalRows: 9999, firstDataRow: 1, lastColumn: m.lastColumn }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
 test('création : clé exigée ; le jeton est renvoyé une fois, seule son empreinte est stockée', () => {
   const gs = opsGs();
   const refused = gs.newosbBridgeRequest({ mode: 'shareCreate', key: 'mauvaise', tabs: ['overview'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + DAYMS });
@@ -186,7 +190,7 @@ test('création : clé exigée ; le jeton est renvoyé une fois, seule son empre
 });
 test('lecture par le lien : uniquement les lignes du périmètre, sans clé', () => {
   const gs = opsGs(); const { token } = mkShare(gs);
-  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: token }); assert.strictEqual(ping.ok, true); assert.strictEqual(ping.share.label, 'Test partage'); assert(!ping.rows && !ping.headers);
+  const ping = shareReq(gs, token, { mode: 'ping' }); assert.strictEqual(ping.ok, true); assert.strictEqual(ping.share.label, 'Test partage'); assert(!ping.rows && !ping.headers);
   const { m, c } = shareRows(gs, token); assert.strictEqual(m.totalRows, 2); assert.deepStrictEqual(m.headers.slice(0, 3), HEADERS.slice(0, 3));
   const codes = c.rows.map(r => r[HEADERS.indexOf(CODE_H)]).sort(); assert.strictEqual(JSON.stringify(codes), '["OP-1","OP-3"]'); assert.strictEqual(c.done, true);
   assert.strictEqual(c.rows[0][HEADERS.indexOf(MOA_H)], 'Promoteur A');
@@ -200,16 +204,16 @@ test('lien anonymisé : pseudonymisation par le serveur, montants et codes posta
 test('expiration, révocation et jeton inconnu : refus explicite, aucune donnée', () => {
   const gs = opsGs(); const a = mkShare(gs), b = mkShare(gs);
   const sh = gs.sheets.OBSERVATOIRE_PARTAGES; sh.data[1][4] = String(Date.now() - 1000);
-  const exp = gs.newosbBridgeRequest({ mode: 'meta', share: a.token }); assert.strictEqual(exp.ok, false); assert.strictEqual(exp.authError, true); assert(/expir/.test(exp.error)); assert(!exp.headers && !exp.rows);
+  const exp = shareReq(gs, a.token, { mode: 'meta' }); assert.strictEqual(exp.ok, false); assert.strictEqual(exp.authError, true); assert(/expir/.test(exp.error)); assert(!exp.headers && !exp.rows);
   assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: b.share.id }).share.status, 'revoked');
-  const rev = gs.newosbBridgeRequest({ mode: 'chunk', share: b.token, offset: 0, limit: 10 }); assert.strictEqual(rev.ok, false); assert(/revoqu/.test(rev.error)); assert(!rev.rows);
-  for (const t of ['A'.repeat(43), 'court', '<script>', b.token + 'x']) { const r = gs.newosbBridgeRequest({ mode: 'ping', share: t }); assert.strictEqual(r.ok, false); assert.strictEqual(r.authError, true); }
+  const rev = shareReq(gs, b.token, { mode: 'chunk', offset: 0, limit: 10 }); assert.strictEqual(rev.ok, false); assert(/revoqu/.test(rev.error)); assert(!rev.rows);
+  for (const t of ['A'.repeat(43), 'court', '<script>', b.token + 'x']) { const r = shareReq(gs, t, { mode: 'ping' }); assert.strictEqual(r.ok, false); assert.strictEqual(r.authError, true); }
 });
 test('prolongation : nouvelle date contrôlée (1 h minimum, 366 jours maximum) ; un lien révoqué ne se prolonge pas', () => {
   const gs = opsGs(); const a = mkShare(gs); const sh = gs.sheets.OBSERVATOIRE_PARTAGES; sh.data[1][4] = String(Date.now() - 1000);
-  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'ping', share: a.token }).ok, false);
+  assert.strictEqual(shareReq(gs, a.token, { mode: 'ping' }).ok, false);
   const ext = gs.newosbBridgeRequest({ mode: 'shareExtend', key: KEY, id: a.share.id, expiresAt: Date.now() + 30 * DAYMS }); assert.strictEqual(ext.ok, true); assert.strictEqual(ext.share.status, 'active');
-  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'ping', share: a.token }).ok, true);
+  assert.strictEqual(shareReq(gs, a.token, { mode: 'ping' }).ok, true);
   for (const bad of [Date.now() + 1000, Date.now() + 400 * DAYMS, 'demain']) assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareExtend', key: KEY, id: a.share.id, expiresAt: bad }).ok, false);
   assert.strictEqual(mkShare(gs, { expiresAt: Date.now() + 400 * DAYMS }).ok, false);
   gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: a.share.id });
@@ -218,8 +222,47 @@ test('prolongation : nouvelle date contrôlée (1 h minimum, 366 jours maximum) 
 test('un lien ne donne accès ni à l’administration, ni à Google Slides, ni à la lecture complète', () => {
   const gs = opsGs(); const { token } = mkShare(gs);
   for (const mode of ['shareCreate', 'shareList', 'shareRevoke', 'createSlides', 'data', '']) { const r = gs.newosbBridgeRequest({ mode, share: token, codes: ['OP-2'], tabs: ['overview'] }); assert.strictEqual(r.ok, false, mode); assert(!r.rows && !r.token && !r.shares, mode); }
-  const both = gs.newosbBridgeRequest({ mode: 'meta', share: token, key: KEY }); assert.strictEqual(both.ok, false); assert(!both.headers);
+  const both = shareReq(gs, token, { mode: 'meta', key: KEY }); assert.strictEqual(both.ok, false); assert(!both.headers);
   const { c } = shareRows(gs, token); assert.strictEqual(c.rows.length, 2);
+});
+
+test('V6.22 : aucune donnée sans identification ; nom, prénom et société obligatoires ; jeton personnel conservé en empreinte seulement', () => {
+  const gs = opsGs(); const { token } = mkShare(gs);
+  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: token }); assert.strictEqual(ping.ok, true); assert.strictEqual(ping.needIdentity, true); assert(!ping.rows && !ping.headers && !ping.share.tabs);
+  const meta = gs.newosbBridgeRequest({ mode: 'meta', share: token }); assert.strictEqual(meta.ok, false); assert.strictEqual(meta.needIdentity, true); assert(!meta.headers);
+  assert(/obligatoires/.test(gs.newosbBridgeRequest({ mode: 'register', share: token, lastName: 'Dupont', firstName: '', company: 'X' }).error));
+  const r = gs.newosbBridgeRequest({ mode: 'register', share: token, lastName: '=Dupont', firstName: 'Jean', company: 'Bailleur <b>Z</b>' }); assert.strictEqual(r.ok, true); assert(/^[A-Za-z0-9]{43}$/.test(r.visitorToken));
+  assert.strictEqual(r.visitor.lastName, 'Dupont'); assert(!/[<>]/.test(r.visitor.company));
+  const vs = gs.sheets.OBSERVATOIRE_PARTAGES_VISITEURS; assert(vs.hidden); assert(!JSON.stringify(vs.data).includes(r.visitorToken));
+  const ok = gs.newosbBridgeRequest({ mode: 'meta', share: token, visitor: r.visitorToken }); assert.strictEqual(ok.ok, true); assert.strictEqual(ok.share.visitor.firstName, 'Jean');
+  const other = mkShare(gs).token; assert.strictEqual(gs.newosbBridgeRequest({ mode: 'meta', share: other, visitor: r.visitorToken }).needIdentity, true, 'un jeton personnel ne vaut que pour son lien');
+  gs.newosbBridgeRequest({ mode: 'ping', share: token, visitor: r.visitorToken });
+  const list = gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares.find(x => x.visitors.length);
+  assert.strictEqual(list.visitors.length, 1); assert.strictEqual(list.visitors[0].lastName, 'Dupont'); assert.strictEqual(list.visitors[0].firstName, 'Jean'); assert.strictEqual(list.visitors[0].accessCount, 1); assert(!JSON.stringify(list).includes(r.visitorToken));
+});
+test('V6.22 : révocation et prolongation par personne ; prolongation du lien pour tous', () => {
+  const gs = opsGs(); const sh = mkShare(gs); const tok = sh.token;
+  const a = gs.newosbBridgeRequest({ mode: 'register', share: tok, lastName: 'A', firstName: 'Anne', company: 'Alpha' }), b = gs.newosbBridgeRequest({ mode: 'register', share: tok, lastName: 'B', firstName: 'Bruno', company: 'Beta' });
+  const meta = v => gs.newosbBridgeRequest({ mode: 'meta', share: tok, visitor: v });
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'visitorRevoke', key: KEY, id: a.visitor.id }).visitor.status, 'revoked');
+  const ra = meta(a.visitorToken); assert.strictEqual(ra.ok, false); assert(/revoqu/.test(ra.error)); assert(!ra.headers); assert.strictEqual(meta(b.visitorToken).ok, true, 'les autres personnes gardent l’accès');
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'visitorExtend', key: KEY, id: a.visitor.id, expiresAt: Date.now() + 90 * DAYMS }).ok, false, 'un accès révoqué ne se prolonge pas');
+  const ext = gs.newosbBridgeRequest({ mode: 'visitorExtend', key: KEY, id: b.visitor.id, expiresAt: Date.now() + 60 * DAYMS }); assert.strictEqual(ext.visitor.extended, true);
+  const c = gs.newosbBridgeRequest({ mode: 'register', share: tok, lastName: 'C', firstName: 'Chloé', company: 'Gamma' });
+  gs.sheets.OBSERVATOIRE_PARTAGES.data[1][4] = String(Date.now() - 1000); // le lien expire
+  assert.strictEqual(meta(b.visitorToken).ok, true, 'prolongation individuelle au-delà du lien'); const rc = meta(c.visitorToken); assert.strictEqual(rc.ok, false); assert(/expir/.test(rc.error));
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'register', share: tok, lastName: 'D', firstName: 'Dan', company: 'Delta' }).ok, false, 'plus de nouvel accès sur un lien expiré');
+  gs.newosbBridgeRequest({ mode: 'shareExtend', key: KEY, id: sh.share.id, expiresAt: Date.now() + 10 * DAYMS }); assert.strictEqual(meta(c.visitorToken).ok, true, 'prolonger le lien prolonge toutes les personnes');
+  gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: sh.share.id }); assert.strictEqual(meta(b.visitorToken).ok, false, 'révoquer le lien coupe tout le monde');
+});
+test('V6.22 : filtres autorisés au destinataire (liste contrôlée) ; anciens liens sans cette colonne toujours lisibles', () => {
+  const gs = opsReqGs(); const r = mkShare(gs, { tabs: ['overview', 'requirements'], allowedFilters: { global: ['region', 'programType', 'inconnu', 'region'], req: ['theme', 'xx'] } });
+  const v = gs.newosbBridgeRequest({ mode: 'register', share: r.token, lastName: 'L', firstName: 'Léa', company: 'Lambda' }).visitorToken;
+  assert.strictEqual(JSON.stringify(gs.newosbBridgeRequest({ mode: 'ping', share: r.token, visitor: v }).share.allowedFilters), '{"global":["region","programType"],"req":["theme"]}');
+  const r2 = mkShare(gs, { tabs: ['overview'], allowedFilters: { global: ['moa'], req: ['theme'] } }); const v2 = gs.newosbBridgeRequest({ mode: 'register', share: r2.token, lastName: 'L', firstName: 'Léa', company: 'Lambda' }).visitorToken;
+  assert.strictEqual(JSON.stringify(gs.newosbBridgeRequest({ mode: 'ping', share: r2.token, visitor: v2 }).share.allowedFilters.req), '[]', 'pas de filtre Exigences sans l’onglet');
+  const row = gs.sheets.OBSERVATOIRE_PARTAGES.data[2]; row.length = 23; // lien créé avant la V6.22 (pas de colonne « Filtres autorisés »)
+  const old = gs.newosbBridgeRequest({ mode: 'ping', share: r2.token, visitor: v2 }); assert.strictEqual(old.ok, true); assert.strictEqual(JSON.stringify(old.share.allowedFilters), '{"global":[],"req":[]}');
 });
 test('création refusée : aucun onglet, aucun code, colonne du code inconnue', () => {
   const gs = opsGs();
@@ -241,25 +284,25 @@ const RREQ = [RH];
 const addReq = (op, ev, moa, codes) => codes.forEach(c => RREQ.push([`${c} - Exigence ${c}`, ev, moa, op, 'BEE Logement Neuf', '04/05/2026', 'Nouvelle-Aquitaine', '33', c, '', 'En cours', '']));
 addReq('OP-1', 'EVA-1', 'Promoteur A', ['1.1.1', '2.1.1']); addReq('op-3 ', 'EVA-3', 'Bailleur B', ['1.2.1']); addReq('OP-2', 'EVA-2', 'Promoteur A', ['3.1.1', '4.1.1']);
 const opsReqGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props }, extraSheets: { RAPPORT: RREQ } });
-const reqRows = (gs, token) => { const m = gs.newosbBridgeRequest({ mode: 'reqMeta', share: token }); assert.strictEqual(m.ok, true, m.error); const c = gs.newosbBridgeRequest({ mode: 'reqChunk', share: token, offset: 0, limit: 1500 }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
+const reqRows = (gs, token) => { const m = shareReq(gs, token, { mode: 'reqMeta' }); assert.strictEqual(m.ok, true, m.error); const c = shareReq(gs, token, { mode: 'reqChunk', offset: 0, limit: 1500 }); assert.strictEqual(c.ok, true, c.error); return { m, c }; };
 test('Exigences dans un lien : seules les lignes RAPPORT des opérations du périmètre, sans clé Exigences', () => {
   const gs = opsReqGs(); const r = mkShare(gs, { tabs: ['overview', 'requirements'], reqFilters: { referential: ['BEE Logement Neuf'], moa: ['Promoteur A'], inconnu: ['x'] } }); assert.strictEqual(r.ok, true, r.error);
-  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: r.token }); assert(ping.share.tabs.includes('requirements')); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"],"moa":["Promoteur A"]}');
+  const ping = shareReq(gs, r.token, { mode: 'ping' }); assert(ping.share.tabs.includes('requirements')); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"],"moa":["Promoteur A"]}');
   const { m, c } = reqRows(gs, r.token); assert.strictEqual(m.rowCount, 3); assert.strictEqual(m.service, 'NEWOSB EXIGENCES');
   assert.strictEqual(c.rows.map(x => x.operationCode.trim().toUpperCase()).sort().join(','), 'OP-1,OP-1,OP-3'); assert(c.rows.every(x => x.requirement && x.evaluationCode));
 });
 test('Exigences dans un lien anonymisé : MOA, codes et évaluations pseudonymisés comme les opérations, filtres MOA retirés', () => {
   const gs = opsReqGs(); const r = mkShare(gs, { tabs: ['requirements'], anonymized: true, reqFilters: { moa: ['Promoteur A'], moaGroup: ['G'], referential: ['BEE Logement Neuf'] } });
-  const ping = gs.newosbBridgeRequest({ mode: 'ping', share: r.token }); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"]}');
+  const ping = shareReq(gs, r.token, { mode: 'ping' }); assert.strictEqual(JSON.stringify(ping.share.reqFilters), '{"referential":["BEE Logement Neuf"]}');
   const { c } = reqRows(gs, r.token); const txt = JSON.stringify(c.rows); assert(!/Promoteur A|Bailleur B|EVA-1|"OP-1"/.test(txt));
   const opCodes = shareRows(gs, r.token).c.rows.map(x => x[HEADERS.indexOf(CODE_H)]);
   c.rows.forEach(x => { assert(/^MOA [0-9A-F]{8}$/.test(x.moa)); assert(/^EVA [0-9A-F]{8}$/.test(x.evaluationCode)); assert(opCodes.includes(x.operationCode), 'même pseudonyme que dans OPERATIONS'); });
 });
 test('Exigences : refusées si l’onglet n’est pas dans le lien, si le lien est révoqué ou expiré', () => {
   const gs = opsReqGs(); const a = mkShare(gs, { tabs: ['overview'] }); const b = mkShare(gs, { tabs: ['requirements'] });
-  const no = gs.newosbBridgeRequest({ mode: 'reqChunk', share: a.token, offset: 0, limit: 10 }); assert.strictEqual(no.ok, false); assert(!no.rows);
+  const no = shareReq(gs, a.token, { mode: 'reqChunk', offset: 0, limit: 10 }); assert.strictEqual(no.ok, false); assert(!no.rows);
   gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: b.share.id });
-  const rev = gs.newosbBridgeRequest({ mode: 'reqMeta', share: b.token }); assert.strictEqual(rev.ok, false); assert.strictEqual(rev.authError, true);
+  const rev = shareReq(gs, b.token, { mode: 'reqMeta' }); assert.strictEqual(rev.ok, false); assert.strictEqual(rev.authError, true);
 });
 test('Exigences : RAPPORT dans un autre classeur via NEWOSB_RAPPORT_SPREADSHEET_ID (identifiant ou URL)', () => {
   const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, NEWOSB_RAPPORT_SPREADSHEET_ID: 'https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit' }, extraSheets: { RAPPORT: RREQ } });
@@ -604,11 +647,11 @@ atest('lien de partage : le jeton remplace la clé (jamais les deux), envoyé à
 section('11. Liens de partage côté navigateur (newosb-share.js, auth.js)');
 function shareEnv(hash) {
   const classes = new Set(), store = {};
-  const ctx = { console, URLSearchParams, Date, Math, JSON, setTimeout, CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } } };
+  const ctx = { console, URLSearchParams, Date, Math, JSON, setTimeout, crypto: globalThis.crypto, TextEncoder, Uint8Array, CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } } };
   ctx.window = ctx; ctx.location = { hash, origin: 'https://site.test', pathname: '/obs/index.html' };
   ctx.addEventListener = () => {}; ctx.dispatchEvent = () => true;
-  ctx.document = { readyState: 'complete', documentElement: { classList: { add: c => classes.add(c), toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } }, getElementById: () => null };
-  ctx.sessionStorage = { setItem: (k, v) => { store[k] = v; }, getItem: k => store[k] ?? null }; ctx.localStorage = ctx.sessionStorage;
+  ctx.document = { readyState: 'complete', documentElement: { classList: { add: c => classes.add(c), toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } }, getElementById: () => null, addEventListener: () => {} };
+  ctx.sessionStorage = { setItem: (k, v) => { store[k] = v; }, getItem: k => store[k] ?? null, removeItem: k => { delete store[k]; } }; ctx.localStorage = ctx.sessionStorage;
   vm.createContext(ctx); vm.runInContext(read('newosb-share.js'), ctx);
   return { S: ctx.NEWOSB_SHARE, classes, ctx, store };
 }
@@ -656,62 +699,63 @@ test('le mode anonymisé imposé par un lien ne modifie pas le réglage du navig
   ctx.NEWOSB_PRIVACY.setEnabled(false); assert.strictEqual(ctx.NEWOSB_PRIVACY.enabled(), true); assert.strictEqual(Object.keys(store).filter(k => /anonymized/.test(k)).length, 0);
 });
 test('un lien de partage ne reconnecte jamais la source mémorisée ; périmètre calculé sur les vrais codes', () => {
-  const a = read('app.js'); assert(a.includes('if (!window.NEWOSB_SHARE?.active) { let src=null;')); assert(a.includes('function dataResolveRealCodes')); assert(a.includes("dataBridge.setShare(token)"));
+  const a = read('app.js'); assert(a.includes('if (!window.NEWOSB_SHARE?.active) { let src=null;')); assert(a.includes('function dataResolveRealCodes')); assert(a.includes("dataBridge.setShare(token,visitor)"));
   const idx = read('index.html'); const s = [...idx.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]); assert(s.indexOf('newosb-share.js') > s.indexOf('newosb-bridge.js') && s.indexOf('newosb-share.js') < s.indexOf('app.js'));
 });
 
-
-section('12. Mini-jeu de chargement « Capte le CO₂ » (newosb-game.js)');
-function gameEnv() { const ctx = { console, Math, Date, setTimeout, clearTimeout, localStorage: { getItem: () => null, setItem() {} } }; ctx.window = ctx; ctx.addEventListener = () => {}; ctx.document = {}; vm.createContext(ctx); vm.runInContext(read('newosb-game.js'), ctx); return ctx.NEWOSB_GAME; }
-const GM = gameEnv();
-const tick = (game, secs, dir) => { for (let t = 0; t < secs; t += 1 / 60) { if (dir) game.input(dir); game.step(1 / 60); } };
-test('carte : rues toutes reliées, 14 îlots de bâtiments variés autour de la base', () => {
-  const { W, H, walkable, bfs, SPAWN, BLOCKS, isBase, nearBase } = GM._map; const d = bfs(SPAWN);
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (walkable(x, y)) assert(d[y * W + x] < Infinity, `${x},${y}`);
-  assert.strictEqual(BLOCKS.length, 14); assert(nearBase(SPAWN.x, SPAWN.y));
-  const g = GM._createGame({ rng: GM._rng(7) }); assert(new Set(g.state.buildings).size >= 8, 'au moins 8 types de bâtiments');
-  assert(g.state.emitters.length === 3 && g.state.emitters.every(e => e.b >= 0 && e.b < 14), 'le CO₂ apparaît dans des bâtiments');
+test('V6.22 : identité demandée une seule fois par navigateur ; jeton personnel mémorisé sous une empreinte du lien', async () => {
+  const shared = {}; const calls = [];
+  const mkEngine = (needIdentity) => ({
+    prepareShareBridge: () => true,
+    shareCall: async (src, token, visitor, params) => { calls.push({ visitor, params }); if (params.mode === 'register') return { ok: true, visitorToken: 'V'.repeat(43) }; return visitor ? { ok: true } : { ok: true, needIdentity, share: { label: 'Lien test', expiresAt: Date.now() + 86400000 } }; },
+    connectShare: async (src, token, onProgress, visitor) => { calls.push({ connect: visitor }); return { share: { tabs: ['overview'], operationCount: 3, allowedFilters: { global: ['region'], req: [] }, visitor: { firstName: 'Claire', lastName: 'Martin', company: 'Bailleur Test' } } }; }
+  });
+  const first = shareEnv(`#partage=${TOK}&src=${encodeURIComponent(SRC)}`); Object.assign(first.store, shared); first.ctx.NEWOSB_ENGINE = mkEngine(true);
+  await first.S.start(false); assert.strictEqual(first.S.status, 'identify'); assert(first.S.gateHtml().includes('data-share-identity'));
+  const form = v => ({ querySelector: sel => ({ value: v[/name="(\w+)"/.exec(sel)[1]] }) });
+  await first.S.identify(form({ lastName: '', firstName: 'Claire', company: 'X' })); assert.strictEqual(first.S.status, 'identify'); assert(/nom, votre prénom et votre société/.test(first.S.message));
+  await first.S.identify(form({ lastName: 'Martin', firstName: 'Claire', company: 'Bailleur Test' }));
+  assert.strictEqual(first.S.status, 'ready'); assert.deepStrictEqual(first.S.info.allowedFilters.global, ['region']);
+  const keys = Object.keys(first.store).filter(k => k.startsWith('newosb_share_visitor_')); assert.strictEqual(keys.length, 1); assert(!keys[0].includes(TOK) && !Object.values(first.store).includes(TOK), 'le lien n’est jamais stocké');
+  assert(first.S.lockedFiltersHtml(3).includes('Claire Martin · Bailleur Test'));
+  // Seconde ouverture dans le même navigateur : pas de formulaire.
+  const second = shareEnv(`#partage=${TOK}&src=${encodeURIComponent(SRC)}`); Object.assign(second.store, first.store); second.ctx.NEWOSB_ENGINE = mkEngine(true); calls.length = 0;
+  await second.S.start(false); assert.strictEqual(second.S.status, 'ready'); assert(!calls.some(c => c.params?.mode === 'register')); assert.strictEqual(calls.find(c => 'connect' in c).connect, 'V'.repeat(43));
+  // Jeton mémorisé refusé (accès révoqué) : refus, jamais de repli.
+  const third = shareEnv(`#partage=${TOK}&src=${encodeURIComponent(SRC)}`); Object.assign(third.store, first.store);
+  third.ctx.NEWOSB_ENGINE = { ...mkEngine(true), shareCall: async () => { const e = new Error('Votre acces a ce lien a ete revoque.'); e.authError = true; throw e; } };
+  await third.S.start(false); assert.strictEqual(third.S.status, 'denied'); assert(/révoqué/.test(third.S.message));
 });
-test('rien ne bouge avant la première touche ; une flèche lance la partie', () => {
-  const g = GM._createGame({ rng: GM._rng(1) }); const e0 = JSON.stringify(g.state.enemies.map(e => [e.x, e.y]));
-  tick(g, 3); assert.strictEqual(g.state.phase, 'ready'); assert.strictEqual(JSON.stringify(g.state.enemies.map(e => [e.x, e.y])), e0);
-  g.input('left'); assert.strictEqual(g.state.phase, 'play'); tick(g, 0.5); assert(g.state.player.x < 11);
-});
-test('le personnage ne traverse ni les bâtiments ni la base', () => {
-  const g = GM._createGame({ rng: GM._rng(2) }); g.state.enemies = []; tick(g, 1, 'down'); assert.strictEqual(g.state.player.y, 4, 'base au sud'); tick(g, 1, 'up'); assert.strictEqual(g.state.player.y, 4, 'bâtiment au nord');
-  g.input('left'); tick(g, 0.1); tick(g, 3, 'up'); assert.strictEqual(g.state.player.x, 9); assert.strictEqual(g.state.player.y, 1, 'virage au premier couloir libre');
-  const { walkable } = GM._map; for (let i = 0; i < 400; i++) { g.input(['up', 'down', 'left', 'right'][i % 4]); g.step(1 / 30); const p = g.state.player; assert(walkable(Math.round(p.x), Math.round(p.y))); }
-});
-test('CO₂ capté en longeant un bâtiment émetteur (3 max) ; dépôt en passant devant la base, même sans s’arrêter', () => {
-  const { BLOCKS } = GM._map; const g = GM._createGame({ rng: GM._rng(3) }); const s = g.state; s.enemies = [];
-  const east = BLOCKS.findIndex(b => b.x === 14 && b.y === 2); s.emitters = [{ b: east, amount: 2, born: 0 }, { b: BLOCKS.findIndex(b => b.x === 18 && b.y === 2), amount: 2, born: 0 }];
-  g.input('right'); for (let t = 0; t < 1.8; t += 1 / 30) { g.input('right'); g.step(1 / 30); }
-  assert.strictEqual(s.carried, 3, 'sac plein à 3'); assert.strictEqual(s.emitters.length, 1); assert.strictEqual(s.emitters[0].amount, 1, 'le reste reste dans le bâtiment');
-  for (let t = 0; t < 2.2; t += 1 / 24) { g.input('left'); g.step(1 / 24); }
-  assert.strictEqual(s.carried, 0, 'déposé en passant'); assert.strictEqual(s.growth, 3); assert.strictEqual(g.treeStage(), 1); assert.strictEqual(s.score, 30);
-});
-test('arbre adulte à 15 CO₂ : arbre planté, toit végétalisé, niveau suivant avec un engin de plus (2 au niveau 1)', () => {
-  const g = GM._createGame({ rng: GM._rng(5) }); const s = g.state; assert.strictEqual(s.enemies.length, 2);
-  assert.deepStrictEqual(s.enemies.map(e => e.type.kind).join(','), 'bulldozer,camion');
-  g.input('right'); s.enemies = []; s.carried = 3; s.growth = 12; s.emitters = []; tick(g, 0.2, 'right');
-  assert.strictEqual(s.trees, 1); assert.strictEqual(s.level, 2); assert.strictEqual(s.growth, 0); assert.strictEqual(s.enemies.length, 3); assert.strictEqual(s.greenRoofs.length, 1);
-});
-test('engins de chantier : foncent sur le personnage visible dans leur rue ; un choc coûte une vie et le CO₂ ; 3 chocs = fin', () => {
-  const g = GM._createGame({ rng: GM._rng(4) }); const s = g.state; g.input('left'); s.player.speed = 0;
-  const e = s.enemies[0]; Object.assign(e, { x: 1, y: 4, wait: 0, dir: { dx: 0, dy: 0 } }); s.enemies = [e];
-  Object.assign(s.player, { x: 7, y: 4 }); g.step(1 / 60);
-  assert(e.charging && e.dir.dx === 1, 'fonce vers la droite'); g.step(1 / 60); assert(e.speed > 2.5 * e.type.speed, 'accélère');
-  for (let n = 0; n < 3 && s.phase !== 'over'; n++) { s.carried = 2; s.invuln = 0; Object.assign(e, { x: s.player.x, y: s.player.y, wait: 0 }); g.step(1 / 60); }
-  assert.strictEqual(s.lives, 0); assert.strictEqual(s.phase, 'over'); assert.strictEqual(s.carried, 0);
-});
-test('intégration : jeu ouvert pendant les chargements OPERATIONS, Exigences et lien de partage ; jamais sans chargement', () => {
-  const a = read('app.js'), r = read('requirements.js'), sh = read('newosb-share.js');
-  assert(a.includes("window.NEWOSB_GAME?.open({title:'Chargement des opérations (OPERATIONS)'") && a.includes('window.NEWOSB_GAME?.done(') && a.includes('window.NEWOSB_GAME?.fail('));
-  assert(r.includes("window.NEWOSB_GAME?.open({title:'Chargement des exigences (RAPPORT)'})") && r.includes('window.NEWOSB_GAME?.fail(state.error)'));
-  assert(sh.includes('window.NEWOSB_GAME?.open(') && sh.includes('window.NEWOSB_GAME?.done(') && sh.includes('window.NEWOSB_GAME?.fail('));
-  const g = read('newosb-game.js'); assert(!/fetch\(|XMLHttpRequest|NEWOSB_ENGINE|NEWOSB_BRIDGE/.test(g), 'le jeu ne lit aucune donnée');
+test('V6.22 : filtres autorisés envoyés à la création ; tableau des personnes avec Révoquer / Prolonger', () => {
+  const src = read('newosb-share.js');
+  assert(src.includes("allowedFilters: { global: v.allowGlobal"));
+  assert(src.includes("mode: 'visitorRevoke'") && src.includes("mode: 'visitorExtend'"));
+  assert(/data-visitor-revoke/.test(src) && /data-visitor-extend/.test(src));
+  const n = read('newosb.js'); assert(n.includes('function shareFilterBlocked(key)')); assert((n.match(/shareFilterBlocked\(/g) || []).length >= 4);
+  const r = read('requirements.js'); assert(r.includes('async function loadShare(url,shareToken,frozenFilters,usePopup,visitorToken,allowedKeys)')); assert(r.includes('bridge.setShare(shareToken,visitorToken)'));
 });
 
+section('12. Écran de chargement (newosb-loader.js)');
+function loaderEnv() {
+  const els = [], timers = [];
+  const mk = () => { const e = { hidden: true, textContent: '', classList: { add() {}, remove() {}, toggle() {} }, style: {}, children: [], appendChild(c) { this.children.push(c); }, addEventListener() {}, getContext: () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } }), set innerHTML(v) { this._h = v; }, querySelector(sel) { const q = els.find(x => x.sel === sel); if (q) return q.el; const el = mk(); els.push({ sel, el }); return el; } }; return e; };
+  const ctx = { console, Math, Date, Number, setTimeout: (f, d) => { timers.push(f); return timers.length; }, clearTimeout() {}, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, matchMedia: () => ({ matches: false }), devicePixelRatio: 1 };
+  ctx.window = ctx; ctx.addEventListener = () => {}; ctx.document = { body: mk(), documentElement: { classList: { add() {}, remove() {} } }, createElement: mk };
+  vm.createContext(ctx); vm.runInContext(read('newosb-loader.js'), ctx);
+  return { L: ctx.NEWOSB_LOADER, timers, els };
+}
+test('chargement rapide : rien ne s’affiche ; chargement long : la barre suit l’avancement réel et se ferme seule', () => {
+  const { L, timers } = loaderEnv(); let entered = 0;
+  L.open({ title: 'Test', onEnter: () => entered++ }); L.done('ok'); assert.strictEqual(L.isOpen(), false); assert.strictEqual(entered, 0, 'pas d’action si rien ne s’est affiché');
+  L.open({ title: 'Test', onEnter: () => entered++ }); timers.shift()(); assert.strictEqual(L.isOpen(), true);
+  L.progress(250, 1000); assert.strictEqual(L._state().target, 0.25); L.progress(100, 1000); assert.strictEqual(L._state().target, 0.25, 'la barre ne recule jamais');
+  L.done('fini'); assert.strictEqual(L._state().target, 1); timers.pop()(); assert.strictEqual(L.isOpen(), false); assert.strictEqual(entered, 1);
+});
+test('erreur de chargement : message affiché, l’écran attend « Fermer » ; le jeu n’existe plus', () => {
+  const { L, timers } = loaderEnv(); L.open({ onEnter: () => { throw new Error('ne doit pas être appelé'); } }); timers.shift()(); L.fail('Accès refusé'); assert.strictEqual(L.isOpen(), true); assert.strictEqual(L._state().failed, true); L.close(); assert.strictEqual(L.isOpen(), false);
+  assert(!fs.existsSync(path.join(ROOT, 'newosb-game.js'))); for (const f of ['app.js', 'requirements.js', 'newosb-share.js', 'index.html']) assert(!/NEWOSB_GAME|newosb-game/.test(read(f)), f);
+  assert(read('index.html').includes('newosb-loader.js'));
+});
 
 section('13. Type de programme (nom du programme + référentiel) — V6.18');
 const PT = (() => { const c = { console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error }; vm.createContext(c); vm.runInContext(read('Code_Exigences.gs') + ';this.f=newosbExigencesProgramType_;this.i=newosbExigencesProgramTypeInput_;', c); return c; })();
@@ -754,9 +798,9 @@ test('le script transmet type et nom du programme ; lien anonymisé : type conse
   assert.strictEqual(ex.programName, 'Crèche des Lilas'); assert.strictEqual(ex.programType, 'Scolaire et enseignement'); assert(/creche/.test(ex.programTypeSource));
   const gs = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY }, extraSheets: { RAPPORT: M2 } });
   const tok = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['requirements'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + 86400000, anonymized: true, reqFilters: { programType: ['Scolaire et enseignement'] } }).token;
-  const row = gs.newosbBridgeRequest({ mode: 'reqChunk', share: tok, offset: 0, limit: 10 }).rows[0];
+  const row = shareReq(gs, tok, { mode: 'reqChunk', offset: 0, limit: 10 }).rows[0];
   assert.strictEqual(row.programName, ''); assert.strictEqual(row.programType, 'Scolaire et enseignement'); assert(!JSON.stringify(row).includes('Lilas'));
-  assert.strictEqual(JSON.stringify(gs.newosbBridgeRequest({ mode: 'ping', share: tok }).share.reqFilters), '{"programType":["Scolaire et enseignement"]}');
+  assert.strictEqual(JSON.stringify(shareReq(gs, tok, { mode: 'ping' }).share.reqFilters), '{"programType":["Scolaire et enseignement"]}');
 });
 
 test('OPERATIONS : type de programme ajouté à chaque ligne (RAPPORT par code, puis par n° de contrat, sinon nom de l’opération)', () => {
@@ -776,7 +820,7 @@ test('OPERATIONS : type de programme ajouté à chaque ligne (RAPPORT par code, 
   const ca = anon.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
   assert(ca.rows.some(r => r[r.length - 2] === 'Scolaire et enseignement')); assert(!JSON.stringify(ca.rows).includes('Lilas'));
   const tok = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['overview'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + 86400000 }).token;
-  const sm = gs.newosbBridgeRequest({ mode: 'meta', share: tok }); const sc = gs.newosbBridgeRequest({ mode: 'chunk', share: tok, offset: 0, limit: 10 });
+  const sm = shareReq(gs, tok, { mode: 'meta' }); const sc = shareReq(gs, tok, { mode: 'chunk', offset: 0, limit: 10 });
   assert.strictEqual(sm.headers.slice(-2)[0], 'Type de programme (calculé)'); assert.strictEqual(sc.rows[0][sc.rows[0].length - 2], 'Scolaire et enseignement');
   const none = loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY } }); const cn = none.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
   assert(cn.rows.every(r => r[r.length - 2]), 'sans RAPPORT : type déduit des seules données OPERATIONS');
@@ -802,7 +846,7 @@ test('l’Observatoire et le générateur chargent la même version d’app.js',
 test('tous les fichiers référencés existent', () => { for (const h of [index, gen]) for (const f of [...scripts(h), ...[...h.matchAll(/href="([^"?#:]+\.(?:css|png))/g)].map(m => m[1])]) assert(fs.existsSync(path.join(ROOT, f)), f); });
 test('un seul script Apps Script OPERATIONS à la racine (pas de doGet en double)', () => assert(!fs.existsSync(path.join(ROOT, 'Code.gs'))));
 test('plus de copie périmée du script dans app.js', () => assert(!/NEWOSB V05\.22\\n \* Source OPERATIONS/.test(read('app.js'))));
-test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-game.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
+test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-loader.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
 test('l’avancement n’est plus déduit de « État du dossier » ni du statut commercial', () => { const a = read('app.js'); assert(!a.includes('dataRawValue(r,fields.status)||dataRawValue(r,fields.dossierState)||affairStage')); });
 
 (async () => {

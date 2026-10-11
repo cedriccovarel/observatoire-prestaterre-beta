@@ -1,5 +1,19 @@
 # Historique
 
+## V6.22
+
+**Écran de chargement professionnel (le mini-jeu est retiré)**
+- Pendant le chargement des données, une animation montre un bâtiment de 1955 qui se rénove : un technicien capte le CO₂ qui s’en échappe et le verse dans une barre « CO₂ capté ». La barre et le pourcentage suivent l’avancement réel du chargement (opérations puis exigences) ; elle ne recule jamais.
+- Chargement court : rien ne s’affiche. Fin du chargement : l’écran se ferme seul. « Continuer en arrière-plan » (ou Échap) le masque sans interrompre le chargement. Mouvements réduits respectés.
+
+**Liens partagés : identification de chaque personne, accès individuels, filtres autorisés**
+- À la première ouverture d’un lien, la personne indique son **nom, prénom et société**. Aucune donnée n’est envoyée avant. Le navigateur garde un jeton personnel (sous une empreinte du lien, jamais le lien lui-même) : l’identité n’est **pas redemandée** aux ouvertures suivantes.
+- Fenêtre « Partager » : sous chaque lien, la liste des personnes (nom prénom, société, date d’enregistrement, dernier accès, nombre d’ouvertures, accès jusqu’au, statut) avec **Révoquer** et **Prolonger** pour chacune. Révoquer une personne ne coupe pas le lien pour les autres ; révoquer le lien coupe tout le monde. Un lien expiré reste ouvert aux seules personnes prolongées individuellement (pas de nouvelle inscription).
+- Nouvelle section « Filtres autorisés pour le destinataire » : cases à cocher pour les filtres de l’Observatoire et, si l’onglet Exigences est partagé, ceux des Exigences. Le destinataire les utilise **à l’intérieur du périmètre figé** ; les autres filtres restent verrouillés. Sur un lien anonymisé, MOA et groupe MOA ne sont pas proposés.
+- Script OPERATIONS 06.22 : feuille cachée `OBSERVATOIRE_PARTAGES_VISITEURS` (créée automatiquement), colonne « Filtres autorisés » ajoutée à `OBSERVATOIRE_PARTAGES` ; les liens créés avant restent valables (sans filtre autorisé ; leurs destinataires s’identifient à la prochaine ouverture).
+- Limite : l’identité est déclarative, et une personne qui efface les données de son navigateur peut se réinscrire sous un autre nom ; pour couper complètement, révoquer le lien.
+- Correctif : sur téléphone, le bouton principal de l’écran du lien partagé était masqué.
+
 ## V6.21.1
 
 - Correctif : un menu de filtre ouvert d’un clic (panneau de droite, Observatoire et onglet Exigences) se refermait dès que les filtres étaient redessinés — par exemple pendant le chargement des exigences en arrière-plan, qui rafraîchit la page à chaque bloc. Le menu ouvert est maintenant mémorisé et reste ouvert.

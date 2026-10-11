@@ -62,7 +62,7 @@
   function create(name) {
     let key = '';
     // V6.15 : jeton d'un lien de partage, utilisé à la place de la clé (jamais les deux).
-    let share = '';
+    let share = '', visitor = '';
     // Fermeture différée de la fenêtre du pont : annulée si la fenêtre est réutilisée entre-temps.
     let closeTimer = null;
     const st = {
@@ -171,7 +171,7 @@
         const timer = setTimeout(() => { st.pending.delete(id); reject(new Error(`Délai dépassé côté Apps Script (${String(params.mode || params.endpoint || 'requête')}).`)); }, timeoutMs);
         st.pending.set(id, { resolve, reject, timer });
         // Envoi ciblé : uniquement vers l'origine exacte du pont validée au READY, jamais vers « * ».
-        st.target.postMessage({ type: 'NEWOSB_BRIDGE_REQUEST', id, params: share ? { ...params, share } : { ...params, key }, token: st.token }, st.targetOrigin);
+        st.target.postMessage({ type: 'NEWOSB_BRIDGE_REQUEST', id, params: share ? { ...params, share, ...(visitor ? { visitor } : {}) } : { ...params, key }, token: st.token }, st.targetOrigin);
       });
     }
 
@@ -194,10 +194,11 @@
 
     return {
       name,
-      setKey(v) { key = String(v || '').trim(); share = ''; },
-      clearKey() { key = ''; share = ''; },
+      setKey(v) { key = String(v || '').trim(); share = ''; visitor = ''; },
+      clearKey() { key = ''; share = ''; visitor = ''; },
       hasKey() { return !!(key || share); },
-      setShare(v) { share = String(v || '').trim(); key = ''; },
+      // V6.22 : jeton du lien + jeton personnel du destinataire identifié.
+      setShare(v, who) { share = String(v || '').trim(); visitor = String(who || '').trim(); key = ''; },
       isShare() { return !!share; },
       preparePopup, ensure, request, destroy, closePopupSoon, navigatePopup,
       get popupBlocked() { return st.popupBlocked; },

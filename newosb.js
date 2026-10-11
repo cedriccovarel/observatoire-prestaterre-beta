@@ -2015,12 +2015,18 @@
     if(vals.length===1)return String(vals[0]);
     return `${vals.length} sélectionnés`;
   }
+  const GLOBAL_FILTER_DEFS=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['programType','Type de programme',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
+  // V6.22 : sur un lien partagé, seuls les filtres autorisés par l'auteur du lien restent modifiables.
+  function shareAllowedFilters(){return SHARE?(SHARE.info?.allowedFilters?.global||[]).map(String):null;}
+  function shareFilterBlocked(key){const allowed=shareAllowedFilters();return !!allowed&&!allowed.includes(String(key));}
   function renderFilters(){
-    if(SHARE){ filtersEl.innerHTML=shareReady()?SHARE.lockedFiltersHtml(baseOperations().length):''; return; }
+    if(SHARE&&!shareReady()){ filtersEl.innerHTML=''; return; }
     const scrollSnapshot=captureUiScroll();
-    const options=filterOptions();
-    const defs=[['year','Année certification',v=>v],['createdYear','Année de création',v=>v],['referential','Référentiel',v=>v],['programType','Type de programme',v=>v],['moaGroup','Groupe MOA',v=>v],['status','Avancement',v=>STATUS_LABELS[v]||v],['moa','Maître d’ouvrage',v=>v],['region','Région',v=>v],['department','Département',v=>`${v} · ${departmentName(v)}`],['profile','Profil',v=>v],['socialZone','Zonage',v=>v]];
-    filtersEl.innerHTML=defs.map(([key,label,labeller])=>{
+    const allowed=shareAllowedFilters();
+    const defs=allowed?GLOBAL_FILTER_DEFS.filter(([key])=>allowed.includes(key)):GLOBAL_FILTER_DEFS;
+    const options=defs.length?filterOptions():{};
+    const lock=SHARE?SHARE.lockedFiltersHtml(baseOperations().length):'';
+    filtersEl.innerHTML=lock+defs.map(([key,label,labeller])=>{
       const values=options[key]||[],selected=globalFilterValues(key),query=norm(state.filterSearch?.[key]||'');
       const placeholder=`Rechercher dans ${String(label).toLowerCase()}…`;
       const search=`<label class="obs-check-search"><span>⌕</span><input type="search" data-global-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(placeholder)}" autocomplete="off"></label>`;
@@ -2992,10 +2998,10 @@
   filtersEl?.addEventListener('keyup',e=>{const input=e.target.closest('[data-global-filter-search]');if(!input)return;applyGlobalFilterSearch(input);});
   filtersEl?.addEventListener('pointerdown',e=>{const input=e.target.closest('[data-global-filter-search]');if(!input)return;e.stopPropagation();});
   filtersEl?.addEventListener('click',e=>{const input=e.target.closest('[data-global-filter-search]');if(input){e.stopPropagation();try{input.focus({preventScroll:true});}catch{input.focus();}return;}});
-  filtersEl?.addEventListener('change',e=>{const c=e.target.closest('[data-global-filter-check]');if(!c)return;preserveUiScroll(()=>{const key=c.dataset.globalFilterCheck,value=c.value;state.openGlobalFilter=key;let vals=globalFilterValues(key).filter(v=>norm(v)!==norm(value));if(c.checked)vals.push(value);state.filters[key]=vals;if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});});
+  filtersEl?.addEventListener('change',e=>{const c=e.target.closest('[data-global-filter-check]');if(!c)return;if(shareFilterBlocked(c.dataset.globalFilterCheck)){renderFilters();return;}preserveUiScroll(()=>{const key=c.dataset.globalFilterCheck,value=c.value;state.openGlobalFilter=key;let vals=globalFilterValues(key).filter(v=>norm(v)!==norm(value));if(c.checked)vals.push(value);state.filters[key]=vals;if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});});
   filtersEl?.addEventListener('click',e=>{
     const summary=e.target.closest('.obs-check-filter>summary');if(summary){const details=summary.parentElement;setTimeout(()=>{if(details?.open){const input=details.querySelector('[data-global-filter-search]');try{input?.focus({preventScroll:true});}catch{input?.focus();}}},0);}
-    const all=e.target.closest('[data-global-filter-all]');if(all){e.preventDefault();preserveUiScroll(()=>{const key=all.dataset.globalFilterAll;state.openGlobalFilter=key;const visible=[...filtersEl.querySelectorAll(`[data-global-filter-check="${key}"]`)].filter(i=>!i.closest('[data-filter-option]')?.hidden).map(i=>i.value);state.filters[key]=uniq([...globalFilterValues(key),...visible]);if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});return;}const clear=e.target.closest('[data-global-filter-clear]');if(clear){e.preventDefault();preserveUiScroll(()=>{const key=clear.dataset.globalFilterClear;state.openGlobalFilter=key;state.filters[key]=[];if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});}});
+    const all=e.target.closest('[data-global-filter-all]');if(all&&shareFilterBlocked(all.dataset.globalFilterAll))return;const blockedClear=e.target.closest('[data-global-filter-clear]');if(blockedClear&&shareFilterBlocked(blockedClear.dataset.globalFilterClear))return;if(all){e.preventDefault();preserveUiScroll(()=>{const key=all.dataset.globalFilterAll;state.openGlobalFilter=key;const visible=[...filtersEl.querySelectorAll(`[data-global-filter-check="${key}"]`)].filter(i=>!i.closest('[data-filter-option]')?.hidden).map(i=>i.value);state.filters[key]=uniq([...globalFilterValues(key),...visible]);if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});return;}const clear=e.target.closest('[data-global-filter-clear]');if(clear){e.preventDefault();preserveUiScroll(()=>{const key=clear.dataset.globalFilterClear;state.openGlobalFilter=key;state.filters[key]=[];if(key==='moaGroup')syncMoaSelectionFromGroups();reconcileTerritoryGlobalFilters(key);renderFilters();renderPage();});}});
   sidebarToggle?.addEventListener('click',()=>setSidebarCollapsed(!layoutEl?.classList.contains('is-sidebar-collapsed')));
   document.getElementById('obsNav')?.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b)changePage(b.dataset.page);});
   document.getElementById('obsReportsNav')?.addEventListener('click',()=>changePage('reports'));

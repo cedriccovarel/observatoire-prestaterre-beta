@@ -386,27 +386,37 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.check('[data-share-tab][value="operations"]');
       await page.fill('[data-share-label]', 'Vue Promoteur A');
       await page.selectOption('[data-share-duration]', '7');
+      await page.click('[data-share-allowed] > summary');
+      await page.check('[data-share-allow-global][value="region"]');
+      await page.check('[data-share-allow-req][value="nature"]');
+      await page.evaluate(() => document.querySelector('[data-share-allowed]')?.scrollIntoView({ block: 'center' }));
+      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'share_admin_allowed.png') }).catch(() => {});
       await page.click('[data-share-create]');
       await page.waitForSelector('[data-share-link]', { timeout: 30000 }).catch(() => {});
       const link = await page.$eval('[data-share-link]', i => i.value).catch(() => '');
       check(/#partage=[A-Za-z0-9]{43}&src=https%3A%2F%2Fscript\.google\.com/.test(link), 'lien créé : jeton dans le fragment (#), source Apps Script jointe');
       const token = (link.match(/partage=([A-Za-z0-9]+)/) || [])[1] || '';
       const sheetTxt = JSON.stringify(gs.sheets.OBSERVATOIRE_PARTAGES?.data || []);
+      check(sheetTxt.includes('region') && sheetTxt.includes('nature'), 'serveur : filtres autorisés enregistrés avec le lien (Région, Nature)');
       check(token && !sheetTxt.includes(token) && sheetTxt.includes('OP-1') && sheetTxt.includes('OP-7') && !sheetTxt.includes('OP-3'), 'serveur : empreinte seule, périmètre = codes réels de la sélection');
       const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
       check(token && !stored.includes(token), 'le jeton n’est enregistré ni dans localStorage ni dans sessionStorage');
+      check(await page.evaluate(() => document.querySelector('[data-share-allowed]').open && document.querySelector('[data-share-allow-global][value="region"]').checked), 'Partager : les filtres autorisés restent cochés après la création');
+      await page.uncheck('[data-share-allow-global][value="region"]');
+      await page.uncheck('[data-share-allow-req][value="nature"]');
       await page.check('[data-share-anonymized]');
       await page.fill('[data-share-label]', '');
       await page.click('[data-share-create]');
       await page.waitForFunction(old => { const v = document.querySelector('[data-share-link]')?.value; return v && v !== old; }, link, { timeout: 30000 }).catch(() => {});
       const anonLink = await page.$eval('[data-share-link]', i => i.value).catch(() => '');
-      const rows = await page.$$eval('.obs-share-table tbody tr', trs => trs.length).catch(() => 0);
+      const rows = await page.$$eval('.obs-share-table tbody tr:not(.obs-share-people-row)', trs => trs.filter(tr => !tr.closest('.obs-share-visitors')).length).catch(() => 0);
       check(rows === 2, `liste des liens : ${rows} liens affichés`);
       check(errors.length === 0, 'administration : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
 
-      const openShared = async (url, viewport) => {
-        const ctx2 = await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
-        await ctx2.route('https://script.google.com/**', async route => {
+      const ID = { lastName: 'Martin', firstName: 'Claire', company: 'Bailleur Test' };
+      const openShared = async (url, viewport, { identity = ID, reuse = null } = {}) => {
+        const ctx2 = reuse || await browser.newContext({ viewport: viewport || { width: 1280, height: 900 } });
+        if (!reuse) await ctx2.route('https://script.google.com/**', async route => {
           const u = new URL(route.request().url()); const run = u.pathname.match(/\/__run\/(\w+)$/);
           if (run) return route.fulfill({ contentType: 'application/json', body: JSON.stringify(gs[run[1]](JSON.parse(route.request().postData() || '{}'))) });
           const out = gs.doGet({ parameter: Object.fromEntries(u.searchParams.entries()) });
@@ -415,11 +425,29 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         });
         const p2 = await ctx2.newPage(); const errs = []; p2.on('pageerror', e => errs.push(e.message));
         await p2.goto(url);
-        await p2.waitForFunction(() => document.documentElement.classList.contains('newosb-share-ready') || /Accès impossible|invalide/.test(document.getElementById('obsPage')?.textContent || ''), null, { timeout: 40000 }).catch(() => {});
-        return { p2, ctx2, errs };
+        const settled = () => p2.waitForFunction(() => document.documentElement.classList.contains('newosb-share-ready') || !!document.querySelector('[data-share-identity]') || /Accès impossible|invalide/.test(document.getElementById('obsPage')?.textContent || ''), null, { timeout: 40000 }).catch(() => {});
+        await settled();
+        const asked = !!(await p2.$('[data-share-identity]'));
+        if (asked && identity) {
+          await p2.fill('[data-share-identity] [name="lastName"]', identity.lastName); await p2.fill('[data-share-identity] [name="firstName"]', identity.firstName); await p2.fill('[data-share-identity] [name="company"]', identity.company);
+          await p2.click('[data-share-identity] button[type="submit"]');
+          await p2.waitForFunction(() => document.documentElement.classList.contains('newosb-share-ready') || /Accès impossible|invalide/.test(document.getElementById('obsPage')?.textContent || ''), null, { timeout: 40000 }).catch(() => {});
+        }
+        return { p2, ctx2, errs, asked };
       };
-      { const { p2, ctx2, errs } = await openShared(link);
-        check(await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready')), 'destinataire : Observatoire chargé sans mot de passe ni clé');
+      { const gate = await openShared(link, null, { identity: null });
+        const gateTxt = await gate.p2.textContent('#obsPage');
+        check(gate.asked && /Vue Promoteur A/.test(gateTxt) && !(await gate.p2.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected || window.NEWOSB_ENGINE.getOperations().length > 0)), 'destinataire : nom, prénom et société demandés avant toute donnée');
+        await gate.p2.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'share_identity.png') }).catch(() => {});
+        await gate.p2.click('[data-share-identity] button[type="submit"]'); await gate.p2.waitForTimeout(200);
+        check(/nom, votre prénom et votre société/.test(await gate.p2.textContent('#obsPage')), 'formulaire incomplet : message, aucune donnée chargée');
+        await gate.ctx2.close(); }
+      let recipientCtx = null;
+      { const { p2, ctx2, errs, asked } = await openShared(link);
+        recipientCtx = ctx2;
+        check(asked && await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready')), 'destinataire : identité saisie une fois, Observatoire chargé sans mot de passe ni clé');
+        const visitorsSheet = JSON.stringify(gs.sheets.OBSERVATOIRE_PARTAGES_VISITEURS?.data || []);
+        check(/Martin/.test(visitorsSheet) && /Claire/.test(visitorsSheet) && /Bailleur Test/.test(visitorsSheet), 'serveur : la personne est enregistrée (nom, prénom, société) dans la feuille cachée des destinataires');
         check(await p2.evaluate(() => !document.querySelector('#authScreen') || getComputedStyle(document.querySelector('#authScreen')).display === 'none'), 'destinataire : écran de mot de passe absent');
         const codes = await p2.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => o.code).sort().join(','));
         check(codes === 'OP-1,OP-2,OP-7', `destinataire : uniquement les opérations du périmètre (${codes})`);
@@ -428,7 +456,15 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const hiddenCtl = await p2.evaluate(() => ['#obsSourceBtn', '#obsResetFilters', '#obsShareBtn', '#obsGeneratorBtn', '#obsRefreshBtn'].every(s => { const el = document.querySelector(s); return !el || getComputedStyle(el).display === 'none'; }));
         check(hiddenCtl, 'destinataire : boutons Données, Réinitialiser, Partager, Générateur et Actualiser masqués');
         const lockTxt = await p2.textContent('#obsFilters');
-        check(/Périmètre figé/.test(lockTxt) && /Vue Promoteur A/.test(lockTxt) && /3 opérations/.test(lockTxt) && !(await p2.$('#obsFilters [data-global-filter-check]')), 'destinataire : filtres remplacés par le périmètre figé (aucune case modifiable)');
+        const allowedKeys = await p2.$$eval('#obsFilters [data-global-filter-check]', is => [...new Set(is.map(i => i.dataset.globalFilterCheck))].join(','));
+        check(/Périmètre figé/.test(lockTxt) && /Vue Promoteur A/.test(lockTxt) && /3 opérations/.test(lockTxt) && /Claire Martin · Bailleur Test/.test(lockTxt) && allowedKeys === 'region', `destinataire : périmètre figé + seul le filtre autorisé est modifiable (${allowedKeys})`);
+        const regionUse = await p2.evaluate(async () => {
+          const box = document.querySelector('#obsFilters [data-global-filter-check="region"]'); box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true })); await new Promise(r => setTimeout(r, 150));
+          const filtered = document.getElementById('obsFilterCount')?.textContent || '';
+          document.querySelector('#obsFilters [data-global-filter-clear="region"]').click(); await new Promise(r => setTimeout(r, 150));
+          return { filtered, after: document.getElementById('obsFilterCount')?.textContent || '', codes: window.NEWOSB_ENGINE.getOperations().length };
+        });
+        check(Number(regionUse.filtered) >= 1 && Number(regionUse.filtered) <= 3 && regionUse.after === '3' && regionUse.codes === 3, `filtre autorisé utilisable, toujours dans le périmètre (${regionUse.filtered} puis ${regionUse.after})`);
         await p2.click('#obsNav [data-page="carbon"]');
         const onCarbon = await p2.evaluate(() => document.querySelector('#obsNav [data-page="carbon"]').classList.contains('is-active') && /Carbone/.test(document.querySelector('#obsPage').textContent));
         check(onCarbon, 'destinataire : navigation entre les onglets accordés');
@@ -438,7 +474,9 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         await p2.waitForFunction(() => window.NEWOSB_REQUIREMENTS.status().connected || window.NEWOSB_REQUIREMENTS.status().error, null, { timeout: 30000 }).catch(() => {});
         await p2.click('#obsNav [data-page="requirements"]'); await p2.waitForTimeout(400);
         const reqTxt = (await p2.textContent('#obsPage')) + ' ' + (await p2.evaluate(() => document.querySelector('.obs-req-filter-host')?.textContent || '')); const reqSt = await p2.evaluate(() => window.NEWOSB_REQUIREMENTS.status());
-        check(reqSt.connected && reqSt.count === 4 && /PÉRIMÈTRE PARTAGÉ/.test(reqTxt) && /Filtres figés/.test(reqTxt) && !(await p2.$('[data-req-filter-check]')) && !(await p2.$('#reqSourceKey')), `Exigences partagées : 4 évaluations des opérations du lien, sans clé ni URL, filtres verrouillés (${reqSt.count}${reqSt.error ? ' · ' + reqSt.error : ''})`);
+        check(reqSt.connected && reqSt.count === 4 && /PÉRIMÈTRE PARTAGÉ/.test(reqTxt) && /Filtres figés/.test(reqTxt) && !(await p2.$('#reqSourceKey')), `Exigences partagées : 4 évaluations des opérations du lien, sans clé ni URL (${reqSt.count}${reqSt.error ? ' · ' + reqSt.error : ''})`);
+        const reqKeys = await p2.$$eval('[data-req-filter-check]', is => [...new Set(is.map(i => i.dataset.reqFilterCheck))].join(','));
+        check(reqKeys === 'nature', `Exigences partagées : seul le filtre autorisé (Nature) est modifiable (${reqKeys})`);
         check(/Compatibilité/.test(reqTxt), 'Exigences partagées : encart de compatibilité avec les mentions affiché');
         await p2.click('#obsNav [data-page="operations"]'); await p2.waitForTimeout(400);
         await p2.evaluate(() => document.querySelector('[data-op-code="OP-1"]')?.click()); await p2.waitForTimeout(500);
@@ -448,8 +486,33 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const auth = await p2.evaluate(() => sessionStorage.getItem('prestaterre-observatoire-v21-auth'));
         check(auth === null, 'destinataire : l’accès n’ouvre pas l’Observatoire complet (aucune session mémorisée)');
         check(errs.length === 0, 'destinataire : aucune erreur JavaScript' + (errs.length ? ' : ' + errs.join(' | ') : ''));
-        await ctx2.close(); }
+        await p2.close(); }
+      { const { p2, asked } = await openShared(link, null, { identity: null, reuse: recipientCtx });
+        check(!asked && await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready')), 'deuxième ouverture du lien : identité non redemandée');
+        await p2.close(); }
+      { // Administration : la personne apparaît sous le lien ; révocation individuelle.
+        await page.click('.data-close[data-share-close]');
+        await page.click('#obsShareBtn');
+        await page.waitForFunction(() => /1 personne/.test(document.querySelector('#obsShareModal')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+        await page.evaluate(() => document.querySelectorAll('[data-share-people]').forEach(d => { if (/1 personne/.test(d.querySelector('summary').textContent)) d.open = true; }));
+        const people = await page.evaluate(() => document.querySelector('.obs-share-visitors')?.textContent || '');
+        const listTxt = await page.textContent('#obsShareModal');
+        check(/Martin Claire/.test(people) && /Bailleur Test/.test(people) && /Actif/.test(people) && /1 personne · 1 accès actif · 2 filtres autorisés/.test(listTxt), 'Partager : la personne (nom, prénom, société) et les filtres autorisés sont listés sous le lien');
+        await page.evaluate(() => document.querySelector('.obs-share-visitors')?.scrollIntoView({ block: 'center' }));
+        await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'share_admin_people.png') }).catch(() => {});
+        await page.evaluate(() => { window.__confirm = window.confirm; window.confirm = () => true; });
+        await page.click('[data-visitor-revoke]');
+        await page.waitForFunction(() => /Révoqué/.test(document.querySelector('.obs-share-visitors')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+        check(/Révoqué/.test(await page.evaluate(() => document.querySelector('.obs-share-visitors')?.textContent || '')), 'Partager : accès de la personne révoqué individuellement');
+        const { p2 } = await openShared(link, null, { identity: null, reuse: recipientCtx });
+        const txt = await p2.textContent('#obsPage');
+        check(/Accès impossible/.test(txt) && /révoqué/.test(txt) && !(await p2.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected)), 'personne révoquée : accès refusé, aucune donnée — ' + txt.slice(0, 120));
+        await recipientCtx.close();
+        const other = await openShared(link, null, { identity: { lastName: 'Durand', firstName: 'Paul', company: 'Autre Société' } });
+        check(await other.p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready')), 'les autres personnes gardent leur accès au lien');
+        await other.ctx2.close(); }
       { const { p2, ctx2, errs } = await openShared(anonLink, { width: 390, height: 844 });
+        check(await p2.evaluate(() => !document.querySelector('#obsFilters [data-global-filter-check]')), 'lien sans filtre autorisé : aucune case modifiable');
         const body = await p2.evaluate(() => document.body.innerText);
         const ok = await p2.evaluate(() => document.documentElement.classList.contains('newosb-share-ready'));
         check(ok && !/Promoteur A|Les Jardins|33400/.test(body), 'lien anonymisé : ni MOA, ni nom d’opération, ni code postal dans la page' + (ok ? ' ' + (body.match(/.{0,60}(Promoteur A|Les Jardins|33400).{0,60}/) || [''])[0] : ' (non chargé)'));
@@ -478,40 +541,29 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         check(/Accès impossible/.test(txt) && /expiré/.test(txt), 'lien expiré : accès refusé avec un message clair — ' + txt.slice(0, 200));
         await ctx2.close(); }
       await context.close(); }
-    console.log('\nI. Mini-jeu pendant le chargement des données (V6.16)');
+    console.log('\nI. Écran de chargement : CO₂ capté d’un bâtiment ancien (V6.22)');
     { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noConnect: true, delayMs: 900 });
       const startLoad = () => page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; window.__load = window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: KEY });
       await page.evaluate(() => window.NEWOSB_ENGINE.showDataSource());
       await startLoad();
-      const shown = await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).then(() => true, () => false);
-      check(shown && /OPERATIONS/.test(await page.textContent('#obsGameTitle')), 'le jeu s’ouvre pendant le chargement OPERATIONS');
-      await page.bringToFront();
-      const x0 = (await page.evaluate(() => window.NEWOSB_GAME._state())).player.x;
-      await page.keyboard.down('ArrowLeft'); await page.waitForTimeout(350); await page.keyboard.up('ArrowLeft');
-      const st = await page.evaluate(() => window.NEWOSB_GAME._state());
-      check(st.phase === 'play' && st.player.x < x0, `flèches du clavier : le personnage se déplace (${x0} → ${st.player.x.toFixed(2)})`);
-      check(await page.$eval('[data-game-enter]', b => b.disabled), 'accès à l’Observatoire désactivé tant que les données ne sont pas chargées');
-      check(await page.evaluate(() => document.documentElement.scrollTop === 0 && window.scrollY === 0), 'les flèches ne font pas défiler la page');
-      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'game_play.png') }).catch(() => {});
-      await page.waitForFunction(() => !document.querySelector('[data-game-enter]').disabled, null, { timeout: 60000 }).catch(() => {});
-      const statusTxt = await page.textContent('[data-game-status]');
-      check(await page.evaluate(() => !document.getElementById('obsGame').hidden) && /✓/.test(statusTxt), `données chargées pendant la partie : le jeu reste ouvert, bouton d’accès actif (${statusTxt.trim()})`);
-      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'game_loaded.png') }).catch(() => {});
-      await page.keyboard.press('Enter');
-      const after = await page.evaluate(() => ({ game: document.getElementById('obsGame').hidden, modal: document.getElementById('dataConnectModal').hidden, connected: window.NEWOSB_ENGINE.getRuntime().connected }));
-      check(after.game && after.modal && after.connected, 'Entrée : on quitte la partie et on arrive sur l’Observatoire (fenêtre Données refermée)');
-      await startLoad();
-      await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
+      const shown = await page.waitForFunction(() => window.NEWOSB_LOADER.isOpen(), null, { timeout: 8000 }).then(() => true, () => false);
+      check(shown && /OPERATIONS/.test(await page.textContent('#obsLoaderTitle')), 'l’écran de chargement s’ouvre pendant le chargement OPERATIONS');
+      check(!(await page.$('#obsGame')) && await page.evaluate(() => !window.NEWOSB_GAME), 'plus de mini-jeu');
+      await page.waitForFunction(() => window.NEWOSB_LOADER._state().target > 0, null, { timeout: 20000 }).catch(() => {});
+      const mid = await page.evaluate(() => window.NEWOSB_LOADER._state());
+      check(mid.target > 0, `la barre de CO₂ suit l’avancement réel du chargement (${Math.round(mid.target * 100)} %)`);
+      await page.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'loader_progress.png') }).catch(() => {});
       await page.evaluate(() => window.__load);
-      const autoClosed = await page.waitForFunction(() => document.getElementById('obsGame').hidden, null, { timeout: 20000 }).then(() => true, () => false);
-      check(autoClosed, 'sans avoir joué : l’Observatoire s’affiche dès la fin du chargement');
+      const closed = await page.waitForFunction(() => !window.NEWOSB_LOADER.isOpen(), null, { timeout: 20000 }).then(() => true, () => false);
+      const after = await page.evaluate(() => ({ modal: document.getElementById('dataConnectModal').hidden, connected: window.NEWOSB_ENGINE.getRuntime().connected }));
+      check(closed && after.connected, 'fin du chargement : l’écran se ferme seul, l’Observatoire est affiché');
       await startLoad();
-      await page.waitForSelector('#obsGame:not([hidden])', { timeout: 8000 }).catch(() => {});
+      await page.waitForFunction(() => window.NEWOSB_LOADER.isOpen(), null, { timeout: 8000 }).catch(() => {});
       await page.keyboard.press('Escape');
-      const hiddenNow = await page.evaluate(() => document.getElementById('obsGame').hidden);
+      const hiddenNow = await page.evaluate(() => !window.NEWOSB_LOADER.isOpen());
       await page.evaluate(() => window.__load);
-      check(hiddenNow && await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected), 'Échap masque le jeu ; le chargement continue');
-      check(errors.length === 0, 'mini-jeu : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
+      check(hiddenNow && await page.evaluate(() => window.NEWOSB_ENGINE.getRuntime().connected), 'Échap : chargement poursuivi en arrière-plan');
+      check(errors.length === 0, 'écran de chargement : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
   } finally { await browser.close(); server.close(); }
   console.log(`\n${passed} vérifications navigateur réussies, ${failed} en échec.`);

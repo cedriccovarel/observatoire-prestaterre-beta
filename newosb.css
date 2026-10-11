@@ -1264,41 +1264,21 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .req-share-lock{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;margin:0 0 14px;border:1px solid #cfe0d8;border-radius:12px;background:#f3f8f5;font-size:12px;color:#315a4c}
 .obs-share-req-note{margin:8px 0 0!important}
 
-/* V6.16 — mini-jeu « Capte le CO₂ » pendant le chargement */
-.obs-game[hidden]{display:none}
-.obs-game{position:fixed;inset:0;z-index:13000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(3,26,18,.78);backdrop-filter:blur(3px)}
-.obs-game-card{width:min(1120px,100%);max-height:100%;overflow:auto;background:#0b2219;border:3px solid #2fae5f;border-radius:6px;box-shadow:0 0 0 4px #06402b,0 30px 80px rgba(0,0,0,.45);padding:16px;color:#e6f4ea;font-family:"Courier New",ui-monospace,monospace;box-sizing:border-box}
-.obs-game-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;flex-wrap:wrap}
-.obs-game-kicker{font-size:11px;font-weight:700;letter-spacing:.14em;color:#7ed492}
-.obs-game-head h2{margin:4px 0 0;font-size:20px;color:#fff;font-family:inherit}
-.obs-game-progress{flex:1 1 260px;max-width:440px;display:flex;flex-direction:column;gap:6px}
-.obs-game-bar{height:12px;border:2px solid #2fae5f;background:#06150f;padding:1px}
-.obs-game-bar i{display:block;height:100%;width:0;background:repeating-linear-gradient(90deg,#2fae5f 0 8px,#7ed492 8px 10px);transition:width .3s steps(8)}
-.obs-game-progress span{font-size:12px;color:#bfe3ca}
-.obs-game.is-loaded .obs-game-progress span{color:#ffd166;font-weight:700}
-.obs-game.is-failed .obs-game-progress span{color:#ff8a7a;font-weight:700}
-.obs-game-hud{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 8px;font-size:13px;font-weight:700;color:#e6f4ea}
-.obs-game-hud span:first-child{color:#ff6b6b;letter-spacing:2px}.obs-game-hud s{color:#3d5a4d;text-decoration:none}
-.obs-game-stage{position:relative;line-height:0;border:2px solid #06402b}
-.obs-game-stage canvas{width:100%;height:auto;aspect-ratio:368/192;image-rendering:pixelated;image-rendering:crisp-edges;display:block;outline:none;background:#0e2a21}
-.obs-game-stage canvas:focus-visible{box-shadow:0 0 0 3px #ffd166}
-.obs-game-msg{position:absolute;left:50%;top:14%;transform:translateX(-50%);padding:8px 14px;background:rgba(6,21,15,.88);border:2px solid #ffd166;color:#ffd166;font-size:14px;font-weight:700;line-height:1.3;text-align:center;opacity:0;pointer-events:none;transition:opacity .15s;white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis}
-.obs-game-msg.is-on{opacity:1}
-.obs-game-foot{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px}
-.obs-game-foot p{margin:0;flex:1 1 360px;font-size:12px;line-height:1.5;color:#bfe3ca}
-.obs-game-foot b{color:#fff}
-.obs-game-actions{display:flex;gap:8px;flex-wrap:wrap}
-.obs-game-actions button,.obs-game-dpad button{font-family:inherit;font-weight:700;cursor:pointer;border:2px solid #2fae5f;background:#06402b;color:#e6f4ea;padding:9px 14px;font-size:13px;border-radius:3px}
-.obs-game-actions .obs-game-enter{background:#2fae5f;color:#06150f}
-.obs-game-actions .obs-game-enter:disabled{background:#173a2c;border-color:#2b5a45;color:#6f907f;cursor:not-allowed}
-.obs-game.is-loaded .obs-game-enter:not(:disabled){animation:obsGameBlink 1s steps(2) infinite}
-@keyframes obsGameBlink{50%{box-shadow:0 0 0 4px #ffd166}}
-.obs-game-dpad{display:none;grid-template-columns:repeat(3,44px);grid-template-rows:repeat(2,44px);gap:4px}
-.obs-game-dpad [data-game-dir="up"]{grid-column:2;grid-row:1}.obs-game-dpad [data-game-dir="left"]{grid-column:1;grid-row:2}.obs-game-dpad [data-game-dir="down"]{grid-column:2;grid-row:2}.obs-game-dpad [data-game-dir="right"]{grid-column:3;grid-row:2}
-.obs-game-dpad button{padding:0;font-size:16px;touch-action:manipulation}
-@media (hover:none),(max-width:760px){.obs-game-dpad{display:grid}}
-@media (max-width:600px){.obs-game{padding:8px}.obs-game-card{padding:10px}.obs-game-head h2{font-size:16px}.obs-game-hud{gap:10px;font-size:11px}.obs-game-msg{font-size:11px}}
-@media (prefers-reduced-motion:reduce){.obs-game-bar i{transition:none}.obs-game.is-loaded .obs-game-enter:not(:disabled){animation:none}}
+/* V6.22 — écran de chargement : captage du CO₂ d'un bâtiment ancien, barre remplie de carbone */
+.obs-loader[hidden]{display:none}
+.obs-loader{position:fixed;inset:0;z-index:13000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(6,40,28,.42);backdrop-filter:blur(3px)}
+.obs-loader-card{width:min(680px,100%);background:#fff;border:1px solid #cfe0d8;border-radius:20px;box-shadow:0 30px 80px rgba(6,40,28,.28);padding:20px 20px 16px;box-sizing:border-box}
+.obs-loader-kicker{font-size:10px;font-weight:900;letter-spacing:.12em;color:#16864f}
+.obs-loader-head h2{margin:4px 0 12px;font-size:20px;color:#073a2a}
+.obs-loader-card canvas{display:block;width:100%;height:auto;aspect-ratio:640/300;border-radius:14px;background:#f3f8f5}
+.obs-loader-foot{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:10px}
+.obs-loader-status{font-size:13px;color:#4c645c}
+.obs-loader-pct{font-size:20px;font-weight:850;color:#06402b;font-variant-numeric:tabular-nums}
+.obs-loader.is-done .obs-loader-status{color:#16864f;font-weight:700}
+.obs-loader.is-failed .obs-loader-status{color:#a13e28;font-weight:700}
+.obs-loader-actions{display:flex;justify-content:flex-end;margin-top:8px}
+.obs-loader-actions button{border:0;background:none;color:#587269;font:inherit;font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;padding:4px}
+.obs-loader-actions button[hidden]{display:none}
 .req-source-legacy{grid-column:1/-1;margin-top:8px;font-size:12px}
 .req-source-legacy>summary{cursor:pointer;color:#587269;font-weight:700}
 .req-source-legacy>.req-source-card{margin-top:10px;box-shadow:none}
@@ -1350,3 +1330,35 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-check-filter.has-selection>summary>span,.obs-req-filter-host .req-check-filter.has-selection>summary>span{flex:1 1 auto}
 .obs-check-filter.has-selection>summary:after,.obs-req-filter-host .req-check-filter.has-selection>summary:after{order:2}
 .obs-check-filter.has-selection>summary>b,.obs-req-filter-host .req-check-filter.has-selection>summary>b{order:3;max-width:100%;margin:0}
+
+/* V6.22 : identification du destinataire d'un lien partagé */
+.obs-share-identity{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0 12px}
+.obs-share-identity label{display:flex;flex-direction:column;gap:5px;font-size:12px;font-weight:800;color:#173b3f}
+.obs-share-identity label.is-wide{grid-column:1/-1}
+.obs-share-identity input{height:40px;border:1px solid #cbdad4;border-radius:9px;padding:0 11px;font:inherit;font-size:14px;font-weight:500;color:#173b3f;background:#fbfdfc}
+.obs-share-identity input:focus{outline:2px solid rgba(22,129,78,.35);border-color:#16814e}
+.obs-share-identity button{grid-column:1/-1;justify-self:start}
+.obs-share-identity-error{grid-column:1/-1;margin:0!important;padding:8px 11px;border-radius:9px;background:#fff1ed;color:#a13e28!important;font-size:13px!important}
+/* Les boutons principaux de la barre du haut sont masqués sur téléphone, pas ceux de l’écran de partage */
+.obs-share-gate .obs-btn-primary{display:inline-flex}
+@media (max-width:560px){.obs-share-identity{grid-template-columns:1fr}.obs-share-gate{padding:22px 16px;margin:4vh 0}}
+/* Filtres laissés modifiables : affichés sous le bandeau figé, dans le panneau de droite */
+.obs-filterbar .obs-share-lock+.obs-check-filter,.obs-req-filter-host .req-share-allowed{margin-top:8px}
+.obs-filterbar .obs-share-lock{flex-direction:column;align-items:stretch;gap:8px}
+/* Fenêtre « Partager » : filtres autorisés et personnes ayant ouvert le lien */
+.obs-share-allowed{margin:12px 0 4px;border:1px solid #d3dfda;border-radius:10px;background:#f8fbf9;padding:0 10px}
+.obs-share-allowed>summary{cursor:pointer;padding:9px 0;font-size:12px;font-weight:800;color:#173b3f}
+.obs-share-allowed>summary small{font-weight:600;color:#7a8a8d;margin-left:6px}
+.obs-share-allowed p{margin:0 0 8px}
+.obs-share-allow-group{margin-bottom:10px}.obs-share-allow-group>b{display:block;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:#587269;margin-bottom:5px}
+.obs-share-allow-group>div{display:flex;flex-wrap:wrap;gap:5px}
+.obs-share-allow{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid #cbdad4;border-radius:999px;background:#fff;font-size:12px;cursor:pointer}
+.obs-share-allow input{margin:0}.obs-share-allow:has(input:checked){border-color:#16814e;background:#e7f4ed;color:#07583a;font-weight:700}
+.obs-share-allow.is-disabled{opacity:.5;cursor:not-allowed}
+.obs-share-people-row>td{padding:0 10px 8px!important;border-bottom:1px solid #e1e9e5!important}
+.obs-share-people-row details>summary{cursor:pointer;font-size:11px;font-weight:800;color:#16814e;padding:2px 0}
+.obs-share-people-row details[open]>summary{margin-bottom:6px}
+.obs-share-visitors{background:#f8fbf9;border:1px solid #e1e9e5;border-radius:9px;overflow:hidden}
+.obs-share-visitors th{background:#eef5f1}
+.data-source-card .obs-share-allow{display:inline-flex;margin:0;width:auto;font-weight:600;color:#173b3f;line-height:1.2}
+.data-source-card .obs-share-allow input{width:auto;height:auto;min-height:0;margin:0;padding:0;flex:none;box-shadow:none}

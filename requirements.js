@@ -124,7 +124,7 @@
     state.via='';
     state.url=url;try{localStorage.setItem(STORAGE_KEY,url);}catch{}
     state.loading=true;state.error='';state.errorKind='';state.loadProgress='Connexion…';emit();
-    window.NEWOSB_GAME?.open({title:'Chargement des exigences (RAPPORT)'});
+    window.NEWOSB_LOADER?.open({title:'Chargement des exigences (RAPPORT)'});
     try{
       const ping=await bridge.request(url,{mode:'ping'},120000);
       if(ping?.service&&ping.service!=='NEWOSB EXIGENCES')throw new Error('Cette URL n’est pas celle du script Exigences (service « '+ping.service+' »).');
@@ -134,14 +134,14 @@
       resetIndexes();state.rows=rows;state.connected=true;state.loadedAt=new Date().toISOString();state.error='';state.errorKind='';state.warnings=Array.isArray(meta?.warnings)?meta.warnings.slice(0,12).map(String):[];
       if(!state.mentionFocus)state.mentionFocus=topMentions(state.rows,1)[0]?.name||'';
       bridge.closePopupSoon(600);
-      window.NEWOSB_GAME?.done(`${fmt(evaluations(rows).length)} évaluations chargées`);
+      window.NEWOSB_LOADER?.done(`${fmt(evaluations(rows).length)} évaluations chargées`);
     }catch(e){
       if(token!==loadToken)return;
       // Une erreur ne laisse jamais un ancien jeu de données affiché comme s'il était à jour ou autorisé.
       clearPrivateData();
       state.errorKind=e?.authError?'auth':'error';
       state.error=e?.authError?`Accès refusé : ${String(e.message||e)}`:String(e?.message||e);
-      window.NEWOSB_GAME?.fail(state.error);
+      window.NEWOSB_LOADER?.fail(state.error);
       if(e?.authError)bridge.clearKey();
     }finally{if(token===loadToken){state.loading=false;state.loadProgress='';emit();}}
   }
@@ -156,7 +156,7 @@
     for(let i=0;i<offsets.length;i+=2){
       if(token!==loadToken)return null;
       state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
-      if(!state.share)window.NEWOSB_GAME?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`);
+      if(!state.share)window.NEWOSB_LOADER?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`);
       const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>req({mode:chunkMode,offset,limit},120000)));
       chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
     }
@@ -167,13 +167,16 @@
   }
   // V6.15 : lien de partage. Les lignes RAPPORT sont servies par le script OPERATIONS, limitées aux
   // opérations du lien ; les filtres de l'onglet sont ceux figés à la création et ne sont pas modifiables.
-  async function loadShare(url,shareToken,frozenFilters,usePopup){
+  // V6.22 : « visitorToken » identifie la personne qui a ouvert le lien ; « allowedKeys » liste les filtres
+  // que l'auteur du lien laisse modifiables (hors filtres figés, qui restent verrouillés).
+  async function loadShare(url,shareToken,frozenFilters,usePopup,visitorToken,allowedKeys){
     if(!bridge)return;
-    bridge.setShare(shareToken);
+    bridge.setShare(shareToken,visitorToken);
     if(usePopup&&!bridge.preparePopup(url)){state.error='La fenêtre Google a été bloquée par le navigateur. Autorisez les fenêtres pop-up pour ce site, puis réessayez.';state.errorKind='error';emit();return;}
     const token=++loadToken;
-    state.share={active:true};state.url='';
-    Object.keys(state.filters).forEach(k=>{const v=frozenFilters&&Array.isArray(frozenFilters[k])?frozenFilters[k]:[];state.filters[k]=v.map(String);});
+    const frozen={};
+    Object.keys(state.filters).forEach(k=>{const v=frozenFilters&&Array.isArray(frozenFilters[k])?frozenFilters[k]:[];state.filters[k]=v.map(String);if(v.length)frozen[k]=true;});
+    state.share={active:true,allowed:(Array.isArray(allowedKeys)?allowedKeys:[]).map(String).filter(k=>k in state.filters&&!frozen[k])};state.url='';
     state.loading=true;state.error='';state.errorKind='';state.loadProgress='Chargement des exigences…';emit();
     try{
       const got=await fetchAll((p,t)=>bridge.request(url,p,t),'reqMeta','reqChunk',token);
@@ -376,10 +379,13 @@
     const search=`<label class="req-check-search"><span>⌕</span><input type="search" data-req-filter-search="${key}" value="${attr(state.filterSearch?.[key]||'')}" placeholder="${attr(`Rechercher dans ${String(label).toLowerCase()}…`)}" autocomplete="off"></label>`;
     return `<details class="req-check-filter ${count?'has-selection':''}" ${state.openFilter===key?'open':''}><summary><span>${esc(label)}</span><b>${esc(summary)}</b></summary><div class="req-check-menu">${search}<div class="req-check-actions"><button type="button" data-req-filter-all="${key}">Tout cocher</button><button type="button" data-req-filter-clear="${key}">Effacer</button></div>${values.length?values.map(v=>{const text=lab(v),hidden=query&&!norm(text).includes(query);return `<label data-req-filter-option="${key}" class="${hidden?'is-search-hidden':''}" ${hidden?'hidden':''}><input type="checkbox" data-req-filter-check="${key}" value="${attr(v)}" ${isChecked(v)?'checked':''}><span>${esc(text)}</span></label>`;}).join(''):'<small>Aucune valeur disponible</small>'}</div></details>`;
   }
+  function shareAllowed(){return state.share?.allowed||[];}
   function filtersHtml(){
     if(state.share){
-      const parts=Object.keys(state.filters).filter(k=>filterValues(k).length).map(k=>`${FILTER_LABELS[k]||k} : ${filterValues(k).map(v=>k==='period'?(v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':v):filterOut(k,v)).join(', ')}`);
-      return `<div class="req-share-lock" role="note"><span class="obs-share-lock-badge">🔒 Filtres figés</span><span>${esc(parts.join(' · ')||'Toutes les exigences des opérations partagées')}</span></div>${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
+      const allowed=shareAllowed(),o=allowed.length?filterOptions():null;
+      const free=allowed.length?`<div class="req-filterbar req-filterbar-checks req-share-allowed">${allowed.map(k=>k==='theme'?checkFilter(k,FILTER_LABELS[k]||k,o.theme,v=>`${v} · ${TARGET_NAMES[v]||''}`):k==='period'?checkFilter(k,FILTER_LABELS[k]||k,['pre2024','2024','2025plus'],v=>v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':'2024'):checkFilter(k,FILTER_LABELS[k]||k,o[k]||[])).join('')}</div>`:'';
+      const parts=Object.keys(state.filters).filter(k=>!allowed.includes(k)&&filterValues(k).length).map(k=>`${FILTER_LABELS[k]||k} : ${filterValues(k).map(v=>k==='period'?(v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':v):filterOut(k,v)).join(', ')}`);
+      return `<div class="req-share-lock" role="note"><span class="obs-share-lock-badge">🔒 Filtres figés</span><span>${esc(parts.join(' · ')||'Toutes les exigences des opérations partagées')}</span></div>${free}${state.requirement?`<div class="req-active"><span>Exigence filtrée : <b>${esc(state.requirement)}</b></span><button type="button" data-req-clear-requirement="1">× Retirer</button></div>`:''}`;
     }
     const o=filterOptions();
     const activeCount=Object.keys(state.filters).reduce((n,k)=>n+filterValues(k).length,0);
@@ -723,7 +729,9 @@
   function handleClick(e){
     if(state.share){
       if(e.target.closest('[data-req-share-retry]')){window.NEWOSB_SHARE?.startRequirements?.(true);return true;}
-      if(e.target.closest('[data-req-connect],[data-req-disconnect],[data-req-forget],[data-req-filter-clear],[data-req-filter-all],[data-req-reset-filters]'))return true;
+      if(e.target.closest('[data-req-connect],[data-req-disconnect],[data-req-forget],[data-req-reset-filters]'))return true;
+      const fk=e.target.closest('[data-req-filter-clear],[data-req-filter-all]');
+      if(fk&&!shareAllowed().includes(fk.dataset.reqFilterClear||fk.dataset.reqFilterAll))return true;
     }
     const view=e.target.closest('[data-req-view][data-view]');if(view){const mode=['list','bar','tiles'].includes(view.dataset.view)?view.dataset.view:'list';state.views[view.dataset.reqView]=mode;state.pages[view.dataset.reqView]=1;emit();return true;}
     const pager=e.target.closest('[data-req-page][data-page]');if(pager){state.pages[pager.dataset.reqPage]=Math.max(1,Number(pager.dataset.page)||1);emit();return true;}
@@ -756,7 +764,7 @@
     return false;
   }
   function handleChange(e){
-    if(state.share&&e.target.closest('[data-req-filter-check]'))return true;
+    if(state.share){const fc=e.target.closest('[data-req-filter-check]');if(fc&&!shareAllowed().includes(fc.dataset.reqFilterCheck))return true;}
     const f=e.target.closest('[data-req-filter-check]');if(f){const key=f.dataset.reqFilterCheck,value=filterIn(f.dataset.reqFilterCheck,f.value||'');state.openFilter=key;const values=filterValues(key).filter(v=>norm(v)!==norm(value));if(f.checked)values.push(value);state.filters[key]=values;if(key==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}if(key==='mention'&&f.checked)state.mentionFocus=value;emit();return true;}
     const mf=e.target.closest('[data-req-mention-focus]');if(mf){state.mentionFocus=mf.value||'';emit();return true;}
     // Encart compatibilité : ces choix ne modifient ni les filtres généraux ni les deux premières cartes.
