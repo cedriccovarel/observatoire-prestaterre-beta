@@ -76,13 +76,11 @@
     mapLayers:{departments:true,regions:true,zoning:false,operations:true,intercommunalities:true,cities:false},
     mapOperationGrouping:'department',
     mapView:{x:0,y:0,w:700,h:500},
-    osmMapView:{lat:46.55,lng:2.35,zoom:5},
-    mapBasemap:'ign',
-    osmTileProviderIndex:0,
     flowFocus:{heating:'',ecs:'',dpeEnergy:'',dpeGes:''},
     solutionMetric:'ubat',
     solutionViews:{},
     mapFocusRegion:'',
+    mapFocusDepartment:'',
     mapFocusPending:false,
     moaPage:1,
     mentionPage:1,
@@ -623,10 +621,10 @@
     const dpe=[...host.querySelectorAll('.obs-dpe-row')].map(el=>({label:googleSlidesText(el.querySelector('.obs-dpe-letter')),before:googleSlidesText(el.querySelector('.obs-dpe-bar:not(.after) strong')),after:googleSlidesText(el.querySelector('.obs-dpe-bar.after strong'))})).filter(x=>x.label);
     if(dpe.length)return {type:'dpe',items:dpe};
 
-    const map=host.querySelector('.obs-map-stage,.obs-france-map,.obs-osm-native');
+    const map=host.querySelector('.obs-map-stage,.obs-france-map');
     if(map){
-      const labels=[...host.querySelectorAll('.obs-map-region-label,.obs-map-dept-label,.obs-map-major-city,.obs-map-city-name,.obs-osm-region-label,.obs-osm-dept-label,.obs-osm-major-city,.obs-osm-city-name')].map(googleSlidesText).filter(Boolean);
-      const markers=[...host.querySelectorAll('.obs-map-marker,.obs-map-dep-op,.obs-osm-dep-op')].slice(0,40).map(el=>({label:googleSlidesText(el.querySelector('title'))||el.getAttribute('aria-label')||'',x:Number(el.getAttribute('cx')||el.getAttribute('x')||0),y:Number(el.getAttribute('cy')||el.getAttribute('y')||0),r:Number(el.getAttribute('r')||5)}));
+      const labels=[...host.querySelectorAll('.obs-map-region-label,.obs-map-dept-label,.obs-map-major-city,.obs-map-city-name')].map(googleSlidesText).filter(Boolean);
+      const markers=[...host.querySelectorAll('.obs-map-marker,.obs-map-dep-op')].slice(0,40).map(el=>({label:googleSlidesText(el.querySelector('title'))||el.getAttribute('aria-label')||'',x:Number(el.getAttribute('cx')||el.getAttribute('x')||0),y:Number(el.getAttribute('cy')||el.getAttribute('y')||0),r:Number(el.getAttribute('r')||5)}));
       return {type:'map',labels:[...new Set(labels)].slice(0,25),markers};
     }
 
@@ -1314,7 +1312,7 @@
     const regionUniverse=filteredOperations({ignoreCrossKey:'region'}), depUniverse=filteredOperations({ignoreCrossKey:'department'});
     const regions=countBy(regionUniverse,o=>operationRegion(o));
     const deps=countBy(depUniverse,o=>departmentName(o.department));
-    const groupingRegion=!state.mapFocusRegion&&state.mapOperationGrouping==='region';
+    const groupingRegion=!state.mapFocusRegion&&!state.mapFocusDepartment&&state.mapOperationGrouping==='region';
     const summaryItems=groupingRegion?regions:deps;
     const summaryKey=groupingRegion?'region':'departmentNameProxy';
     const summaryLabel=groupingRegion?'Région':'Département';
@@ -1326,8 +1324,8 @@
       {label:'Départements',value:fmt(uniq(ops.map(o=>o.department)).length),note:'départements représentés'}
     ])}
     <div class="obs-grid-map obs-grid-map-focus">
-      <article class="obs-card obs-map-card"><div class="obs-card-head obs-map-head"><div><span>CARTE TERRITORIALE</span><h2>Répartition des projets</h2></div><div class="obs-map-head-actions"><small>${state.mapFocusRegion?`Région sélectionnée : ${esc(state.mapFocusRegion)} · répartition départementale`:'Clique sur une région pour la détailler'}</small>${state.mapFocusRegion?'<button type="button" class="obs-card-action" data-map-reset-region="1">← Retour France</button>':''}<button type="button" class="obs-card-action obs-map-fullscreen-btn" data-map-fullscreen="1">⛶ Plein écran</button></div></div>
-        <div class="obs-map-basemapbar"><b>Fond</b><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='legacy'?'is-active':''}" data-map-basemap="legacy">Neutre</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='ign'?'is-active':''}" data-map-basemap="ign">IGN</button><button type="button" class="obs-basemap-toggle ${state.mapBasemap==='osm'?'is-active':''}" data-map-basemap="osm">OSM</button><label class="obs-map-group-switch ${state.mapFocusRegion?'is-locked':''}"><span>Département</span><input type="checkbox" data-map-grouping-toggle="1" ${groupingRegion?'checked':''} ${state.mapFocusRegion?'disabled':''}><i></i><span>Région</span></label></div>
+      <article class="obs-card obs-map-card"><div class="obs-card-head obs-map-head"><div><span>CARTE TERRITORIALE</span><h2>Répartition des projets</h2></div><div class="obs-map-head-actions"><small>${state.mapFocusDepartment?`Département : ${esc(departmentName(state.mapFocusDepartment))} (${esc(state.mapFocusDepartment)}) · opérations par commune`:state.mapFocusRegion?`Région : ${esc(state.mapFocusRegion)} · clique sur un département pour zoomer`:'Clique sur une région pour zoomer · sur une pastille pour la liste des opérations'}</small>${state.mapFocusDepartment?'<button type="button" class="obs-card-action" data-map-back-region="1">← Région</button>':''}${state.mapFocusRegion||state.mapFocusDepartment?'<button type="button" class="obs-card-action" data-map-reset-region="1">← Retour France</button>':''}<button type="button" class="obs-card-action obs-map-fullscreen-btn" data-map-fullscreen="1">⛶ Plein écran</button></div></div>
+        <div class="obs-map-basemapbar"><b>Regrouper les opérations</b><label class="obs-map-group-switch ${state.mapFocusRegion||state.mapFocusDepartment?'is-locked':''}"><span>Département</span><input type="checkbox" data-map-grouping-toggle="1" ${groupingRegion?'checked':''} ${state.mapFocusRegion||state.mapFocusDepartment?'disabled':''}><i></i><span>Région</span></label></div>
         <div class="obs-map-layerbar"><b>Couches</b>${layer('regions','Régions','▱')}${layer('departments','Départements','▦')}${layer('intercommunalities','Intercommunalités','◎')}${layer('operations',`Opérations · ${groupingRegion?'région':'département'}`,'●')}${layer('zoning','Zonage 1·2·3','◫')}</div>
         <div id="obsTerritoryMap" class="obs-map-stage"><div class="obs-map-loading">Chargement du fond de carte…</div></div>
       </article>
@@ -1912,6 +1910,7 @@
   }
 
   function renderPage(options={}){
+    closeMapPopover();
     if(SHARE && !shareReady()){
       pageEl.innerHTML=SHARE.gateHtml();
       const fw=document.querySelector('.obs-filterbar-wrap'); if(fw)fw.hidden=true;
@@ -2528,8 +2527,9 @@
     const width=Math.max(.0001,maxX-minX),height=Math.max(.0001,maxY-minY),scale=Math.min(box.width/width,box.height/height),usedW=width*scale,usedH=height*scale,ox=box.x+(box.width-usedW)/2,oy=box.y+(box.height-usedH)/2;
     return(lon,lat)=>[ox+(lon*cos-minX)*scale,oy+usedH-(lat-minY)*scale];
   }
-  function geometryPath(geometry,project){
-    const ringPath=ring=>{let d='';ring.forEach((point,i)=>{const p=project(point[0],point[1]);d+=`${i?'L':'M'}${p[0].toFixed(1)},${p[1].toFixed(1)} `;});return d+'Z ';};
+  // « tol » : distance minimale (unités SVG) entre deux points conservés — allège les contours détaillés.
+  function geometryPath(geometry,project,tol=0){
+    const ringPath=ring=>{let d='',lx=NaN,ly=NaN;ring.forEach((point,i)=>{const p=project(point[0],point[1]);if(i&&i<ring.length-1&&tol&&Math.abs(p[0]-lx)<tol&&Math.abs(p[1]-ly)<tol)return;lx=p[0];ly=p[1];d+=`${i?'L':'M'}${p[0].toFixed(2)},${p[1].toFixed(2)} `;});return d+'Z ';};
     let d='';if(geometry.type==='Polygon')geometry.coordinates.forEach(r=>d+=ringPath(r));else if(geometry.type==='MultiPolygon')geometry.coordinates.forEach(poly=>poly.forEach(r=>d+=ringPath(r)));return d;
   }
   function featureCode(feature){const p=feature?.properties||{};return String(p.code||p.CODE||p.CODE_DEPT||'').toUpperCase().trim();}
@@ -2567,41 +2567,11 @@
   }
 
 
-  const REGION_CODE_BY_NAME = {
-    'auvergne rhone alpes':'84','bourgogne franche comte':'27','bretagne':'53','centre val de loire':'24','corse':'94',
-    'grand est':'44','hauts de france':'32','ile de france':'11','normandie':'28','nouvelle aquitaine':'75',
-    'occitanie':'76','pays de la loire':'52','provence alpes cote d azur':'93',
-    'guadeloupe':'01','martinique':'02','guyane':'03','la reunion':'04','reunion':'04','mayotte':'06'
-  };
-  const regionMajorCitiesCache=new Map();
   function regionFeatures(features,region){return (features||[]).filter(f=>norm(regionName(featureCode(f)))===norm(region));}
-  function geometryLonLatBounds(features){
-    let minLon=Infinity,maxLon=-Infinity,minLat=Infinity,maxLat=-Infinity;
-    (features||[]).forEach(f=>walkCoordinates(f.geometry,(lon,lat)=>{minLon=Math.min(minLon,lon);maxLon=Math.max(maxLon,lon);minLat=Math.min(minLat,lat);maxLat=Math.max(maxLat,lat);}));
-    return Number.isFinite(minLon)?{minLon,maxLon,minLat,maxLat}:null;
-  }
+
   function resetTerritoryMapFocus(){
-    state.mapFocusRegion='';state.mapFocusPending=false;
-    state.mapView={x:0,y:0,w:700,h:500};state.osmMapView={lat:46.55,lng:2.35,zoom:5};
-  }
-  function fitOsmRegion(features,region,host){
-    const rf=regionFeatures(features,region),b=geometryLonLatBounds(rf);if(!b)return false;
-    const rect=host?.getBoundingClientRect?.()||{width:700,height:390},width=Math.max(360,rect.width||700)*.82,height=Math.max(260,rect.height||390)*.78;
-    let chosen=6,centerLng=(b.minLon+b.maxLon)/2,centerLat=(b.minLat+b.maxLat)/2;
-    for(let z=10;z>=5;z--){const a=osmWorld(b.minLon,b.maxLat,z),c=osmWorld(b.maxLon,b.minLat,z);if(Math.abs(c[0]-a[0])<=width&&Math.abs(c[1]-a[1])<=height){chosen=z;break;}}
-    const p1=osmWorld(b.minLon,b.maxLat,chosen),p2=osmWorld(b.maxLon,b.minLat,chosen),ll=osmLonLat((p1[0]+p2[0])/2,(p1[1]+p2[1])/2,chosen);
-    state.osmMapView={lng:ll[0]||centerLng,lat:ll[1]||centerLat,zoom:chosen};return true;
-  }
-  function fitLegacyRegion(features,region,project){
-    const rf=regionFeatures(features,region);if(!rf.length)return false;
-    let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;rf.forEach(f=>walkCoordinates(f.geometry,(lon,lat)=>{const [x,y]=project(lon,lat);minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}));
-    if(!Number.isFinite(minX))return false;
-    const padX=Math.max(18,(maxX-minX)*.12),padY=Math.max(14,(maxY-minY)*.12);let x=minX-padX,y=minY-padY,w=(maxX-minX)+2*padX,h=(maxY-minY)+2*padY;
-    const ratio=MAP_CANVAS.width/MAP_CANVAS.height;if(w/h>ratio)h=w/ratio;else w=h*ratio;state.mapView={x:x-(w-((maxX-minX)+2*padX))/2,y:y-(h-((maxY-minY)+2*padY))/2,w,h};clampMapView();return true;
-  }
-  async function getRegionMajorCities(region){
-    const key=norm(region).replace(/[^a-z0-9]+/g,' ').trim();if(regionMajorCitiesCache.has(key))return regionMajorCitiesCache.get(key);const code=REGION_CODE_BY_NAME[key];if(!code){regionMajorCitiesCache.set(key,[]);return [];}
-    try{const rows=await fetchGeoJson(`https://geo.api.gouv.fr/communes?codeRegion=${encodeURIComponent(code)}&fields=nom,code,centre,population,codeDepartement&format=json&geometry=centre&boost=population&limit=50`);const out=(Array.isArray(rows)?rows:[]).filter(c=>Array.isArray(c?.centre?.coordinates)&&Number(c.population)>0).sort((a,b)=>Number(b.population)-Number(a.population)).slice(0,12).map(c=>({name:String(c.nom||''),population:Number(c.population)||0,department:String(c.codeDepartement||''),lon:Number(c.centre.coordinates[0]),lat:Number(c.centre.coordinates[1])}));regionMajorCitiesCache.set(key,out);return out;}catch(err){console.warn('NEWOSB grandes villes région:',region,err);regionMajorCitiesCache.set(key,[]);return [];}
+    state.mapFocusRegion='';state.mapFocusDepartment='';state.mapFocusPending=false;
+    state.mapView={x:0,y:0,w:700,h:500};
   }
   function focusTerritoryRegion(region){
     if(!region)return;state.mapFocusRegion=region;state.mapFocusPending=true;
@@ -2633,6 +2603,7 @@
     if(z<600)return 4;       // villes
     return 5;                // opérations
   }
+  function mapDetailText(level){return state.mapFocusDepartment?'Communes':state.mapFocusRegion?'Départements':territoryMapDetailLabel(level);}
   function territoryMapDetailLabel(level){
     return ({1:'Régions',2:'Départements',3:'Intercommunalités',4:'Zoom fin',5:'Opérations'})[level]||'Territoires';
   }
@@ -2666,10 +2637,10 @@
       host.style.setProperty('--obs-map-city-stroke',`${m.stroke.toFixed(2)}px`);
       host.style.setProperty('--obs-map-city-meta-display',level>=5?'inline':'none');
       host.style.setProperty('--obs-map-major-meta-display',level>=3?'inline':'none');
-      const historicalNamesVisible=host.dataset.basemap!=='legacy'||level>=4;
+      const historicalNamesVisible=level>=4;
       host.style.setProperty('--obs-map-city-name-display',historicalNamesVisible?'inline':'none');
       host.style.setProperty('--obs-map-major-name-display',historicalNamesVisible?'inline':'none');
-      const d=host.querySelector('[data-map-detail-label]');if(d)d.textContent=`Détail : ${territoryMapDetailLabel(level)}`;
+      const d=host.querySelector('[data-map-detail-label]');if(d)d.textContent=`Détail : ${mapDetailText(level)}`;
     }
   }
   function zoomTerritoryMap(svg,host,factor,clientX,clientY){
@@ -2767,197 +2738,92 @@
     applyTerritoryMapView(svg,host);
   }
 
-  const OSM_TILE_SIZE=256, OSM_MIN_ZOOM=4, OSM_MAX_ZOOM=18;
-  const OSM_TILE_PROVIDERS=[
-    {
-      id:'ign',
-      name:'Plan IGN',
-      tile(z,x,y){return `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`;},
-      attribution:'© IGN · Plan IGN'
-    },
-    {
-      id:'osm-de',
-      name:'OpenStreetMap DE',
-      tile(z,x,y){return `https://tile.openstreetmap.de/${z}/${x}/${y}.png`;},
-      attribution:'© OpenStreetMap contributors · FOSSGIS'
-    },
-    {
-      id:'osm',
-      name:'OpenStreetMap',
-      tile(z,x,y){return `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;},
-      attribution:'© OpenStreetMap contributors'
-    }
-  ];
-  function osmProviderIndex(){
-    const raw=Number(state.osmTileProviderIndex);
-    return Number.isFinite(raw)&&raw>=0&&raw<OSM_TILE_PROVIDERS.length?Math.floor(raw):0;
-  }
-  function osmProvider(){return OSM_TILE_PROVIDERS[osmProviderIndex()]||OSM_TILE_PROVIDERS[0];}
-  function osmUpdateProviderUi(ctx){
-    const provider=osmProvider();
-    const attr=ctx?.host?.querySelector('[data-osm-attribution]');
-    if(attr)attr.innerHTML=provider.id==='ign'?'<a href="https://www.ign.fr/" target="_blank" rel="noopener">© IGN</a> · Plan IGN':'<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> contributors'+(provider.id==='osm-de'?' · FOSSGIS':'');
-    const btn=ctx?.host?.querySelector('[data-osm-provider]');
-    if(btn){btn.textContent=provider.id==='ign'?'IGN':'OSM';btn.title=`Fond actuel : ${provider.name}. Cliquer pour changer.`;}
-  }
-  function osmSetProvider(ctx,index,{manual=false}={}){
-    index=(index+OSM_TILE_PROVIDERS.length)%OSM_TILE_PROVIDERS.length;
-    state.osmTileProviderIndex=index;
-    state.mapBasemap=OSM_TILE_PROVIDERS[index]?.id==='ign'?'ign':'osm';
-    if(ctx){ctx.tileFailureCount=0;ctx.providerSwitching=false;ctx.providerExhausted=false;osmUpdateProviderUi(ctx);scheduleOsmRender(ctx);}
-    if(manual)showToast?.(`Fond cartographique : ${OSM_TILE_PROVIDERS[index].name}`);
-  }
-  function osmTileFailed(ctx){
-    if(!ctx||ctx.providerSwitching||ctx.providerExhausted)return;
-    ctx.tileFailureCount=(ctx.tileFailureCount||0)+1;
-    if(ctx.tileFailureCount<3)return;
-    ctx.providerSwitching=true;
-    const next=osmProviderIndex()+1;
-    if(next<OSM_TILE_PROVIDERS.length){
-      state.osmTileProviderIndex=next;state.mapBasemap=OSM_TILE_PROVIDERS[next]?.id==='ign'?'ign':'osm';ctx.tileFailureCount=0;ctx.providerSwitching=false;osmUpdateProviderUi(ctx);scheduleOsmRender(ctx);
-    }else{
-      ctx.providerExhausted=true;ctx.providerSwitching=false;
-      const notice=ctx.host.querySelector('[data-osm-provider-status]');
-      if(notice){notice.hidden=false;notice.textContent='Fond cartographique distant indisponible · couches Observatoire Prestaterre conservées';}
-    }
-  }
-  function osmClampLat(lat){return Math.max(-85.05112878,Math.min(85.05112878,Number(lat)||0));}
-  function osmWrapLng(lng){lng=Number(lng)||0;while(lng<-180)lng+=360;while(lng>=180)lng-=360;return lng;}
-  function osmWorld(lon,lat,zoom){
-    lon=osmWrapLng(lon);lat=osmClampLat(lat);const scale=OSM_TILE_SIZE*Math.pow(2,zoom),rad=lat*Math.PI/180;
-    return [(lon+180)/360*scale,(1-Math.log(Math.tan(rad)+1/Math.cos(rad))/Math.PI)/2*scale];
-  }
-  function osmLonLat(x,y,zoom){
-    const scale=OSM_TILE_SIZE*Math.pow(2,zoom),lng=x/scale*360-180,n=Math.PI-2*Math.PI*y/scale,lat=180/Math.PI*Math.atan(Math.sinh(n));
-    return [osmWrapLng(lng),osmClampLat(lat)];
-  }
-  function osmDetailLevel(zoom){if(zoom<=5)return 1;if(zoom<=7)return 2;if(zoom<=9)return 3;if(zoom<=11)return 4;return 5;}
-  function applyOsmCityLabelScale(host,zoom){
-    if(!host)return;
-    const z=Math.max(OSM_MIN_ZOOM,Math.min(OSM_MAX_ZOOM,Number(zoom)||OSM_MIN_ZOOM));
-    const city=Math.min(7.4,6.0+Math.max(0,z-10)*.18);
-    const major=Math.min(8.2,6.7+Math.max(0,z-6)*.14);
-    const meta=Math.min(6.2,5.1+Math.max(0,z-10)*.14);
-    host.dataset.osmZoom=String(Math.round(z));
-    host.style.setProperty('--obs-osm-city-name-size',`${city.toFixed(2)}px`);
-    host.style.setProperty('--obs-osm-city-active-size',`${(city+.6).toFixed(2)}px`);
-    host.style.setProperty('--obs-osm-major-city-size',`${major.toFixed(2)}px`);
-    host.style.setProperty('--obs-osm-city-meta-size',`${meta.toFixed(2)}px`);
-    host.style.setProperty('--obs-osm-city-stroke',z>=12?'1.8px':'1.4px');
-    host.style.setProperty('--obs-osm-city-meta-display',z>=12?'inline':'none');
-    host.style.setProperty('--obs-osm-major-meta-display',z>=8?'inline':'none');
-  }
-  function osmDetailLabel(zoom){return territoryMapDetailLabel(osmDetailLevel(zoom));}
-  function osmDominantZone(zoneMap){return [...(zoneMap||new Map()).entries()].filter(([z])=>norm(z)!=='non precise'&&norm(z)!=='non précisé').sort((a,b)=>b[1]-a[1])[0]?.[0]||'';}
-  function osmZoneSummary(zoneMap){const rows=[...(zoneMap||new Map()).entries()].sort((a,b)=>b[1]-a[1]);return rows.length?rows.map(([z,n])=>`${z}: ${n}`).join(' · '):'Zonage non renseigné';}
-  function osmViewport(ctx){
-    const rect=ctx.mapEl.getBoundingClientRect(),width=Math.max(320,Math.round(rect.width||700)),height=Math.max(240,Math.round(rect.height||390));
-    const z=Math.round(state.osmMapView.zoom||5),center=osmWorld(state.osmMapView.lng,state.osmMapView.lat,z);
-    return {width,height,z,centerX:center[0],centerY:center[1],left:center[0]-width/2,top:center[1]-height/2};
-  }
-  function renderOsmTiles(ctx,v){
-    const n=Math.pow(2,v.z),x0=Math.floor(v.left/OSM_TILE_SIZE),x1=Math.floor((v.left+v.width)/OSM_TILE_SIZE),y0=Math.max(0,Math.floor(v.top/OSM_TILE_SIZE)),y1=Math.min(n-1,Math.floor((v.top+v.height)/OSM_TILE_SIZE));
-    const provider=osmProvider();let html='';
-    for(let ty=y0;ty<=y1;ty++)for(let tx=x0;tx<=x1;tx++){
-      const wrapped=((tx%n)+n)%n,left=tx*OSM_TILE_SIZE-v.left,top=ty*OSM_TILE_SIZE-v.top,src=provider.tile(v.z,wrapped,ty);
-      html+=`<img class="obs-osm-tile" data-osm-tile="${provider.id}" src="${esc(src)}" alt="" draggable="false" loading="eager" decoding="async" referrerpolicy="strict-origin-when-cross-origin" style="left:${left.toFixed(1)}px;top:${top.toFixed(1)}px">`;
-    }
-    ctx.tiles.innerHTML=html;
-    ctx.tiles.querySelectorAll('[data-osm-tile]').forEach(img=>{
-      img.addEventListener('load',()=>{ctx.tileFailureCount=0;},{once:true});
-      img.addEventListener('error',()=>{img.style.display='none';osmTileFailed(ctx);},{once:true});
-    });
-    osmUpdateProviderUi(ctx);
-  }
   function legacyMapMarkerScale(){const z=Math.max(.6,territoryMapZoomPercent()/100);return Math.max(.52,Math.min(1.28,1/z));}
-  function groupedMapMarkerSvg(features,project,counts,mode='department',className='obs-map-marker'){
-    const max=Math.max(1,...counts.values()),legacy=className==='obs-map-marker',scale=legacy?legacyMapMarkerScale():1;
+  // Pastilles d'opérations (région ou département) : un clic ouvre la liste des opérations regroupées.
+  function groupedMapMarkerSvg(features,project,counts,mode='department',className='obs-map-marker',opsByDep=new Map(),registry=null){
+    const max=Math.max(1,...counts.values()),scale=legacyMapMarkerScale();
     if(mode==='region'){
       const groups=new Map();
-      features.forEach(f=>{const code=featureCode(f),r=regionName(code);if(!groups.has(r))groups.set(r,{features:[],count:0});const g=groups.get(r);g.features.push(f);g.count+=counts.get(code)||0;});
-      const maxR=Math.max(1,...[...groups.values()].map(g=>g.count));
-      return [...groups.entries()].map(([r,g])=>{if(!g.count)return'';const c=groupCenter(g.features,project);if(legacy){const digits=String(g.count).length,h=(16+Math.min(7,Math.sqrt(g.count)))*scale,w=(22+digits*6+Math.min(20,Math.sqrt(g.count)*2.2))*scale,y=c[1]+(17*scale);return `<g class="${className} obs-map-group-region obs-map-count-pill" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(y-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(y+2.7*scale).toFixed(1)}" text-anchor="middle" style="font-size:${(7.5*scale).toFixed(2)}px">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''}</title></g>`;}const rad=7+10*Math.sqrt(g.count/maxR);return `<g class="${className} obs-map-group-region" ${crossAttrs('region',r,`Région : ${r}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+4).toFixed(1)}" text-anchor="middle">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''}</title></g>`;}).join('');
+      features.forEach(f=>{const code=featureCode(f),r=regionName(code);if(!groups.has(r))groups.set(r,{features:[],count:0,ops:[]});const g=groups.get(r);g.features.push(f);g.count+=counts.get(code)||0;g.ops.push(...(opsByDep.get(code)||[]));});
+      return [...groups.entries()].map(([r,g])=>{if(!g.count)return'';registry?.set(`region|${r}`,{title:r,sub:'Région',ops:g.ops,zoom:{key:'region',value:r}});const c=groupCenter(g.features,project),digits=String(g.count).length,h=(16+Math.min(7,Math.sqrt(g.count)))*scale,w=(22+digits*6+Math.min(20,Math.sqrt(g.count)*2.2))*scale,y=c[1]+(17*scale);return `<g class="${className} obs-map-group-region obs-map-count-pill" ${pastilleAttrs('region',r,r,g.count)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(y-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(y+2.7*scale).toFixed(1)}" text-anchor="middle" style="font-size:${(7.5*scale).toFixed(2)}px">${fmt(g.count)}</text><title>${esc(r)} · ${fmt(g.count)} opération${g.count>1?'s':''} · cliquer pour la liste</title></g>`;}).join('');
     }
-    return features.map(f=>{const code=featureCode(f),count=counts.get(code)||0;if(!count)return'';const c=featureCenter(f,project),rad=(5+8*Math.sqrt(count/max))*scale;return `<g class="${className}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+3*scale).toFixed(1)}" text-anchor="middle" ${legacy?`style="font-size:${(7.5*scale).toFixed(2)}px"`:''}>${fmt(count)}</text><title>${esc(departmentName(code))} · ${fmt(count)} opération${count>1?'s':''}</title></g>`;}).join('');
+    return features.map(f=>{const code=featureCode(f),count=counts.get(code)||0;if(!count)return'';registry?.set(`department|${code}`,{title:`${departmentName(code)} (${code})`,sub:regionName(code),ops:opsByDep.get(code)||[],zoom:{key:'department',value:code}});const c=featureCenter(f,project),rad=(5+8*Math.sqrt(count/max))*scale;return `<g class="${className}" ${pastilleAttrs('department',code,departmentName(code),count)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${rad.toFixed(1)}"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+3*scale).toFixed(1)}" text-anchor="middle" style="font-size:${(7.5*scale).toFixed(2)}px">${fmt(count)}</text><title>${esc(departmentName(code))} · ${fmt(count)} opération${count>1?'s':''} · cliquer pour la liste</title></g>`;}).join('');
   }
 
 
-  function renderOsmOverlay(ctx,v){
-    applyOsmCityLabelScale(ctx.host,v.z);
-    const project=(lon,lat)=>{const p=osmWorld(lon,lat,v.z);return [p[0]-v.left,p[1]-v.top];};
-    const level=osmDetailLevel(v.z),defs=[],paths=[],counts=ctx.counts,zonesByDep=ctx.zonesByDep,max=ctx.max;
-    ctx.features.forEach((f,idx)=>{
-      const code=featureCode(f),count=counts.get(code)||0,active=activeCross('department',code),zoneMap=zonesByDep.get(code)||new Map();
-      let fill='rgba(22,134,79,.06)';
-      if(state.mapLayers.zoning&&zoneMap.size){
-        const entries=[...zoneMap.entries()].filter(([z])=>norm(z)!=='non precise'&&norm(z)!=='non précisé');
-        if(entries.length===1)fill=mapZoneColor(entries[0][0]);
-        else if(entries.length>1){const id=`osm-zone-${code.replace(/[^A-Z0-9]/gi,'')}-${idx}`,total=entries.reduce((a,[,n])=>a+n,0)||1;let cursor=0,stops='';entries.sort((a,b)=>a[0].localeCompare(b[0],'fr')).forEach(([z,n])=>{const a=cursor/total*100;cursor+=n;const b=cursor/total*100,c=mapZoneColor(z);stops+=`<stop offset="${a}%" stop-color="${c}"/><stop offset="${b}%" stop-color="${c}"/>`;});defs.push(`<linearGradient id="${id}" x1="0%" y1="0%" x2="100%" y2="100%">${stops}</linearGradient>`);fill=`url(#${id})`;}
-      }
-      const fillOpacity=state.mapLayers.zoning?(count?.26:.05):(state.mapLayers.operations&&count?(.07+.24*Math.sqrt(count/max)):.03),stroke=state.mapLayers.departments?'rgba(255,255,255,.95)':'rgba(6,64,43,.18)',sw=state.mapLayers.departments?1.2:.45;
-      paths.push(`<path class="obs-osm-dep ${active?'is-active':''}" d="${geometryPath(f.geometry,project)}" fill="${fill}" fill-opacity="${fillOpacity.toFixed(2)}" stroke="${stroke}" stroke-width="${sw}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><title>${esc(departmentName(code))} · ${fmt(count)} opération${count>1?'s':''} · ${esc(osmZoneSummary(zoneMap))}</title></path>`);
+
+  async function hydrateTerritoryMap(token){ return hydrateTerritoryMapLegacy(token); }
+
+  // V6.23 : contours détaillés (pleine résolution) chargés seulement quand on zoome sur une région ou un
+  // département ; communes du département (géo API) pour le zoom départemental. Gardés en mémoire uniquement.
+  const DETAILED_DEPARTMENT_URLS=['https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements.geojson','https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements.geojson'];
+  let detailedDepartmentsPromise=null;
+  function loadDetailedDepartments(){
+    if(!detailedDepartmentsPromise)detailedDepartmentsPromise=(async()=>{for(const url of DETAILED_DEPARTMENT_URLS){try{const g=await fetchGeoJson(url),m=new Map();(g?.features||[]).forEach(f=>{const c=featureCode(f);if(c)m.set(c,f);});if(m.size)return m;}catch(err){console.warn('NEWOSB contours détaillés:',url,err);}}detailedDepartmentsPromise=null;return null;})();
+    return detailedDepartmentsPromise;
+  }
+  const departmentCommunesCache=new Map();
+  function loadDepartmentCommunes(code){
+    if(!departmentCommunesCache.has(code))departmentCommunesCache.set(code,fetchGeoJson(`https://geo.api.gouv.fr/departements/${encodeURIComponent(code)}/communes?format=geojson&geometry=contour&fields=nom,code`).then(g=>Array.isArray(g?.features)?g.features:[]).catch(err=>{console.warn('NEWOSB communes:',code,err);departmentCommunesCache.delete(code);return [];}));
+    return departmentCommunesCache.get(code);
+  }
+  // Fenêtre contextuelle d'une pastille : liste des opérations regroupées, chaque ligne ouvre la fiche.
+  var mapPopEl=null; // var : renderPage peut fermer la fenêtre avant l'initialisation de ce bloc
+  function closeMapPopover(){if(mapPopEl){mapPopEl.remove();mapPopEl=null;}}
+  function mapPopRows(ops,q){
+    const nq=norm(q||''),rows=ops.filter(o=>!nq||[o.code,o.name,o.moa,o.city,o.referential].some(v=>norm(v).includes(nq)));
+    return rows.length?rows.map(o=>`<li><button type="button" data-map-pop-op="${attr(o.code)}"><b>${esc(o.name||o.code)}</b><span>${esc([o.code,o.city,o.referential].filter(Boolean).join(' · '))}</span><small><i class="obs-pill ${o.status==='cancelled'?'red':(o.status==='incomplete'?'warn':'')}">${esc(o.rawStatus||STATUS_LABELS[o.status]||o.status||'')}</i>${o.dwellings?`${fmt(o.dwellings)} lgts`:''}</small></button></li>`).join(''):'<li class="obs-map-pop-empty">Aucune opération ne correspond.</li>';
+  }
+  function openMapPastille(el){
+    const host=el.closest('#obsTerritoryMap'),kind=el.dataset.mapPastille,value=decodeURIComponent(el.dataset.mapPastilleValue||''),entry=host?._pastilles?.get(`${kind}|${value}`);
+    if(!entry)return;
+    closeMapPopover();
+    const ops=[...entry.ops].sort((a,b)=>String(a.name||a.code).localeCompare(String(b.name||b.code),'fr',{numeric:true}));
+    const pop=document.createElement('div');pop.className='obs-map-pop';pop.setAttribute('role','dialog');pop.setAttribute('aria-label',`Opérations : ${entry.title}`);
+    const zoom=entry.zoom&&!(entry.zoom.key==='department'&&state.mapFocusDepartment===entry.zoom.value)?`<button type="button" class="obs-card-action" data-map-pop-zoom="1">${entry.zoom.key==='region'?'Zoomer sur la région':'Zoomer sur le département'}</button>`:'';
+    pop.innerHTML=`<header><div><span>${esc(entry.sub||'')}</span><h3>${esc(entry.title)}</h3><small>${fmt(ops.length)} opération${ops.length>1?'s':''}</small></div><button type="button" class="obs-map-pop-close" data-map-pop-close aria-label="Fermer">×</button></header>${ops.length>8?`<label class="obs-map-pop-search"><span>⌕</span><input type="search" data-map-pop-search placeholder="Rechercher une opération…" autocomplete="off"></label>`:''}<ul data-map-pop-list>${mapPopRows(ops,'')}</ul>${zoom?`<footer>${zoom}</footer>`:''}`;
+    (document.fullscreenElement||document.body).appendChild(pop);mapPopEl=pop; // visible aussi en plein écran
+    const r=el.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight,vw=window.innerWidth,vh=window.innerHeight;
+    let left=r.right+10,top=r.top+r.height/2-ph/2;if(left+pw>vw-10)left=r.left-pw-10;if(left<10)left=Math.max(10,(vw-pw)/2);top=Math.max(10,Math.min(vh-ph-10,top));
+    pop.style.left=`${Math.round(left)}px`;pop.style.top=`${Math.round(top)}px`;
+    pop.addEventListener('input',e=>{if(e.target.matches('[data-map-pop-search]'))pop.querySelector('[data-map-pop-list]').innerHTML=mapPopRows(ops,e.target.value);});
+    pop.addEventListener('click',e=>{
+      if(e.target.closest('[data-map-pop-close]')){closeMapPopover();el.focus?.();return;}
+      const row=e.target.closest('[data-map-pop-op]');if(row){closeMapPopover();openOperation(row.dataset.mapPopOp);return;}
+      if(e.target.closest('[data-map-pop-zoom]')&&entry.zoom){closeMapPopover();const z=entry.zoom;document.querySelector(`#obsTerritoryMap [data-cross-key="${z.key}"][data-cross-value="${attr(encodeURIComponent(z.value))}"]`)?.dispatchEvent(new MouseEvent('click',{bubbles:true}));}
     });
-    const regionGroups=new Map();ctx.features.forEach(f=>{const r=regionName(featureCode(f));if(!regionGroups.has(r))regionGroups.set(r,[]);regionGroups.get(r).push(f);});
-    let regionSvg='';if(state.mapLayers.regions&&level<=2){regionSvg=`<path class="obs-osm-region-outline" d="${regionBoundaryPath(ctx.features,project)}"/>`+[...regionGroups.entries()].map(([r,fs])=>{const c=groupCenter(fs,project);return `<g class="obs-osm-region-label ${activeCross('region',r)?'is-active':''}" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-48).toFixed(1)}" y="${(c[1]-12).toFixed(1)}" width="96" height="24" rx="12"></rect><text x="${c[0].toFixed(1)}" y="${(c[1]+4).toFixed(1)}" text-anchor="middle">${esc(shorten(r,20))}</text></g>`;}).join('');}
-    let depSvg='';if(state.mapLayers.departments&&level>=2&&level<=3)depSvg=ctx.features.map(f=>{const code=featureCode(f),c=featureCenter(f,project);return `<g class="obs-osm-dept-label ${activeCross('department',code)?'is-active':''}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="13"></circle><text x="${c[0].toFixed(1)}" y="${(c[1]+3.5).toFixed(1)}" text-anchor="middle">${esc(code)}</text></g>`;}).join('');
-    let depOps='';if(state.mapLayers.operations)depOps=groupedMapMarkerSvg(ctx.features,project,counts,state.mapOperationGrouping,'obs-osm-dep-op');
-    let epciSvg='';if(state.mapLayers.intercommunalities&&level>=3&&ctx.epcis)epciSvg=[...ctx.epcis.values()].map(e=>{const p=project(e.lon/e.n,e.lat/e.n);return `<g class="obs-osm-epci-label ${activeCross('intercommunality',e.name)?'is-active':''}" ${crossAttrs('intercommunality',e.name,`Intercommunalité : ${e.name}`)}><rect x="${(p[0]-62).toFixed(1)}" y="${(p[1]-11).toFixed(1)}" width="124" height="22" rx="11"></rect><text x="${p[0].toFixed(1)}" y="${(p[1]+3).toFixed(1)}" text-anchor="middle">${esc(shorten(e.name,28))} · ${fmt(e.n)}</text></g>`;}).join('');
-    let majorCitySvg=''; // V05.30: aucun repère de ville.
-    let citySvg=''; // V05.30: aucun repère de ville.
-    let opSvg='';
-    ctx.overlay.setAttribute('viewBox',`0 0 ${v.width} ${v.height}`);ctx.overlay.setAttribute('width',v.width);ctx.overlay.setAttribute('height',v.height);
-    ctx.overlay.innerHTML=`<defs>${defs.join('')}</defs>${paths.join('')}${regionSvg}${depSvg}${depOps}${epciSvg}${majorCitySvg}${citySvg}${opSvg}`;
-    const detail=ctx.host.querySelector('[data-osm-detail]');if(detail)detail.textContent=`Détail : ${osmDetailLabel(v.z)} · zoom ${v.z}`;
+    (pop.querySelector('[data-map-pop-search]')||pop.querySelector('[data-map-pop-op]')||pop.querySelector('[data-map-pop-close]'))?.focus({preventScroll:true});
   }
-  function renderOsmNative(ctx){if(!ctx?.mapEl?.isConnected)return;const v=osmViewport(ctx);renderOsmTiles(ctx,v);renderOsmOverlay(ctx,v);}
-  function scheduleOsmRender(ctx){if(!ctx?.mapEl?.isConnected)return;if(ctx.renderRaf)return;ctx.renderRaf=requestAnimationFrame(()=>{ctx.renderRaf=0;renderOsmNative(ctx);});}
-  function osmZoomAt(ctx,newZoom,clientX,clientY){
-    newZoom=Math.max(OSM_MIN_ZOOM,Math.min(OSM_MAX_ZOOM,Math.round(newZoom)));const oldZoom=Math.round(state.osmMapView.zoom||5);if(newZoom===oldZoom){renderOsmNative(ctx);return;}
-    const rect=ctx.mapEl.getBoundingClientRect(),px=Number.isFinite(clientX)?clientX-rect.left:rect.width/2,py=Number.isFinite(clientY)?clientY-rect.top:rect.height/2,oldV=osmViewport(ctx),focusWorld=[oldV.left+px,oldV.top+py],focus=osmLonLat(focusWorld[0],focusWorld[1],oldZoom),focusNew=osmWorld(focus[0],focus[1],newZoom),newCenter=[focusNew[0]-(px-rect.width/2),focusNew[1]-(py-rect.height/2)],ll=osmLonLat(newCenter[0],newCenter[1],newZoom);
-    state.osmMapView={lng:ll[0],lat:ll[1],zoom:newZoom};scheduleOsmRender(ctx);
+  document.addEventListener('pointerdown',e=>{if(mapPopEl&&!mapPopEl.contains(e.target)&&!e.target.closest?.('[data-map-pastille]'))closeMapPopover();},true);
+  function pastilleAttrs(kind,value,label,count){
+    return `data-map-pastille="${attr(kind)}" data-map-pastille-value="${attr(encodeURIComponent(String(value)))}" role="button" tabindex="0" aria-label="${attr(`${label} · ${count} opération${count>1?'s':''} · afficher la liste`)}"`;
   }
-  function setupOsmNativeNavigation(ctx){
-    const el=ctx.mapEl;let dragging=false,pointerId=null,lastX=0,lastY=0;
-    el.addEventListener('wheel',e=>{e.preventDefault();osmZoomAt(ctx,(state.osmMapView.zoom||5)+(e.deltaY<0?1:-1),e.clientX,e.clientY);},{passive:false});
-    el.addEventListener('contextmenu',e=>e.preventDefault());
-    el.addEventListener('pointerdown',e=>{if(e.button!==2)return;e.preventDefault();dragging=true;pointerId=e.pointerId;lastX=e.clientX;lastY=e.clientY;el.classList.add('is-panning');try{el.setPointerCapture(e.pointerId);}catch{}});
-    el.addEventListener('pointermove',e=>{if(!dragging||e.pointerId!==pointerId)return;e.preventDefault();const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;const z=Math.round(state.osmMapView.zoom||5),center=osmWorld(state.osmMapView.lng,state.osmMapView.lat,z),ll=osmLonLat(center[0]-dx,center[1]-dy,z);state.osmMapView.lng=ll[0];state.osmMapView.lat=ll[1];scheduleOsmRender(ctx);});
-    const stop=e=>{if(!dragging||e.pointerId!==pointerId)return;dragging=false;pointerId=null;el.classList.remove('is-panning');try{el.releasePointerCapture(e.pointerId);}catch{}};el.addEventListener('pointerup',stop);el.addEventListener('pointercancel',stop);
-    ctx.host.querySelectorAll('[data-osm-zoom]').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();osmZoomAt(ctx,(state.osmMapView.zoom||5)+(btn.dataset.osmZoom==='in'?1:-1));}));
-    ctx.host.querySelector('[data-osm-provider]')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();osmSetProvider(ctx,osmProviderIndex()+1,{manual:true});});
-    if(window.ResizeObserver){ctx.resizeObserver=new ResizeObserver(()=>scheduleOsmRender(ctx));ctx.resizeObserver.observe(el);}
-  }
-  async function hydrateOsmDetails(ctx,token){
-    const unique=new Map();(ctx.mapOps||[]).forEach(op=>{const key=mapLocationKey(op)||op.code;if(!unique.has(key))unique.set(key,{op,members:[]});unique.get(key).members.push(op);});const sample=[...unique.values()].slice(0,250);
-    const geos=await Promise.all(sample.map(async item=>({op:item.op,members:item.members,geo:await resolveOperationMapGeo(item.op)})));if(token!==state.renderToken||!ctx.host.isConnected)return;
-    const cities=new Map(),epcis=new Map(),points=[];geos.forEach(({op,members,geo})=>{if(!geo||!Number.isFinite(geo.lon)||!Number.isFinite(geo.lat))return;const weight=Math.max(1,members.length),city=geo.city||op.city||'Commune non précisée',ck=`${norm(city)}|${op.department||''}`;if(!cities.has(ck))cities.set(ck,{name:city,department:op.department||'',lat:0,lon:0,n:0,zones:new Map(),epci:geo.epci||op.intercommunality||''});const c=cities.get(ck);c.lat+=geo.lat*weight;c.lon+=geo.lon*weight;c.n+=weight;members.forEach(m=>{const z=m.socialZone||'Non précisé';c.zones.set(z,(c.zones.get(z)||0)+1);if(!m.intercommunality&&(geo.epci||op.intercommunality))m.intercommunality=geo.epci||op.intercommunality;points.push({op:m,lat:geo.lat,lon:geo.lon});});if(!c.epci&&(geo.epci||op.intercommunality))c.epci=geo.epci||op.intercommunality;const eName=geo.epci||op.intercommunality||'';if(eName){const ek=norm(eName);if(!epcis.has(ek))epcis.set(ek,{name:eName,lat:0,lon:0,n:0});const e=epcis.get(ek);e.lat+=geo.lat*weight;e.lon+=geo.lon*weight;e.n+=weight;}});ctx.cities=cities;ctx.epcis=epcis;ctx.points=points;scheduleOsmRender(ctx);
-  }
-  async function hydrateTerritoryMap(token){
-    const host=document.getElementById('obsTerritoryMap');if(!host||!engine.getDepartmentGeoJSON)return;
-    if(state.mapBasemap==='legacy') return hydrateTerritoryMapLegacy(token);
-    state.osmTileProviderIndex=state.mapBasemap==='ign'?0:(state.osmTileProviderIndex===0?1:state.osmTileProviderIndex);
-    try{
-      host.dataset.basemap=state.mapBasemap==='ign'?'ign':'osm';
-      const geo=await engine.getDepartmentGeoJSON();if(token!==state.renderToken||!host.isConnected)return;const features=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f))),mapOps=filteredOperations({ignoreCrossKeys:['department','region']}),counts=new Map(),zonesByDep=new Map();mapOps.forEach(o=>{const dep=String(o.department||'');if(!dep)return;counts.set(dep,(counts.get(dep)||0)+1);const z=o.socialZone||'Non précisé';if(!zonesByDep.has(dep))zonesByDep.set(dep,new Map());const m=zonesByDep.get(dep);m.set(z,(m.get(z)||0)+1);});
-      host.innerHTML=`<div class="obs-osm-native"><div class="obs-osm-tiles" aria-hidden="true"></div><svg class="obs-osm-overlay" role="img" aria-label="Fond cartographique et couches Observatoire Prestaterre"></svg><div class="obs-osm-controls"><button type="button" data-osm-zoom="in" aria-label="Zoom avant" title="Zoom avant">+</button><button type="button" data-osm-zoom="out" aria-label="Zoom arrière" title="Zoom arrière">−</button><button type="button" class="obs-osm-provider-btn" data-osm-provider aria-label="Changer le fond cartographique" title="Changer le fond cartographique">IGN</button></div><div class="obs-osm-detail" data-osm-detail></div><div class="obs-osm-provider-status" data-osm-provider-status hidden></div>${state.mapLayers.zoning?'<div class="obs-zone-legend obs-zone-legend-osm"><span><i style="--z:#06402B"></i>Zone 1</span><span><i style="--z:#79A98F"></i>Zone 2</span><span><i style="--z:#D5E5C8"></i>Zone 3</span><span><i style="--z:#E9EEEB"></i>Non renseigné</span></div>':''}<div class="obs-osm-attribution" data-osm-attribution><a href="https://www.ign.fr/" target="_blank" rel="noopener">© IGN</a> · Plan IGN</div><div class="obs-map-legend-note obs-osm-note">Molette = zoom · clic droit maintenu = déplacer · le détail augmente avec le zoom</div></div>`;
-      const ctx={host,mapEl:host.querySelector('.obs-osm-native'),tiles:host.querySelector('.obs-osm-tiles'),overlay:host.querySelector('.obs-osm-overlay'),features,mapOps,counts,zonesByDep,max:Math.max(1,...counts.values()),cities:new Map(),epcis:new Map(),points:[],majorCities:[]};host._newosbOsmCtx=ctx;if(state.mapFocusPending&&state.mapFocusRegion){fitOsmRegion(features,state.mapFocusRegion,ctx.mapEl);state.mapFocusPending=false;}setupOsmNativeNavigation(ctx);renderOsmNative(ctx);hydrateOsmDetails(ctx,token).catch(err=>console.warn('NEWOSB détails OSM:',err));if(state.mapFocusRegion)getRegionMajorCities(state.mapFocusRegion).then(cities=>{if(token===state.renderToken&&ctx.host.isConnected){ctx.majorCities=cities;scheduleOsmRender(ctx);}}).catch(()=>{});
-    }catch(err){console.warn('NEWOSB fond OpenStreetMap:',err);if(token===state.renderToken&&host.isConnected)hydrateTerritoryMapLegacy(token);}
-  }
-
   async function hydrateTerritoryMapLegacy(token){
     const host=document.getElementById('obsTerritoryMap'); if(!host||!engine.getDepartmentGeoJSON)return;
     host.dataset.basemap='legacy';
+    const alive=()=>token===state.renderToken&&host.isConnected;
     try{
-      const geo=await engine.getDepartmentGeoJSON(); if(token!==state.renderToken||!document.getElementById('obsTerritoryMap'))return;
-      const features=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f))), project=projector(features,{x:24,y:20,width:652,height:450});
-      if(state.mapFocusPending&&state.mapFocusRegion){fitLegacyRegion(features,state.mapFocusRegion,project);state.mapFocusPending=false;}
-      const visibleFeatures=state.mapFocusRegion?regionFeatures(features,state.mapFocusRegion):features;
-      const mapOps=state.mapFocusRegion?filteredOperations({ignoreCrossKey:'department'}):filteredOperations({ignoreCrossKeys:['department','region']}), counts=new Map(), zonesByDep=new Map();
-      mapOps.forEach(o=>{const dep=String(o.department||'');if(!dep)return;counts.set(dep,(counts.get(dep)||0)+1);const z=o.socialZone||'Non précisé';if(!zonesByDep.has(dep))zonesByDep.set(dep,new Map());const m=zonesByDep.get(dep);m.set(z,(m.get(z)||0)+1);});
+      const geo=await engine.getDepartmentGeoJSON(); if(!alive())return;
+      const allFeatures=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f)));
+      const focusDep=state.mapFocusDepartment, focusRegion=state.mapFocusRegion, focused=!!(focusDep||focusRegion);
+      // Zoom sur une région ou un département : contours en pleine résolution, projetés sur toute la carte.
+      let detailed=null;
+      if(focused){const pending=host.querySelector('.obs-map-loading');if(pending)pending.textContent='Chargement des contours détaillés…';detailed=await loadDetailedDepartments();if(!alive())return;}
+      const pick=f=>detailed?.get(featureCode(f))||f;
+      const visibleFeatures=(focusDep?allFeatures.filter(f=>featureCode(f)===focusDep):focusRegion?regionFeatures(allFeatures,focusRegion):allFeatures).map(pick);
+      if(!visibleFeatures.length)throw new Error('Territoire introuvable sur la carte.');
+      const project=focused?projector(visibleFeatures,{x:28,y:22,width:644,height:456}):projector(allFeatures,{x:24,y:20,width:652,height:450});
+      const tol=focused?0.3:0;
+      if(state.mapFocusPending){state.mapView={x:0,y:0,w:MAP_CANVAS.width,h:MAP_CANVAS.height};state.mapFocusPending=false;}
+      const baseOps=filteredOperations({ignoreCrossKeys:['department','region']});
+      const mapOps=focusDep?baseOps.filter(o=>String(o.department||'')===focusDep):focusRegion?baseOps.filter(o=>norm(operationRegion(o))===norm(focusRegion)):baseOps;
+      const counts=new Map(), zonesByDep=new Map(), opsByDep=new Map();
+      mapOps.forEach(o=>{const dep=String(o.department||'');if(!dep)return;counts.set(dep,(counts.get(dep)||0)+1);if(!opsByDep.has(dep))opsByDep.set(dep,[]);opsByDep.get(dep).push(o);const z=o.socialZone||'Non précisé';if(!zonesByDep.has(dep))zonesByDep.set(dep,new Map());const m=zonesByDep.get(dep);m.set(z,(m.get(z)||0)+1);});
+      host._pastilles=new Map();
       const max=Math.max(1,...counts.values()), defs=[], paths=[];
       visibleFeatures.forEach((f,idx)=>{
         const code=featureCode(f),v=counts.get(code)||0,active=activeCross('department',code), zoneMap=zonesByDep.get(code)||new Map();
-        let fill='#F5F8F6';
+        let fill=focusDep?'#F7FAF8':'#F5F8F6';
         if(state.mapLayers.zoning && zoneMap.size){
           const entries=[...zoneMap.entries()].filter(([z])=>norm(z)!=='non precise'&&norm(z)!=='non précisé');
           if(entries.length===1) fill=mapZoneColor(entries[0][0]);
@@ -2966,27 +2832,46 @@
             entries.sort((a,b)=>a[0].localeCompare(b[0],'fr')).forEach(([z,n])=>{const a=cursor/total*100;cursor+=n;const b=cursor/total*100,c=mapZoneColor(z);stops+=`<stop offset="${a}%" stop-color="${c}"/><stop offset="${b}%" stop-color="${c}"/>`;});
             defs.push(`<linearGradient id="${id}" x1="0%" y1="0%" x2="100%" y2="100%">${stops}</linearGradient>`);fill=`url(#${id})`;
           }
-        } else if(state.mapLayers.operations && v){ fill=`rgba(22,134,79,${(.12+.62*Math.sqrt(v/max)).toFixed(3)})`; }
-        const stroke=state.mapLayers.departments?'#FFFFFF':'rgba(255,255,255,.18)',sw=state.mapLayers.departments?1.15:.3;
-        paths.push(`<path class="obs-map-dep ${active?'is-active':''}" d="${geometryPath(f.geometry,project)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><title>${esc(departmentName(code))} · ${fmt(v)} projet${v>1?'s':''}${zoneMap.size?` · ${[...zoneMap.entries()].map(([z,n])=>`${z}: ${n}`).join(' / ')}`:''}</title></path>`);
+        } else if(state.mapLayers.operations && v && !focusDep){ fill=`rgba(22,134,79,${(.12+.62*Math.sqrt(v/max)).toFixed(3)})`; }
+        const stroke=focusDep?'#06402B':(state.mapLayers.departments?'#FFFFFF':'rgba(255,255,255,.18)'),sw=focusDep?1.6:(state.mapLayers.departments?(focused?1.4:1.15):.3);
+        const clickable=focusDep?'':crossAttrs('department',code,`Département : ${departmentName(code)}`);
+        paths.push(`<path class="obs-map-dep ${active?'is-active':''} ${focusDep?'is-focus':''}" d="${geometryPath(f.geometry,project,tol)}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${clickable}><title>${esc(departmentName(code))} · ${fmt(v)} projet${v>1?'s':''}${zoneMap.size?` · ${[...zoneMap.entries()].map(([z,n])=>`${z}: ${n}`).join(' / ')}`:''}${focusDep?'':' · cliquer pour zoomer'}</title></path>`);
       });
       const regionGroups=new Map();visibleFeatures.forEach(f=>{const r=regionName(featureCode(f));if(!regionGroups.has(r))regionGroups.set(r,[]);regionGroups.get(r).push(f);});
-      const regionOutline=state.mapLayers.regions?`<path class="obs-map-region-outline" d="${regionBoundaryPath(visibleFeatures,project)}"/>`:'';
-      const regionHitOverlay=state.mapLayers.regions&&!state.mapFocusRegion?[...regionGroups.entries()].map(([r,fs])=>`<path class="obs-map-region-hit" d="${fs.map(f=>geometryPath(f.geometry,project)).join(' ')}" ${crossAttrs('region',r,`Région : ${r}`)}><title>${esc(r)} · cliquer pour zoomer</title></path>`).join(''):'';
-      const regionLabels=state.mapLayers.regions?[...regionGroups.entries()].map(([r,fs])=>{const c=groupCenter(fs,project),active=activeCross('region',r),sc=legacyMapMarkerScale(),w=76*sc,h=20*sc;return `<g class="obs-map-region-label ${active?'is-active':''}" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(c[1]-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(c[1]+3*sc).toFixed(1)}" text-anchor="middle" style="font-size:${(8*sc).toFixed(2)}px">${esc(shorten(r,16))}</text></g>`;}).join(''):'';
+      const regionOutline=state.mapLayers.regions&&!focusDep?`<path class="obs-map-region-outline" d="${regionBoundaryPath(visibleFeatures,project)}"/>`:'';
+      const regionHitOverlay=state.mapLayers.regions&&!focused?[...regionGroups.entries()].map(([r,fs])=>`<path class="obs-map-region-hit" d="${fs.map(f=>geometryPath(f.geometry,project)).join(' ')}" ${crossAttrs('region',r,`Région : ${r}`)}><title>${esc(r)} · cliquer pour zoomer</title></path>`).join(''):'';
+      const regionLabels=state.mapLayers.regions&&!focused?[...regionGroups.entries()].map(([r,fs])=>{const c=groupCenter(fs,project),active=activeCross('region',r),sc=legacyMapMarkerScale(),w=76*sc,h=20*sc;return `<g class="obs-map-region-label ${active?'is-active':''}" ${crossAttrs('region',r,`Région : ${r}`)}><rect x="${(c[0]-w/2).toFixed(1)}" y="${(c[1]-h/2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${(h/2).toFixed(1)}"></rect><text x="${c[0].toFixed(1)}" y="${(c[1]+3*sc).toFixed(1)}" text-anchor="middle" style="font-size:${(8*sc).toFixed(2)}px">${esc(shorten(r,16))}</text></g>`;}).join(''):'';
       const regionOverlay=regionOutline+regionHitOverlay+regionLabels;
-      const departmentLabels=state.mapLayers.departments?visibleFeatures.map(f=>{const code=featureCode(f),v=counts.get(code)||0,c=featureCenter(f,project);return `<g class="obs-map-dept-label ${activeCross('department',code)?'is-active':''}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><text x="${c[0].toFixed(1)}" y="${c[1].toFixed(1)}" text-anchor="middle">${esc(code)}</text><title>${esc(departmentName(code))} · ${fmt(v)} projet${v>1?'s':''}</title></g>`;}).join(''):'';
-      const markers=state.mapLayers.operations?groupedMapMarkerSvg(visibleFeatures,project,counts,state.mapFocusRegion?'department':state.mapOperationGrouping,'obs-map-marker'):'';
+      const departmentLabels=state.mapLayers.departments&&!focusDep?visibleFeatures.map(f=>{const code=featureCode(f),v=counts.get(code)||0,c=featureCenter(f,project);return `<g class="obs-map-dept-label ${activeCross('department',code)?'is-active':''}" ${crossAttrs('department',code,`Département : ${departmentName(code)}`)}><text x="${c[0].toFixed(1)}" y="${(c[1]-(state.mapLayers.operations&&v?16:0)*legacyMapMarkerScale()).toFixed(1)}" text-anchor="middle">${esc(focusRegion?`${code} · ${shorten(departmentName(code),18)}`:code)}</text><title>${esc(departmentName(code))} · ${fmt(v)} projet${v>1?'s':''} · cliquer pour zoomer</title></g>`;}).join(''):'';
+      const markers=state.mapLayers.operations&&!focusDep?groupedMapMarkerSvg(visibleFeatures,project,counts,focusRegion?'department':state.mapOperationGrouping,'obs-map-marker',opsByDep,host._pastilles):'';
       const zoningLegend=state.mapLayers.zoning?`<div class="obs-zone-legend"><span><i style="--z:#06402B"></i>Zone 1</span><span><i style="--z:#79A98F"></i>Zone 2</span><span><i style="--z:#D5E5C8"></i>Zone 3</span><span><i style="--z:#E9EEEB"></i>Non renseigné</span></div>`:'';
-      host.innerHTML=`<div class="obs-map-controls" aria-label="Commandes de zoom de la carte"><button type="button" data-map-zoom="in" title="Zoom avant" aria-label="Zoom avant">+</button><button type="button" data-map-zoom="out" title="Zoom arrière" aria-label="Zoom arrière">−</button><span data-map-zoom-label>${territoryMapZoomPercent()}%</span><small data-map-detail-label>Détail : ${territoryMapDetailLabel(territoryMapDetailLevel())}</small></div><svg class="obs-france-map" viewBox="${territoryMapViewBox()}" role="img" aria-label="Carte multicouche des territoires"><defs>${defs.join('')}</defs>${paths.join('')}${regionOverlay}${departmentLabels}${markers}<g id="obsMapDetailLayer"></g></svg>${zoningLegend}<div class="obs-map-legend-note">${state.mapLayers.zoning?'Fond = zonage 1/2/3 des opérations localisées':'Fond = densité d’opérations'} · zoom = détail croissant · molette = zoom · clic droit maintenu = déplacer</div>`;
+      const note=focusDep?'Contours des communes · pastille = opérations d’une commune (cliquer pour la liste)':`${state.mapLayers.zoning?'Fond = zonage 1/2/3 des opérations localisées':'Fond = densité d’opérations'} · clic sur un territoire = zoom · clic sur une pastille = liste des opérations`;
+      host.innerHTML=`<div class="obs-map-controls" aria-label="Commandes de zoom de la carte"><button type="button" data-map-zoom="in" title="Zoom avant" aria-label="Zoom avant">+</button><button type="button" data-map-zoom="out" title="Zoom arrière" aria-label="Zoom arrière">−</button><span data-map-zoom-label>${territoryMapZoomPercent()}%</span><small data-map-detail-label>Détail : ${mapDetailText(territoryMapDetailLevel())}</small></div><svg class="obs-france-map ${focused?'is-focused':''}" viewBox="${territoryMapViewBox()}" role="img" aria-label="Carte multicouche des territoires"><defs>${defs.join('')}</defs>${paths.join('')}<g id="obsMapCommuneLayer"></g>${regionOverlay}${departmentLabels}${markers}<g id="obsMapDetailLayer"></g><g id="obsMapCommuneMarkers"></g></svg>${zoningLegend}<div class="obs-map-legend-note">${note} · molette = zoom · clic droit maintenu = déplacer</div>${focused&&!detailed?'<div class="obs-map-precision-note">Contours détaillés indisponibles : contours simplifiés affichés.</div>':''}`;
       setupTerritoryMapNavigation(host);
       hydrateTerritoryDetailOverlay(host,project,mapOps,token).catch(err=>console.warn('NEWOSB détails cartographiques:',err));
+      if(focusDep)hydrateDepartmentFocus(host,project,focusDep,mapOps,token).catch(err=>console.warn('NEWOSB zoom département:',err));
     }catch(err){
       console.warn('NEWOSB carte:',err);
-      if(token===state.renderToken&&document.getElementById('obsTerritoryMap'))host.innerHTML='<div class="obs-empty">Le fond cartographique n’a pas pu être chargé. Les répartitions Région / Département restent utilisables.</div>';
+      if(alive())host.innerHTML='<div class="obs-empty">Le fond cartographique n’a pas pu être chargé. Les répartitions Région / Département restent utilisables.</div>';
     }
   }
-
+  // Zoom départemental : contours des communes et une pastille par commune (position réelle de la commune).
+  async function hydrateDepartmentFocus(host,project,dep,ops,token){
+    const alive=()=>token===state.renderToken&&host.isConnected;
+    const [communes,geos]=await Promise.all([loadDepartmentCommunes(dep),Promise.all(ops.slice(0,400).map(async op=>({op,geo:await resolveOperationMapGeo(op)})))]);
+    if(!alive())return;
+    const byCommune=new Map(),unlocated=[];
+    geos.forEach(({op,geo})=>{if(!geo||!Number.isFinite(geo.lon)||!Number.isFinite(geo.lat)){unlocated.push(op);return;}const name=geo.city||op.city||'Commune non précisée',key=geo.insee||op.insee||norm(name);if(!byCommune.has(key))byCommune.set(key,{name,lon:0,lat:0,ops:[]});const c=byCommune.get(key);c.lon+=geo.lon;c.lat+=geo.lat;c.ops.push(op);});
+    const withOps=new Set([...byCommune.keys()]);
+    const layer=host.querySelector('#obsMapCommuneLayer');
+    if(layer&&communes.length)layer.innerHTML=communes.map(f=>{const code=String(f?.properties?.code||''),has=withOps.has(code);return `<path class="obs-map-commune ${has?'has-ops':''}" d="${geometryPath(f.geometry,project,0.35)}"><title>${esc(f?.properties?.nom||'')}${has?` · ${fmt(byCommune.get(code).ops.length)} opération${byCommune.get(code).ops.length>1?'s':''}`:''}</title></path>`;}).join('');
+    const markersEl=host.querySelector('#obsMapCommuneMarkers');if(!markersEl)return;
+    const list=[...byCommune.entries()].sort((a,b)=>b[1].ops.length-a[1].ops.length),max=Math.max(1,...list.map(([,c])=>c.ops.length)),sc=legacyMapMarkerScale();
+    host._pastilles=host._pastilles||new Map();
+    markersEl.innerHTML=state.mapLayers.operations?list.map(([key,c])=>{const n=c.ops.length,[x,y]=project(c.lon/n,c.lat/n),rad=(6+9*Math.sqrt(n/max))*sc;host._pastilles.set(`commune|${key}`,{title:c.name,sub:departmentName(dep),ops:c.ops});return `<g class="obs-map-marker obs-map-commune-marker" ${pastilleAttrs('commune',key,c.name,n)}><circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${rad.toFixed(2)}"></circle><text x="${x.toFixed(2)}" y="${(y+3*sc).toFixed(2)}" text-anchor="middle" style="font-size:${(7.5*sc).toFixed(2)}px">${fmt(n)}</text><title>${esc(c.name)} · ${fmt(n)} opération${n>1?'s':''} · cliquer pour la liste</title></g>`;}).join(''):'';
+    if(unlocated.length&&state.mapLayers.operations){host._pastilles.set(`commune|__unlocated`,{title:'Opérations non localisées',sub:departmentName(dep),ops:unlocated});markersEl.insertAdjacentHTML('beforeend',`<g class="obs-map-marker obs-map-unlocated" ${pastilleAttrs('commune','__unlocated','Opérations non localisées',unlocated.length)}><rect x="${(MAP_CANVAS.width-150)}" y="${(MAP_CANVAS.height-34)}" width="140" height="22" rx="11"></rect><text x="${MAP_CANVAS.width-80}" y="${MAP_CANVAS.height-19}" text-anchor="middle">${fmt(unlocated.length)} sans commune localisée</text></g>`);}
+    applyTerritoryMapView(host.querySelector('.obs-france-map'),host);
+  }
 
   function applyGlobalFilterSearch(input){
     if(!input)return;
@@ -3036,7 +2921,6 @@
     const presExportAll=e.target.closest('[data-pres-export-all]'); if(presExportAll){ exportAllPresentationSlides(presExportAll.dataset.presExportAll||'png'); return; }
     const presFull=e.target.closest('[data-pres-fullscreen]'); if(presFull){ document.getElementById('obsPresentationStage')?.requestFullscreen?.(); return; }
     const pageLink=e.target.closest('[data-page-link]'); if(pageLink){changePage(pageLink.dataset.pageLink);return;}
-    const basemap=e.target.closest('[data-map-basemap]'); if(basemap){const mode=basemap.dataset.mapBasemap;if(['legacy','ign','osm'].includes(mode)){state.mapBasemap=mode;if(mode==='ign')state.osmTileProviderIndex=0;else if(mode==='osm'&&state.osmTileProviderIndex===0)state.osmTileProviderIndex=1;if(state.mapFocusRegion)state.mapFocusPending=true;renderPage();}return;}
     const layer=e.target.closest('[data-map-layer]'); if(layer){const key=layer.dataset.mapLayer;if(Object.prototype.hasOwnProperty.call(state.mapLayers,key)){state.mapLayers[key]=!state.mapLayers[key];renderPage();}return;}
     const flow=e.target.closest('[data-flow-focus][data-flow-before]'); if(flow){const key=flow.dataset.flowFocus,val=decodeURIComponent(flow.dataset.flowBefore||'');if(state.flowFocus[key]!==undefined){state.flowFocus[key]=norm(state.flowFocus[key])===norm(val)?'':val;renderPage();}return;}
     const q=e.target.closest('[data-quick-filter]'); if(q){quickFilter(q.dataset.quickFilter,q.dataset.quickValue);return;}
@@ -3048,11 +2932,13 @@
     const copyReport=e.target.closest?.('[data-copy-progress-report]');if(copyReport){const text=progressReportText(),st=copyReport.parentElement?.querySelector('[data-copy-progress-report-status]');const done=ok=>{if(st)st.textContent=ok?'Copié : colle-le dans la conversation.':'Copie impossible : sélectionne le texte ci-dessous.';if(!ok&&st){let ta=pageEl.querySelector('[data-progress-report-text]');if(!ta){ta=document.createElement('textarea');ta.setAttribute('data-progress-report-text','');ta.style.cssText='width:100%;height:180px;margin-top:8px;font:11px monospace';copyReport.parentElement.appendChild(ta);}ta.value=text;ta.select();}};try{navigator.clipboard.writeText(text).then(()=>done(true),()=>done(false));}catch{done(false);}return;}
     const matrixClear=e.target.closest?.('[data-matrix-clear]');if(matrixClear){const kind=matrixClear.dataset.matrixClear,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances';state[key]=[];state.performanceMatrixPage=1;renderPage();return;}
         const tableView=e.target.closest('[data-table-view][data-view]'); if(tableView){const map={territory:'territoryTableView',moa:'moaTableView','status-year':'statusYearView',mention:'mentionTableView',performance:'performanceTableView','performance-matrix':'performanceMatrixView',operations:'operationsTableView'},key=map[tableView.dataset.tableView];if(key){state[key]=tableView.dataset.view;renderPage();}return;}
+    const backRegion=e.target.closest('[data-map-back-region]'); if(backRegion){closeMapPopover();state.crossFilters=state.crossFilters.filter(f=>f.key!=='department');state.mapFocusRegion=state.mapFocusRegion||regionName(state.mapFocusDepartment);state.mapFocusDepartment='';state.mapFocusPending=true;state.mapOperationGrouping='department';renderPage();return;}
+    const pastille=e.target.closest('[data-map-pastille]'); if(pastille){openMapPastille(pastille);return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
     const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
     const viewToggle=e.target.closest('[data-overview-view][data-view]'); if(viewToggle){const kind=viewToggle.dataset.overviewView,view=viewToggle.dataset.view;if(kind==='mention'){state.overviewMentionView=view;state.overviewMentionPage=1;}else if(kind==='performance'){state.overviewPerformanceView=view;state.overviewPerformancePage=1;}renderPage();return;}
-    const cross=e.target.closest('[data-cross-key][data-cross-value]'); if(cross){const decodedValue=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossValue):cross.dataset.crossValue, decodedLabel=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossLabel||''):cross.dataset.crossLabel;const fixed=crossKeyValueFix(cross.dataset.crossKey,decodedValue,decodedLabel);if(fixed.value){if(state.page==='territories'&&fixed.key==='region'){if(activeCross('region',fixed.value)){resetTerritoryMapFocus();state.mapOperationGrouping='region';}else{focusTerritoryRegion(fixed.value);state.mapOperationGrouping='department';state.mapLayers.departments=true;state.mapLayers.regions=true;state.territorySummaryPage=1;state.territoryPage=1;}}setCrossFilter(fixed.key,fixed.value,fixed.label);}return;}
-    const remove=e.target.closest('[data-remove-cross]'); if(remove){const i=Number(remove.dataset.removeCross);if(Number.isInteger(i)&&state.crossFilters[i]){if(state.crossFilters[i].key==='region'){resetTerritoryMapFocus();state.mapOperationGrouping='region';}state.crossFilters.splice(i,1);renderPage();}return;}
+    const cross=e.target.closest('[data-cross-key][data-cross-value]'); if(cross){const decodedValue=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossValue):cross.dataset.crossValue, decodedLabel=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossLabel||''):cross.dataset.crossLabel;const fixed=crossKeyValueFix(cross.dataset.crossKey,decodedValue,decodedLabel);if(fixed.value){if(state.page==='territories'&&fixed.key==='department'){closeMapPopover();if(state.mapFocusDepartment===fixed.value){state.mapFocusDepartment='';state.mapFocusPending=true;if(!activeCross('department',fixed.value)){renderPage();return;}}else{state.mapFocusDepartment=fixed.value;state.mapFocusRegion=state.mapFocusRegion||regionName(fixed.value);state.mapFocusPending=true;state.territorySummaryPage=1;state.territoryPage=1;if(activeCross('department',fixed.value)){renderPage();return;}}}if(state.page==='territories'&&fixed.key==='region'){closeMapPopover();if(activeCross('region',fixed.value)){resetTerritoryMapFocus();state.mapOperationGrouping='region';}else{focusTerritoryRegion(fixed.value);state.mapFocusDepartment='';state.mapOperationGrouping='department';state.mapLayers.departments=true;state.mapLayers.regions=true;state.territorySummaryPage=1;state.territoryPage=1;}}setCrossFilter(fixed.key,fixed.value,fixed.label);}return;}
+    const remove=e.target.closest('[data-remove-cross]'); if(remove){const i=Number(remove.dataset.removeCross);if(Number.isInteger(i)&&state.crossFilters[i]){if(state.crossFilters[i].key==='region'){resetTerritoryMapFocus();state.mapOperationGrouping='region';}if(state.crossFilters[i].key==='department'&&state.mapFocusDepartment){state.mapFocusDepartment='';state.mapFocusPending=true;}state.crossFilters.splice(i,1);renderPage();}return;}
     if(e.target.closest('[data-clear-cross]')){state.crossFilters=[];resetTerritoryMapFocus();state.mapOperationGrouping='region';renderPage();return;}
     if(e.target.closest('[data-drilldown-current]')){changePage('operations');return;}
     const tag=e.target.closest('[data-tag-kind][data-tag-name]'); if(tag){const ops=filteredOperations().filter(o=>operationHasTag(o,tag.dataset.tagKind,tag.dataset.tagName));engine.openExplorer(tag.dataset.tagName,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
@@ -3074,14 +2960,15 @@
   });
   pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
   pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
+  pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
 
   pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
-  document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';const host=document.getElementById('obsTerritoryMap');if(host?._newosbOsmCtx)scheduleOsmRender(host._newosbOsmCtx);});
+  document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';});
   window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
-  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
+  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(mapPopEl){closeMapPopover();return;}if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 
   // V6.15 : périmètre affiché, pour la création d'un lien de partage (newosb-share.js).
   const SHARE_FILTER_LABELS=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['programType','Type de programme'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];

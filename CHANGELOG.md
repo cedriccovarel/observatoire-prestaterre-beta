@@ -1,5 +1,17 @@
 # Historique
 
+## V6.23
+
+**Carte territoriale (onglet Territoires)**
+- Un seul fond : le fond neutre. Les fonds IGN et OpenStreetMap sont retirés ; la bascule Département / Région et les couches (Régions, Départements, Intercommunalités, Opérations, Zonage) sont conservées.
+- Zoom plus précis : un clic sur une région la projette sur toute la carte avec des contours en pleine résolution (au lieu d’agrandir les contours simplifiés de la France entière). Dans une région, un clic sur un département l’affiche seul, avec les contours de ses communes (géo API) et une pastille par commune placée sur la commune. Boutons « ← Région » et « ← Retour France ».
+- Un clic sur une pastille « opérations » (région, département ou commune) ouvre une fenêtre avec la liste de ses opérations (recherche au-delà de 8 opérations) ; un clic sur une ligne ouvre la fiche. La fenêtre propose aussi « Zoomer sur la région / le département ». Échap ou un clic à côté la ferme. Accessible au clavier (Entrée sur une pastille).
+- Contours détaillés et communes chargés seulement au zoom, gardés en mémoire (rien dans le stockage du navigateur). Si les contours détaillés sont indisponibles, les contours simplifiés sont affichés avec un message.
+
+**Écran de chargement plus vivant, couvrant tout le chargement**
+- Le chantier avance en cinq étapes avec le chargement réel : diagnostic thermique (fuites de chaleur), isolation de la façade (échafaudage), menuiseries, énergie renouvelable (panneaux solaires, pompe à chaleur), végétalisation (toiture, arbres). Le technicien se déplace vers chaque poste ; le ciel s’éclaircit ; le CO₂ émis est aspiré par un capteur et remplit la barre.
+- Une seule barre pour **OPERATIONS puis RAPPORT** : les opérations comptent pour 35 %, les exigences pour 65 %. L’écran ne se ferme qu’une fois les deux chargés (y compris pour un lien partagé avec l’onglet Exigences). Étapes « Opérations › Exigences » affichées sous l’animation. La barre ne recule jamais et avance doucement entre deux blocs reçus.
+
 ## V6.22
 
 **Écran de chargement professionnel (le mini-jeu est retiré)**

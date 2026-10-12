@@ -88,6 +88,10 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.23 — Carte territoriale et écran de chargement
+
+Mise à jour du site uniquement : **aucun script Apps Script à changer** (Code_Operations.gs reste en 06.22). Le zoom département utilise la géo API publique (geo.api.gouv.fr), déjà utilisée par la carte.
+
 ## V6.22 — Identification des destinataires et filtres autorisés
 
 1. Coller le nouveau **`Code_Operations.gs`** (06.22) dans le script OPERATIONS, enregistrer, puis **Déployer → Gérer les déploiements → ✏️ → Nouvelle version → Déployer** (même URL). Aucune propriété à ajouter, aucune clé à changer.

@@ -112,9 +112,10 @@
   async function load(attempt) {
     const engine = window.NEWOSB_ENGINE;
     Object.assign(share, { status: 'loading', message: 'Chargement des données…' }); emit();
-    window.NEWOSB_LOADER?.open({ title: 'Chargement de l’Observatoire partagé', delay: 300 });
+    // Une seule progression pour les opérations puis, si l'onglet est partagé, les exigences.
+    window.NEWOSB_LOADER?.open({ title: 'Chargement de l’Observatoire partagé', delay: 300, phases: [{ key: 'ops', label: 'Opérations', weight: 0.35 }, { key: 'req', label: 'Exigences', weight: 0.65 }] });
     try {
-      const res = await engine.connectShare(share.src, share.token, (loaded, total) => { if (attempt !== share.attempt) return; share.progress = { loaded, total }; window.NEWOSB_LOADER?.progress(loaded, total); emit(); }, share.visitor);
+      const res = await engine.connectShare(share.src, share.token, (loaded, total) => { if (attempt !== share.attempt) return; share.progress = { loaded, total }; window.NEWOSB_LOADER?.progress(loaded, total, undefined, 'ops'); emit(); }, share.visitor);
       if (attempt !== share.attempt) return;
       share.info = res.share || {};
       share.info.tabs = (share.info.tabs || []).filter(t => SHAREABLE.includes(t));
@@ -124,8 +125,13 @@
       document.documentElement.classList.toggle('newosb-share-anonymized', !!share.info.anonymized);
       Object.assign(share, { status: 'ready', message: '' });
       emit();
-      window.NEWOSB_LOADER?.done(`${(share.info.operationCount || 0).toLocaleString('fr-FR')} opérations chargées`);
-      if (share.info.tabs.includes('requirements')) startRequirements(false);
+      const opsText = `${(share.info.operationCount || 0).toLocaleString('fr-FR')} opérations`;
+      if (!share.info.tabs.includes('requirements')) { window.NEWOSB_LOADER?.done(`${opsText} chargées`); return; }
+      window.NEWOSB_LOADER?.phase('req', `✓ ${opsText} · chargement des exigences (RAPPORT)…`);
+      await startRequirements(false);
+      if (attempt !== share.attempt) return;
+      const req = window.NEWOSB_REQUIREMENTS?.status?.() || {};
+      window.NEWOSB_LOADER?.done(req.connected ? `${opsText} · ${(req.count || 0).toLocaleString('fr-FR')} évaluations chargées` : `${opsText} chargées · exigences indisponibles`);
     } catch (err) { fail(err, attempt); }
   }
 
@@ -177,7 +183,7 @@
   // Exigences : lignes RAPPORT servies par le même script, avec le même jeton (aucune clé Exigences).
   function startRequirements(usePopup) {
     if (share.status !== 'ready' || !(share.info?.tabs || []).includes('requirements')) return;
-    window.NEWOSB_REQUIREMENTS?.loadShare?.(share.src, share.token, share.info.reqFilters || {}, !!usePopup, share.visitor, share.info.allowedFilters?.req || []);
+    return window.NEWOSB_REQUIREMENTS?.loadShare?.(share.src, share.token, share.info.reqFilters || {}, !!usePopup, share.visitor, share.info.allowedFilters?.req || []);
   }
 
   function gateHtml() {

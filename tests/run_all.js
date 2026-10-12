@@ -751,6 +751,18 @@ test('chargement rapide : rien ne s’affiche ; chargement long : la barre suit 
   L.progress(250, 1000); assert.strictEqual(L._state().target, 0.25); L.progress(100, 1000); assert.strictEqual(L._state().target, 0.25, 'la barre ne recule jamais');
   L.done('fini'); assert.strictEqual(L._state().target, 1); timers.pop()(); assert.strictEqual(L.isOpen(), false); assert.strictEqual(entered, 1);
 });
+test('V6.23 : une seule progression pour OPERATIONS puis RAPPORT ; 100 % seulement à la fin', () => {
+  const { L, timers } = loaderEnv();
+  L.open({ title: 'Test', phases: [{ key: 'ops', label: 'Opérations', weight: 0.35 }, { key: 'req', label: 'Exigences', weight: 0.65 }] }); timers.shift()();
+  L.progress(500, 1000, '', 'ops'); assert(Math.abs(L._state().target - 0.175) < 1e-9);
+  L.progress(1000, 1000, '', 'ops'); assert(Math.abs(L._state().target - 0.35) < 1e-9, 'opérations chargées : 35 %, pas 100 %');
+  L.phase('req', 'exigences…'); assert.strictEqual(L._state().phase, 'req'); assert(Math.abs(L._state().target - 0.35) < 1e-9);
+  L.progress(0, 4000, '', 'req'); assert(Math.abs(L._state().target - 0.35) < 1e-9, 'le début de RAPPORT ne fait pas reculer la barre');
+  L.progress(2000, 4000, '', 'req'); assert(Math.abs(L._state().target - 0.675) < 1e-9);
+  L.done('ok'); assert.strictEqual(L._state().target, 1);
+  // Sans phases (source Exigences séparée) : comportement inchangé.
+  const b = loaderEnv(); b.L.open({}); b.timers.shift()(); b.L.progress(1, 4, '', 'req'); assert.strictEqual(b.L._state().target, 0.25);
+});
 test('erreur de chargement : message affiché, l’écran attend « Fermer » ; le jeu n’existe plus', () => {
   const { L, timers } = loaderEnv(); L.open({ onEnter: () => { throw new Error('ne doit pas être appelé'); } }); timers.shift()(); L.fail('Accès refusé'); assert.strictEqual(L.isOpen(), true); assert.strictEqual(L._state().failed, true); L.close(); assert.strictEqual(L.isOpen(), false);
   assert(!fs.existsSync(path.join(ROOT, 'newosb-game.js'))); for (const f of ['app.js', 'requirements.js', 'newosb-share.js', 'index.html']) assert(!/NEWOSB_GAME|newosb-game/.test(read(f)), f);

@@ -156,9 +156,10 @@
     for(let i=0;i<offsets.length;i+=2){
       if(token!==loadToken)return null;
       state.loadProgress=`Chargement RAPPORT… ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`;emit();
-      if(!state.share)window.NEWOSB_LOADER?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`);
+      window.NEWOSB_LOADER?.progress(Math.min(total,offsets[i]),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]))} / ${fmt(total)} lignes`,'req');
       const chunks=await Promise.all(offsets.slice(i,i+2).map(offset=>req({mode:chunkMode,offset,limit},120000)));
       chunks.sort((a,b)=>(Number(a?.offset)||0)-(Number(b?.offset)||0)).forEach(c=>{if(Array.isArray(c?.rows))out.push(...c.rows);});
+      if(token===loadToken)window.NEWOSB_LOADER?.progress(Math.min(total,offsets[i]+2*limit),total,`RAPPORT : ${fmt(Math.min(total,offsets[i]+2*limit))} / ${fmt(total)} lignes`,'req');
     }
     if(token!==loadToken)return null;
     const rows=out.map(normalizeRow).filter(r=>r.evaluationCode&&r.requirement);
