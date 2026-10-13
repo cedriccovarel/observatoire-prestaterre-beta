@@ -322,18 +322,32 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(errors.length === 0, 'aucune erreur JavaScript (Exigences, fiche, encart)' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close(); }
 
-    console.log('\nG. Présentation : exports PPTX, PNG et Google Slides');
+    console.log('\nG. Présentation : boîte de captures, slides composées, exports PPTX, PNG et Google Slides');
     { const { page, context, errors, gs } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
       await page.click('button[data-page="overview"]'); await page.waitForTimeout(300);
-      await page.locator('[data-add-presentation]').first().click(); await page.waitForTimeout(300);
+      for (let i = 0; i < 4; i++) { await page.locator('[data-add-presentation]').nth(i).click(); await page.waitForTimeout(250); }
       await page.click('button[data-page="presentation"]'); await page.waitForTimeout(500);
+      const box = await page.evaluate(() => ({ caps: document.querySelectorAll('[data-pres-capture-check]').length, checked: document.querySelectorAll('[data-pres-capture-check]:checked').length, slides: document.querySelectorAll('[data-pres-select]').length }));
+      check(box.caps === 4 && box.checked === 4 && box.slides === 1, `▣ dépose les visuels dans la boîte de captures, sans créer de slide (${JSON.stringify(box)})`);
+      const tick = async idx => { await page.click('[data-pres-capture-none]').catch(() => {}); for (const i of idx) { await page.locator('[data-pres-capture-check]').nth(i).check(); await page.waitForTimeout(80); } };
+      await tick([0]); await page.click('[data-pres-new-slide]'); await page.waitForTimeout(400);
+      await tick([1, 2, 3]); await page.click('[data-pres-new-slide]'); await page.waitForTimeout(500);
+      const lay = await page.evaluate(() => { const its = [...document.querySelectorAll('#obsPresentationStage .obs-pres-item')].map(e => ({ x: e.offsetLeft, y: e.offsetTop, w: e.offsetWidth, h: e.offsetHeight })); const area = document.querySelector('#obsPresentationStage .obs-pres-items'); const overlap = its.some((a, i) => its.some((b, j) => i < j && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)); const inside = its.every(a => a.x >= 0 && a.y >= 0 && a.x + a.w <= area.offsetWidth + 1 && a.y + a.h <= area.offsetHeight + 1); const scaled = [...document.querySelectorAll('#obsPresentationStage .obs-pres-item-scaler')].every(e => /scale\(/.test(e.style.transform)); return { n: its.length, overlap, inside, scaled, slides: document.querySelectorAll('[data-pres-select]').length, titles: document.querySelectorAll('#obsPresentationStage .obs-pres-item-head').length }; });
+      check(lay.n === 3 && !lay.overlap && lay.inside && lay.scaled && lay.titles === 3 && lay.slides === 3, `nouvelle slide avec 3 captures cochées : disposées sans chevauchement, mises à l’échelle, titrées (${JSON.stringify(lay)})`);
+      await page.selectOption('[data-pres-field="layout"]', 'feature'); await page.waitForTimeout(300);
+      const feat = await page.evaluate(() => { const its = [...document.querySelectorAll('#obsPresentationStage .obs-pres-item')]; return its.length === 3 && its[0].offsetHeight > its[1].offsetHeight * 1.8 && its[1].offsetLeft > its[0].offsetLeft; });
+      check(feat, 'disposition « Mise en avant » : un grand visuel et les autres empilés à côté');
+      await page.click('[data-pres-item-remove]'); await page.waitForTimeout(300);
+      check(await page.evaluate(() => document.querySelectorAll('#obsPresentationStage .obs-pres-item').length === 2 && document.querySelectorAll('[data-pres-capture-check]').length === 4), 'retirer un visuel de la slide le garde dans la boîte');
+      await page.click('[data-pres-select]:nth-child(2)'); await page.waitForTimeout(300);
       const dl = page.waitForEvent('download', { timeout: 60000 });
       await page.click('[data-pres-export-pptx]');
       const d = await dl; const fp = await d.path(); const buf = fs.readFileSync(fp);
       const JSZip = require(path.join(ROOT, 'jszip.min.js'));
       const zip = await JSZip.loadAsync(buf); const media = Object.keys(zip.files).filter(f => f.startsWith('ppt/media/'));
       const slide2 = await zip.file('ppt/slides/slide2.xml').async('string');
-      check(/\.pptx$/.test(d.suggestedFilename()) && media.length >= 3 && !slide2.includes('Visuel indisponible'), `PPTX : fichier produit avec le visuel de la slide (${media.length} images, auparavant « Visuel indisponible »)`);
+      const slideFiles = Object.keys(zip.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f));
+      check(/\.pptx$/.test(d.suggestedFilename()) && slideFiles.length === 3 && media.length >= 4 && !slide2.includes('Visuel indisponible') && !(await zip.file('ppt/slides/slide3.xml').async('string')).includes('Visuel indisponible'), `PPTX : 3 slides produites avec leurs visuels (${slideFiles.length} slides, ${media.length} images)`);
       const dl2 = page.waitForEvent('download', { timeout: 60000 });
       await page.click('[data-pres-export="png"]');
       const d2 = await dl2; const png = fs.readFileSync(await d2.path());
@@ -346,9 +360,14 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.waitForFunction(() => !document.querySelector('[data-pres-google-slides]')?.disabled, null, { timeout: 60000 }).catch(() => {});
       await page.waitForTimeout(500);
       const pres = gs.slidesLog.presentations;
-      check(pres.length === 1 && pres[0].slides.length === 2 && pres[0].slides.every(sl => sl.images.length === 1 && sl.images[0].type === 'image/jpeg' && sl.images[0].bytes > 5000), `Google Slides : présentation créée avec ${pres[0]?.slides.length || 0} slides rendues en image`);
+      check(pres.length === 1 && pres[0].slides.length === 3 && pres[0].slides.every(sl => sl.images.length === 1 && sl.images[0].type === 'image/jpeg' && sl.images[0].bytes > 5000), `Google Slides : présentation créée avec ${pres[0]?.slides.length || 0} slides rendues en image`);
       if (popup) await popup.waitForURL(/docs\.google\.com/, { timeout: 10000 }).catch(() => {});
       check(popup && /docs\.google\.com\/presentation/.test(popup.url()), 'Google Slides : la présentation s’ouvre dans la fenêtre du pont (' + (popup && popup.url()) + ')');
+      // Présentation enregistrée par une version précédente (un visuel par slide) : reprise sans perte.
+      await page.evaluate(() => localStorage.setItem('newosb_v0518_presentation', JSON.stringify({ slides: [{ id: 'cover_1', type: 'cover', title: 'Ancienne' }, { id: 'slide_old', type: 'content', title: 'Ancien graphique', kicker: 'K', legend: 'L', scope: 'S', contentHtml: '<div class="obs-card"><p>Visuel ancien</p></div>' }], activeId: 'slide_old', counter: 2 })));
+      await page.reload(); await page.waitForFunction(() => window.NEWOSB_ENGINE); await page.click('button[data-page="presentation"]'); await page.waitForTimeout(500);
+      const old = await page.evaluate(() => ({ caps: [...document.querySelectorAll('.obs-pres-capture-text b')].map(b => b.textContent), stage: document.querySelector('#obsPresentationStage .obs-pres-items')?.textContent || '', title: document.querySelector('#obsPresentationStage h2')?.textContent }));
+      check(old.caps.length === 1 && old.caps[0] === 'Ancien graphique' && /Visuel ancien/.test(old.stage) && old.title === 'Ancien graphique', `présentation d’une version précédente : la slide garde son visuel, devenu une capture de la boîte (${JSON.stringify(old)})`);
       check(errors.length === 0, 'aucune erreur JavaScript pendant les exports' + (errors.length ? ' : ' + errors.slice(0, 3).join(' | ') : ''));
       await context.close(); }
     console.log('\nH. Liens de partage à durée limitée (V6.15)');
@@ -552,14 +571,21 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const json = body => ({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body });
       await context.route(/githubusercontent|jsdelivr|etalab/, r => { const u = r.request().url(); if (/departements-version-simplifiee/.test(u)) return r.fulfill(json(geo(2))); if (/\/departements\.geojson$/.test(u)) return r.fulfill(json(geo(40))); return r.abort(); });
       await context.route(/geo\.api\.gouv\.fr/, r => { const u = new URL(r.request().url()); if (/departements\/33\/communes/.test(u.pathname)) return r.fulfill(json(JSON.stringify(COMMUNES))); const c = centre[u.searchParams.get('codePostal')]; if (c) return r.fulfill(json(JSON.stringify([{ code: c[0], nom: c[1], codeDepartement: '33', centre: { type: 'Point', coordinates: [c[2], c[3]] } }]))); return r.fulfill(json('[]')); });
+      // Le chargement des exigences en arrière-plan rafraîchit la page : on attend qu'il soit terminé.
+      await page.waitForFunction(() => !window.NEWOSB_REQUIREMENTS?.status?.().loading, null, { timeout: 30000 }).catch(() => {});
       await page.click('#obsNav [data-page="territories"]');
       await page.waitForSelector('.obs-france-map', { timeout: 20000 }).catch(() => {});
       const bar = await page.evaluate(() => ({ basemaps: document.querySelectorAll('[data-map-basemap]').length, osm: !!document.querySelector('.obs-osm-native'), sw: !!document.querySelector('[data-map-grouping-toggle]'), layers: document.querySelectorAll('[data-map-layer]').length }));
       check(bar.basemaps === 0 && !bar.osm && bar.sw && bar.layers === 5, `fond neutre seul : plus de choix IGN / OSM ; bascule Département / Région et 5 couches conservées (${JSON.stringify(bar)})`);
       const pts = () => page.evaluate(() => { const p = [...document.querySelectorAll('.obs-map-dep')].find(e => /Gironde/.test(e.querySelector('title')?.textContent || '')); return p ? (p.getAttribute('d').match(/[ML]/g) || []).length : 0; });
       const franceDetail = await pts();
-      await page.evaluate(() => document.querySelector('[data-map-pastille="department"][data-map-pastille-value="33"]').dispatchEvent(new MouseEvent('click', { bubbles: true })));
-      await page.waitForSelector('.obs-map-pop', { timeout: 5000 }).catch(() => {});
+      // La fin du chargement des exigences redessine la carte (et ferme la fenêtre) : nouvel essai si besoin.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await page.waitForSelector('[data-map-pastille="department"][data-map-pastille-value="33"]', { timeout: 15000 }).catch(() => {});
+        await page.evaluate(() => document.querySelector('[data-map-pastille="department"][data-map-pastille-value="33"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+        await page.waitForTimeout(600);
+        if (await page.$('.obs-map-pop')) break;
+      }
       const pop = await page.evaluate(() => ({ title: document.querySelector('.obs-map-pop h3')?.textContent || '', rows: [...document.querySelectorAll('.obs-map-pop [data-map-pop-op]')].map(b => b.dataset.mapPopOp).sort().join(','), zoom: !!document.querySelector('.obs-map-pop [data-map-pop-zoom]') }));
       check(/Gironde/.test(pop.title) && pop.rows === 'OP-1,OP-2,OP-7' && pop.zoom, `pastille du département : fenêtre avec la liste de ses opérations (${pop.title} : ${pop.rows})`);
       await page.click('.obs-map-pop [data-map-pop-op="OP-2"]'); await page.waitForTimeout(400);

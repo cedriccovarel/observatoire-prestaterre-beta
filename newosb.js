@@ -59,7 +59,7 @@
     energy:['Énergie & transitions','Explorer les transitions chauffage / ECS et les niveaux de performance énergétique.'],
     carbon:['Carbone & DPE','Analyser les indicateurs carbone, le respect des seuils et les évolutions DPE / GES.'],
     crossdata:['Croiser les données','Explorer les relations entre deux indicateurs avec un nuage de points et les jalons carbone 2028 / 2031.'],
-    presentation:['Présentation','Composer une restitution type OSBslide à partir des graphes et tableaux de l’Observatoire Prestaterre, puis exporter en PNG 4K ou SVG.'],
+    presentation:['Présentation','Capturer graphiques et tableaux (▣), composer des slides à partir de la boîte de captures, puis exporter (Google Slides, PPTX, PNG 4K, SVG).'],
     operations:['Projets & opérations','Explorer les projets uniques puis leurs opérations techniques ligne par ligne.'],
     quality:['Qualité & données','Contrôler la fiabilité, la complétude, les incohérences et les anomalies de la sélection.'],
     dictionary:['Dictionnaire','Comprendre chaque donnée : définition, source, unité, calcul et règles de lecture.'],
@@ -129,6 +129,8 @@
     renderToken:0,
     presentationSlides:[],
     presentationActiveId:'',
+    presentationCaptures:[],
+    presentationChecked:new Set(),
     presentationCounter:0
   };
 
@@ -221,14 +223,27 @@
     state.presentationCounter += 1;
     return {id:`cover_${Date.now()}_${state.presentationCounter}`,type:'cover',title:'Observatoire du bâtiment durable',subtitle:'Synthèse des indicateurs et analyses',dateText:new Date().toLocaleDateString('fr-FR',{month:'long',year:'numeric'}),footerText:'Prestaterre Certifications',confidentialText:'CONFIDENTIEL',fontFamily:'Arial, sans-serif',titleSize:64,subtitleSize:28,dateSize:26,createdAt:new Date().toISOString()};
   }
+  // V6.24 : boîte de captures + slides composées. Le bouton ▣ d'un graphique ou d'un tableau dépose une
+  // capture dans la boîte de l'onglet Présentation ; on coche les captures voulues puis « Nouvelle slide » :
+  // la slide les dispose automatiquement (grille ou mise en avant) en adaptant visuels et textes.
+  const PRES_AREA={width:1160,height:450};   // zone des visuels d'une slide standard (1280×720)
+  const PRES_ITEM_MAX_ZOOM=2.4;
   function loadPresentationState(){
     try{
       const raw=localStorage.getItem(PRESENTATION_STORAGE_KEY) || localStorage.getItem('newosb_v0517_presentation');
       if(raw){
         const parsed=JSON.parse(raw);
+        state.presentationCaptures=Array.isArray(parsed?.captures)?parsed.captures.filter(c=>c&&c.id):[];
         if(Array.isArray(parsed?.slides)) state.presentationSlides=parsed.slides.map(s=>({type:'content',confidentialText:'CONFIDENTIEL',...s}));
         state.presentationActiveId=parsed?.activeId||state.presentationSlides[0]?.id||'';
         state.presentationCounter=Math.max(Number(parsed?.counter)||0,state.presentationSlides.length||0);
+        // Slides des versions précédentes (un visuel par slide) : le visuel devient une capture de la boîte.
+        state.presentationSlides.forEach(s=>{
+          if(s.type==='cover'||Array.isArray(s.captureIds))return;
+          s.captureIds=[];
+          if(s.contentHtml){state.presentationCounter+=1;const cap={id:`cap_${Date.now()}_${state.presentationCounter}`,title:s.title||'Capture',kicker:s.kicker||'',legend:s.legend||'',scope:s.scope||'',sourcePage:s.sourcePage||'',contentHtml:s.contentHtml,w:0,h:0,createdAt:s.createdAt||new Date().toISOString()};state.presentationCaptures.push(cap);s.captureIds=[cap.id];}
+          delete s.contentHtml;
+        });
       }
       if(!state.presentationSlides.some(s=>s.type==='cover')) state.presentationSlides.unshift(defaultCoverModel());
       const cover=state.presentationSlides.find(s=>s.type==='cover');
@@ -237,18 +252,24 @@
       if(!state.presentationActiveId) state.presentationActiveId=cover?.id||state.presentationSlides[0]?.id||'';
       savePresentationState();
     }catch{
-      state.presentationSlides=[defaultCoverModel()];
+      state.presentationSlides=[defaultCoverModel()];state.presentationCaptures=[];
       state.presentationActiveId=state.presentationSlides[0].id;
     }
   }
   function savePresentationState(){
     try{
       localStorage.setItem(PRESENTATION_STORAGE_KEY, JSON.stringify({
+        version:2,
+        captures:state.presentationCaptures,
         slides:state.presentationSlides,
         activeId:state.presentationActiveId,
         counter:state.presentationCounter
       }));
-    }catch{}
+      return true;
+    }catch{
+      try{engine.toast?.('Mémoire du navigateur pleine : supprime des captures inutilisées pour enregistrer la présentation.');}catch{}
+      return false;
+    }
   }
   function currentPresentationSlide(){
     if(!state.presentationSlides.length) return null;
@@ -311,44 +332,88 @@
     clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
     return clone.outerHTML;
   }
+  // ▣ : dépose une capture du graphique / tableau dans la boîte de l'onglet Présentation.
   async function addCurrentCardToPresentation(trigger){
     const card=trigger?.closest('.obs-card, .obs-kpi-summary-group, .obs-kpi');
     if(!card)return;
     const isKpi=card.classList.contains('obs-kpi');
     const isKpiGroup=card.classList.contains('obs-kpi-summary-group');
     const head=card.querySelector('.obs-card-head');
-    const title=(isKpiGroup?'Chiffres clés':(isKpi?(card.querySelector(':scope > span')?.textContent||'Chiffre clé'):(head?.querySelector('h2')?.textContent||'Slide'))).trim();
+    const title=(isKpiGroup?'Chiffres clés':(isKpi?(card.querySelector(':scope > span')?.textContent||'Chiffre clé'):(head?.querySelector('h2')?.textContent||'Capture'))).trim();
     const kicker=(isKpiGroup?'VUE D’ENSEMBLE':(isKpi?'CHIFFRE CLÉ':(head?.querySelector('span')?.textContent||'OBSERVATOIRE DU BÂTIMENT DURABLE'))).trim();
     const legend=(isKpiGroup?'Opérations · Logements · Bâtiments · Maîtres d’ouvrage':(isKpi?(card.querySelector(':scope > small')?.textContent||''):(head?.querySelector('small')?.textContent||card.querySelector('.obs-table-note')?.textContent||''))).trim();
+    // Taille naturelle du visuel (sans l'en-tête de la carte) : sert à choisir la disposition des slides.
+    const cs=getComputedStyle(card),padX=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0),padY=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+    const w=Math.round(Math.max(160,card.clientWidth-padX)),h=Math.round(Math.max(60,card.clientHeight-padY-(head?.offsetHeight||0)));
     const clone=card.cloneNode(true);
     clone.querySelectorAll('.obs-pres-head-tools,.obs-kpi-pres-btn,.obs-kpi-group-pres-btn').forEach(el=>el.remove());
     clone.querySelectorAll('.obs-card-head .obs-card-action').forEach(el=>el.remove());
-    const clonedHead=clone.querySelector('.obs-card-head');
-    if(clonedHead) clonedHead.remove();
+    clone.querySelector('.obs-card-head')?.remove();
     state.presentationCounter += 1;
-    const id=`slide_${Date.now()}_${state.presentationCounter}`;
-    const slide={
-      id,
-      type:'content',
-      title,
-      kicker,
-      legend,
-      notes:'',
-      scope:activeFilterScopeText(),
-      confidentialText:'CONFIDENTIEL',
-      fontFamily:fontChoices()[0],
-      titleSize:50,
-      legendSize:20,
-      footerSize:16,
-      bodyScale:isKpi?115:(isKpiGroup?105:100),
-      sourcePage:state.page,
-      contentHtml:await cloneAsPortableHtml(clone),
-      createdAt:new Date().toISOString()
-    };
-    state.presentationSlides.push(slide);
-    state.presentationActiveId=id;
+    const capture={id:`cap_${Date.now()}_${state.presentationCounter}`,title,kicker,legend,scope:activeFilterScopeText(),sourcePage:state.page,contentHtml:await cloneAsPortableHtml(clone),w,h,createdAt:new Date().toISOString()};
+    state.presentationCaptures.push(capture);
+    state.presentationChecked.add(capture.id);
     savePresentationState();
-    try{engine.toast?.(`Ajouté à la présentation : ${title}`);}catch{}
+    trigger.classList.add('is-captured');setTimeout(()=>trigger.classList.remove('is-captured'),1200);
+    try{engine.toast?.(`Capture ajoutée : ${title} · ${state.presentationCaptures.length} dans la boîte de l’onglet Présentation`);}catch{}
+  }
+  function presentationCapture(id){return state.presentationCaptures.find(c=>c.id===id)||null;}
+  function slideCaptures(slide){return (slide?.captureIds||[]).map(presentationCapture).filter(Boolean);}
+  function captureUseCount(id){return state.presentationSlides.filter(s=>(s.captureIds||[]).includes(id)).length;}
+  function checkedCaptureIds(){return state.presentationCaptures.map(c=>c.id).filter(id=>state.presentationChecked.has(id));}
+  function slideTextsFromCaptures(caps){
+    if(caps.length===1)return {title:caps[0].title,kicker:caps[0].kicker,legend:caps[0].legend};
+    const kickers=[...new Set(caps.map(c=>c.kicker).filter(Boolean))];
+    const joined=caps.map(c=>c.title).join(' · ');
+    return {title:joined.length<=58?joined:`${caps[0].title} et ${caps.length-1} autre${caps.length>2?'s':''} visuel${caps.length>2?'s':''}`,kicker:kickers.length===1?kickers[0]:'OBSERVATOIRE DU BÂTIMENT DURABLE',legend:''};
+  }
+  function scopeFromCaptures(caps){const scopes=[...new Set(caps.map(c=>c.scope).filter(Boolean))];return scopes.join(' | ');}
+  function createSlideFromSelection(){
+    const ids=checkedCaptureIds();
+    if(!ids.length){try{engine.toast?.('Coche au moins une capture dans la boîte.');}catch{}return;}
+    const caps=ids.map(presentationCapture);
+    state.presentationCounter += 1;
+    const slide={id:`slide_${Date.now()}_${state.presentationCounter}`,type:'content',...slideTextsFromCaptures(caps),notes:'',scope:scopeFromCaptures(caps),confidentialText:'CONFIDENTIEL',fontFamily:fontChoices()[0],titleSize:caps.length>1?42:50,legendSize:20,footerSize:16,bodyScale:100,layout:'auto',showItemTitles:caps.length>1,captureIds:ids,createdAt:new Date().toISOString()};
+    const at=state.presentationSlides.findIndex(s=>s.id===state.presentationActiveId);
+    state.presentationSlides.splice(at>=0?at+1:state.presentationSlides.length,0,slide);
+    state.presentationActiveId=slide.id;
+    state.presentationChecked.clear();
+    savePresentationState();renderPage();
+  }
+  function addSelectionToSlide(id){
+    const slide=state.presentationSlides.find(s=>s.id===id);if(!slide||slide.type==='cover')return;
+    const ids=checkedCaptureIds().filter(c=>!(slide.captureIds||[]).includes(c));
+    if(!ids.length){try{engine.toast?.('Coche des captures qui ne sont pas déjà sur cette slide.');}catch{}return;}
+    slide.captureIds=[...(slide.captureIds||[]),...ids];
+    if(slide.captureIds.length>1&&slide.showItemTitles===undefined)slide.showItemTitles=true;
+    slide.scope=scopeFromCaptures(slideCaptures(slide));
+    state.presentationChecked.clear();
+    savePresentationState();renderPage();
+  }
+  function moveSlideItem(slideId,capId,delta){
+    const slide=state.presentationSlides.find(s=>s.id===slideId);if(!slide)return;
+    const list=slide.captureIds||[],i=list.indexOf(capId),j=i+delta;if(i<0||j<0||j>=list.length)return;
+    [list[i],list[j]]=[list[j],list[i]];savePresentationState();renderPage();
+  }
+  function removeSlideItem(slideId,capId){
+    const slide=state.presentationSlides.find(s=>s.id===slideId);if(!slide)return;
+    slide.captureIds=(slide.captureIds||[]).filter(c=>c!==capId);savePresentationState();renderPage();
+  }
+  function deletePresentationCapture(id){
+    const cap=presentationCapture(id);if(!cap)return;
+    const used=captureUseCount(id);
+    if(used&&!window.confirm(`« ${cap.title} » est utilisée sur ${used} slide${used>1?'s':''}. La supprimer de la boîte la retire aussi de ces slides. Continuer ?`))return;
+    state.presentationCaptures=state.presentationCaptures.filter(c=>c.id!==id);
+    state.presentationSlides.forEach(s=>{if(s.captureIds)s.captureIds=s.captureIds.filter(c=>c!==id);});
+    state.presentationChecked.delete(id);
+    savePresentationState();renderPage();
+  }
+  function clearPresentationCaptures(){
+    if(!state.presentationCaptures.length)return;
+    if(!window.confirm('Vider la boîte de captures ? Les slides qui les utilisent perdront leurs visuels.'))return;
+    state.presentationCaptures=[];state.presentationChecked.clear();
+    state.presentationSlides.forEach(s=>{if(s.captureIds)s.captureIds=[];});
+    savePresentationState();renderPage();
   }
   function ensureCoverSlide(){
     let cover=state.presentationSlides.find(s=>s.type==='cover');
@@ -366,6 +431,7 @@
   function updatePresentationField(id,key,value){
     const slide=state.presentationSlides.find(s=>s.id===id); if(!slide)return;
     if(['titleSize','legendSize','footerSize','bodyScale','subtitleSize','dateSize'].includes(key)) slide[key]=Number(value)||0;
+    else if(key==='showItemTitles') slide[key]=!!value;
     else slide[key]=value;
     savePresentationState();
   }
@@ -401,8 +467,67 @@
   function clearPresentationSlides(){
     const cover=defaultCoverModel(); state.presentationSlides=[cover]; state.presentationActiveId=cover.id; savePresentationState(); renderPage();
   }
+
+  // ---- Disposition automatique des captures d'une slide ----
+  const PRES_LAYOUTS=[['auto','Automatique'],['feature','Mise en avant (1 grand + autres)'],['1','1 colonne'],['2','2 colonnes'],['3','3 colonnes'],['4','4 colonnes']];
+  function presItemTitleSize(n,slide){const base=n<=1?20:n===2?18:n===3?16:n===4?15:n<=6?14:13;return Math.round(base*((Number(slide?.legendSize)||20)/20)*10)/10;}
+  function presentationLayout(caps,slide,W=PRES_AREA.width,H=PRES_AREA.height){
+    const n=caps.length;if(!n)return [];
+    const gap=n>1?14:0,showTitles=n>1?slide?.showItemTitles!==false:!!slide?.showItemTitles,head=showTitles?Math.round(presItemTitleSize(n,slide)*1.45+8):0,pad=n>1?20:0;
+    const nat=caps.map(c=>({w:Math.max(120,Number(c.w)||1100),h:Math.max(60,Number(c.h)||520)}));
+    const grid=cols=>{const rows=Math.ceil(n/cols),rowH=(H-gap*(rows-1))/rows,out=[];let i=0;for(let r=0;r<rows;r++){const k=Math.min(cols,n-i),cw=(W-gap*(k-1))/k;for(let j=0;j<k;j++)out.push({x:j*(cw+gap),y:r*(rowH+gap),w:cw,h:rowH}),i++;}return out;};
+    const feature=()=>{if(n<2)return grid(1);const lw=Math.round((W-gap)*(n===2?0.6:0.58)),rw=W-gap-lw,rh=(H-gap*(n-2))/(n-1),out=[{x:0,y:0,w:lw,h:H}];for(let i=1;i<n;i++)out.push({x:lw+gap,y:(i-1)*(rh+gap),w:rw,h:rh});return out;};
+    const fitted=rects=>rects.map((r,i)=>Math.min((r.w-pad)/nat[i].w,(r.h-pad-head)/nat[i].h,PRES_ITEM_MAX_ZOOM));
+    const score=rects=>{const k=fitted(rects),areas=k.map((v,i)=>v*v*nat[i].w*nat[i].h),total=areas.reduce((a,b)=>a+b,0),min=Math.min(...areas),max=Math.max(...areas)||1;return total*Math.pow(min/max,0.18);};
+    const mode=String(slide?.layout||'auto');
+    let rects;
+    if(mode==='feature')rects=feature();
+    else if(/^[1-4]$/.test(mode))rects=grid(Math.min(n,Number(mode)));
+    else{const cands=[];for(let c=1;c<=Math.min(n,4);c++)cands.push(grid(c));if(n>=3&&n<=5)cands.push(feature());rects=cands.reduce((best,c)=>score(c)>score(best)?c:best,cands[0]);}
+    return rects.map(r=>({...r,head,pad}));
+  }
+  function presentationItemsMarkup(slide,editable=true){
+    const caps=slideCaptures(slide),n=caps.length;
+    if(!n)return `<div class="obs-pres-items is-empty" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px"><div class="obs-pres-items-empty"><b>Slide sans visuel</b><span>Coche des captures dans la boîte, à gauche, puis « Ajouter à cette slide ».</span></div></div>`;
+    const rects=presentationLayout(caps,slide),ts=presItemTitleSize(n,slide),scale=Math.max(.5,Math.min(1,(Number(slide.bodyScale)||100)/100));
+    return `<div class="obs-pres-items ${n>1?'is-multi':'is-single'}" data-pres-scale="${scale}" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;--pres-item-title:${ts}px">${caps.map((c,i)=>{const r=rects[i];return `<section class="obs-pres-item" style="left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;padding:${r.pad/2}px">${r.head?`<header class="obs-pres-item-head" style="height:${r.head}px"><b ${editable?`contenteditable="true" spellcheck="false" data-pres-capture-title="${attr(c.id)}"`:''}>${esc(c.title)}</b></header>`:''}<div class="obs-pres-item-body" style="height:calc(100% - ${r.head}px)"><div class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}" style="width:${Math.max(120,Number(c.w)||1100)}px">${c.contentHtml||''}</div></div></section>`;}).join('')}</div>`;
+  }
+  // Mise à l'échelle de chaque visuel dans sa case (le contenu est rendu à sa largeur d'origine, puis réduit
+  // ou agrandi proportionnellement et centré). Appelée après chaque affichage et avant chaque export.
+  function fitPresentationItems(root){
+    (root||document).querySelectorAll('.obs-pres-items').forEach(area=>{
+      const scale=Number(area.dataset.presScale)||1;
+      area.querySelectorAll('.obs-pres-item-body').forEach(body=>{
+        const el=body.querySelector('.obs-pres-item-scaler');if(!el)return;
+        const bw=body.clientWidth,bh=body.clientHeight,natW=Number(el.dataset.natW)||1100;if(!bw||!bh)return;
+        el.style.transform='none';
+        // Le visuel est rendu à plusieurs largeurs proches de sa largeur d'origine (graphiques, tableaux et
+        // tuiles se réorganisent) ; on garde celle qui remplit le mieux la case, à lisibilité égale.
+        const widths=[...new Set([1,0.8,0.65,1.25].map(f=>Math.round(Math.max(260,natW*f))))];
+        let best=null;
+        widths.forEach((w,i)=>{el.style.width=`${w}px`;const ew=Math.max(w,el.scrollWidth),h=Math.max(1,el.offsetHeight||Number(el.dataset.natH)||520),k=Math.min(bw/ew,bh/h,PRES_ITEM_MAX_ZOOM),area=k*k*w*h*(i===0?1.08:1)*(k<.5?k/.5:1);if(!best||area>best.area)best={w,h,k,area};});
+        el.style.width=`${best.w}px`;
+        // Un contenu à largeur minimale (tunnel, tableau large) peut dépasser : on retient sa largeur réelle.
+        const ew=Math.max(best.w,el.scrollWidth),h=Math.max(1,el.offsetHeight||best.h),k=Math.min(bw/ew,bh/h,PRES_ITEM_MAX_ZOOM)*scale;
+        if(ew>best.w)el.style.width=`${ew}px`;
+        el.style.transform=`translate(${((bw-ew*k)/2).toFixed(1)}px,${((bh-h*k)/2).toFixed(1)}px) scale(${k.toFixed(4)})`;
+      });
+    });
+  }
+  // Aperçu : la slide (1280×720) est réduite pour tenir dans la largeur disponible ; les exports gardent la taille réelle.
+  function fitPresentationPreview(){
+    const box=pageEl.querySelector('[data-pres-stage-fit]'),stage=box?.querySelector('#obsPresentationStage');if(!box||!stage)return;
+    stage.style.transformOrigin='0 0';
+    if(document.fullscreenElement===box){const k=Math.min(window.innerWidth/1280,window.innerHeight/720);stage.style.left=`${Math.round((window.innerWidth-1280*k)/2)}px`;stage.style.top=`${Math.round((window.innerHeight-720*k)/2)}px`;stage.style.transform=`scale(${k.toFixed(4)})`;return;}
+    stage.style.left='';stage.style.top='';
+    const avail=box.parentElement.clientWidth-parseFloat(getComputedStyle(box.parentElement).paddingLeft||0)-parseFloat(getComputedStyle(box.parentElement).paddingRight||0);
+    const k=Math.max(.35,Math.min(1,avail/1280));
+    stage.style.transform=k<1?`scale(${k.toFixed(4)})`:'';stage.style.transformOrigin='0 0';
+    box.style.width=`${Math.round(1280*k)}px`;box.style.height=`${Math.round(720*k)}px`;
+  }
+  window.addEventListener('resize',()=>{if(state.page==='presentation')fitPresentationPreview();});
   function presentationSlideMarkup(slide){
-    if(!slide) return `<div class="obs-empty">Aucune slide. Ajoute une couverture ou utilise l’icône ▣ sur un graphe / tableau.</div>`;
+    if(!slide) return `<div class="obs-empty">Aucune slide. Ajoute une couverture ou crée une slide depuis la boîte de captures.</div>`;
     const slideIndex=Math.max(1,state.presentationSlides.findIndex(s=>s.id===slide.id)+1);
     if(slide.type==='cover'){
       return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-cover" style="--pres-title-size:${Number(slide.titleSize)||64}px;--pres-subtitle-size:${Number(slide.subtitleSize)||28}px;--pres-date-size:${Number(slide.dateSize)||26}px;font-family:${attr(slide.fontFamily||fontChoices()[0])}">
@@ -417,11 +542,11 @@
         <div class="obs-pres-cover-conf" contenteditable="true" spellcheck="false" data-pres-editable="confidentialText" data-pres-id="${attr(slide.id)}">${esc(slide.confidentialText||'CONFIDENTIEL')}</div><div class="obs-pres-cover-page">1</div>
       </article>`;
     }
-    return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-standard" style="--pres-title-size:${Number(slide.titleSize)||50}px;--pres-legend-size:${Number(slide.legendSize)||20}px;--pres-footer-size:${Number(slide.footerSize)||16}px;--pres-body-scale:${(Number(slide.bodyScale)||100)/100};font-family:${attr(slide.fontFamily||fontChoices()[0])}">
+    return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-standard" style="--pres-title-size:${Number(slide.titleSize)||50}px;--pres-legend-size:${Number(slide.legendSize)||20}px;--pres-footer-size:${Number(slide.footerSize)||16}px;font-family:${attr(slide.fontFamily||fontChoices()[0])}">
       <div class="obs-pres-osb-brand"><img src="assets/prestaterre_logo_green.png" alt="Prestaterre"></div>
       <div class="obs-pres-confidential" contenteditable="true" spellcheck="false" data-pres-editable="confidentialText" data-pres-id="${attr(slide.id)}">${esc(slide.confidentialText||'CONFIDENTIEL')}</div>
       <div class="obs-pres-top"><div class="obs-pres-title-line"></div><div class="obs-pres-title-block"><div class="obs-pres-kicker" contenteditable="true" spellcheck="false" data-pres-editable="kicker" data-pres-id="${attr(slide.id)}">${esc(slide.kicker||'OBSERVATOIRE DU BÂTIMENT DURABLE')}</div><h2 contenteditable="true" spellcheck="false" data-pres-editable="title" data-pres-id="${attr(slide.id)}">${esc(slide.title||'Titre de slide')}</h2><p contenteditable="true" spellcheck="false" data-pres-editable="legend" data-pres-id="${attr(slide.id)}">${esc(slide.legend||'')}</p></div></div>
-      <div class="obs-pres-figure-wrap"><div class="obs-pres-figure">${slide.contentHtml||''}</div></div>
+      <div class="obs-pres-figure-wrap ${slideCaptures(slide).length>1?'is-multi':''}">${presentationItemsMarkup(slide)}</div>
       <div class="obs-pres-bottom"><div class="obs-pres-scope" contenteditable="true" spellcheck="false" data-pres-editable="scope" data-pres-id="${attr(slide.id)}">${esc(slide.scope||'')}</div><div class="obs-pres-notes" contenteditable="true" spellcheck="false" data-pres-editable="notes" data-pres-id="${attr(slide.id)}">${esc(slide.notes||'')}</div><div class="obs-pres-page-number">${slideIndex}</div></div>
     </article>`;
   }
@@ -440,7 +565,13 @@
         <label>Taille date <input type="range" min="18" max="42" step="1" data-pres-field="dateSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.dateSize||26)}"><span>${fmt(slide.dateSize||26)} px</span></label>
       </div>`;
     }
+    const caps=slideCaptures(slide),n=caps.length;
+    const items=n?`<ol class="obs-pres-item-list">${caps.map((c,i)=>`<li><span>${esc(shorten(c.title,46))}</span><button type="button" title="Monter" aria-label="Monter ${attr(c.title)}" data-pres-item-move="up" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i?'':'disabled'}>↑</button><button type="button" title="Descendre" aria-label="Descendre ${attr(c.title)}" data-pres-item-move="down" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i<n-1?'':'disabled'}>↓</button><button type="button" title="Retirer de la slide" aria-label="Retirer ${attr(c.title)} de la slide" data-pres-item-remove="${attr(c.id)}" data-pres-id="${attr(slide.id)}">×</button></li>`).join('')}</ol>`:'<p class="obs-pres-muted">Aucun visuel sur cette slide.</p>';
     return `<div class="obs-pres-editor-card"><h3>Édition de la slide</h3>
+      <div class="obs-pres-editor-group"><b>Visuels de la slide (${n})</b>${items}
+        <label>Disposition<select data-pres-field="layout" data-pres-id="${attr(slide.id)}">${PRES_LAYOUTS.map(([v,l])=>`<option value="${v}" ${String(slide.layout||'auto')===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
+        <label class="obs-pres-check"><input type="checkbox" data-pres-field="showItemTitles" data-pres-id="${attr(slide.id)}" ${(n>1?slide.showItemTitles!==false:!!slide.showItemTitles)?'checked':''}><span>Titre au-dessus de chaque visuel</span></label>
+      </div>
       <label>Titre<input type="text" data-pres-field="title" data-pres-id="${attr(slide.id)}" value="${attr(slide.title||'')}"></label>
       <label>Sur-titre<input type="text" data-pres-field="kicker" data-pres-id="${attr(slide.id)}" value="${attr(slide.kicker||'')}"></label>
       <label>Légende / sous-titre<textarea data-pres-field="legend" data-pres-id="${attr(slide.id)}">${esc(slide.legend||'')}</textarea></label>
@@ -448,29 +579,40 @@
       <label>Note libre<textarea data-pres-field="notes" data-pres-id="${attr(slide.id)}">${esc(slide.notes||'')}</textarea></label>
       <label>Mention confidentialité<input type="text" data-pres-field="confidentialText" data-pres-id="${attr(slide.id)}" value="${attr(slide.confidentialText||'')}"></label>
       <label>Police<select data-pres-field="fontFamily" data-pres-id="${attr(slide.id)}">${fontChoices().map(f=>`<option value="${attr(f)}" ${slide.fontFamily===f?'selected':''}>${esc(f.split(',')[0])}</option>`).join('')}</select></label>
-      <label>Taille du titre <input type="range" min="32" max="76" step="1" data-pres-field="titleSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.titleSize||50)}"><span>${fmt(slide.titleSize||50)} px</span></label>
+      <label>Taille du titre <input type="range" min="28" max="76" step="1" data-pres-field="titleSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.titleSize||50)}"><span>${fmt(slide.titleSize||50)} px</span></label>
       <label>Taille des textes <input type="range" min="14" max="34" step="1" data-pres-field="legendSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.legendSize||20)}"><span>${fmt(slide.legendSize||20)} px</span></label>
       <label>Taille du bas de page <input type="range" min="12" max="26" step="1" data-pres-field="footerSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.footerSize||16)}"><span>${fmt(slide.footerSize||16)} px</span></label>
-      <label>Échelle du visuel <input type="range" min="80" max="120" step="1" data-pres-field="bodyScale" data-pres-id="${attr(slide.id)}" value="${attr(slide.bodyScale||100)}"><span>${fmt(slide.bodyScale||100)} %</span></label>
+      <label>Taille des visuels <input type="range" min="50" max="100" step="1" data-pres-field="bodyScale" data-pres-id="${attr(slide.id)}" value="${attr(Math.min(100,slide.bodyScale||100))}"><span>${fmt(Math.min(100,slide.bodyScale||100))} %</span></label>
     </div>`;
+  }
+  function presentationCaptureBox(slide){
+    const caps=state.presentationCaptures,checked=checkedCaptureIds().length,canAdd=slide&&slide.type!=='cover';
+    const pageLabel=p=>(pageMeta[p]||[])[0]||p||'';
+    const list=caps.length?caps.map(c=>{const used=captureUseCount(c.id);return `<li class="obs-pres-capture ${state.presentationChecked.has(c.id)?'is-checked':''}"><label><input type="checkbox" data-pres-capture-check="${attr(c.id)}" ${state.presentationChecked.has(c.id)?'checked':''}><span class="obs-pres-capture-thumb" aria-hidden="true"><span class="obs-pres-items" data-pres-scale="1" style="width:100%;height:100%;position:relative"><span class="obs-pres-item" style="left:0;top:0;width:100%;height:100%"><span class="obs-pres-item-body" style="height:100%"><span class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}">${c.contentHtml||''}</span></span></span></span></span><span class="obs-pres-capture-text"><b>${esc(shorten(c.title,60))}</b><small>${esc([pageLabel(c.sourcePage),new Date(c.createdAt).toLocaleDateString('fr-FR')].filter(Boolean).join(' · '))}${used?` · sur ${used} slide${used>1?'s':''}`:''}</small></span></label><button type="button" class="obs-pres-capture-del" data-pres-capture-delete="${attr(c.id)}" title="Supprimer la capture" aria-label="Supprimer la capture ${attr(c.title)}">×</button></li>`;}).join(''):'<li class="obs-pres-captures-empty">La boîte est vide. Dans les autres onglets, clique sur ▣ en haut d’un graphique, d’un tableau ou des chiffres clés pour le capturer ici.</li>';
+    return `<section class="obs-pres-captures" aria-label="Boîte de captures">
+      <div class="obs-pres-side-head"><h3>Captures <small>${fmt(caps.length)}</small></h3><div class="obs-pres-side-actions">${caps.length?`<button type="button" class="obs-card-action" data-pres-capture-all="1">Tout cocher</button><button type="button" class="obs-card-action" data-pres-capture-none="1" ${checked?'':'disabled'}>Aucune</button><button type="button" class="obs-card-action danger" data-pres-captures-clear="1" title="Vider la boîte">Vider</button>`:''}</div></div>
+      <ul class="obs-pres-capture-list">${list}</ul>
+      <div class="obs-pres-capture-actions"><button type="button" class="obs-card-action obs-pres-primary" data-pres-new-slide="1" ${checked?'':'disabled'}>＋ Nouvelle slide${checked?` (${checked})`:''}</button>${canAdd?`<button type="button" class="obs-card-action" data-pres-add-to-slide="${attr(slide.id)}" ${checked?'':'disabled'}>Ajouter à cette slide</button>`:''}</div>
+    </section>`;
   }
   function renderPresentation(){
     const slide=currentPresentationSlide();
     const right=`<div class="obs-presentation-head-actions"><button type="button" class="obs-card-action" data-pres-cover="1">Couverture</button><button type="button" class="obs-card-action obs-google-slides-btn" data-pres-google-slides="1">Google Slides ↗</button><button type="button" class="obs-card-action" data-pres-export-pptx="1">PPTX</button><button type="button" class="obs-card-action" data-pres-export-all="png">PNG 4K</button><button type="button" class="obs-card-action" data-pres-export-all="svg">SVG</button></div>`;
-    const thumbs=state.presentationSlides.map((s,i)=>`<button type="button" class="obs-pres-thumb ${s.id===slide?.id?'is-active':''}" data-pres-select="${attr(s.id)}"><span class="obs-pres-thumb-index">${i+1}</span><b>${esc(shorten(s.type==='cover'?'Couverture':(s.title||'Slide'),40))}</b><small>${esc(shorten(s.type==='cover'?(s.subtitle||''):(s.scope||''),70))}</small></button>`).join('') || '<div class="obs-empty">Aucune slide pour le moment.</div>';
+    const thumbs=state.presentationSlides.map((s,i)=>{const n=s.type==='cover'?0:slideCaptures(s).length;return `<button type="button" class="obs-pres-thumb ${s.id===slide?.id?'is-active':''}" data-pres-select="${attr(s.id)}"><span class="obs-pres-thumb-index">${i+1}</span><b>${esc(shorten(s.type==='cover'?'Couverture':(s.title||'Slide'),40))}</b><small>${esc(s.type==='cover'?shorten(s.subtitle||'',70):`${n} visuel${n>1?'s':''}${s.layout&&s.layout!=='auto'?` · ${(PRES_LAYOUTS.find(l=>l[0]===s.layout)||['',''])[1]}`:''}`)}</small></button>`;}).join('') || '<div class="obs-empty">Aucune slide pour le moment.</div>';
     const editor=presentationEditor(slide);
     const controls=slide?`<div class="obs-pres-slide-actions">${slide.type!=='cover'?`<button type="button" class="obs-card-action" data-pres-duplicate="${attr(slide.id)}">Dupliquer</button><button type="button" class="obs-card-action" data-pres-move="up" data-pres-id="${attr(slide.id)}">Monter</button><button type="button" class="obs-card-action" data-pres-move="down" data-pres-id="${attr(slide.id)}">Descendre</button>`:''}<button type="button" class="obs-card-action" data-pres-fullscreen="1">Plein écran</button><button type="button" class="obs-card-action" data-pres-export="png" data-pres-id="${attr(slide.id)}">PNG 4K</button><button type="button" class="obs-card-action" data-pres-export="svg" data-pres-id="${attr(slide.id)}">SVG</button><button type="button" class="obs-card-action danger" data-pres-delete="${attr(slide.id)}">Supprimer</button></div>`:`<div class="obs-pres-slide-actions"><button type="button" class="obs-card-action" data-pres-cover="1">Créer une couverture</button></div>`;
     return `${pageHead('presentation',right)}
-      <div class="obs-pres-help">Les textes restent éditables dans l’Observatoire Prestaterre. Le bouton Google Slides reproduit fidèlement chaque slide dans Drive, graphiques et mises en page compris. Le rendu est envoyé comme visuel haute définition afin d’éviter toute déformation des graphiques. Le PPTX reste disponible comme export secondaire.</div>
+      <div class="obs-pres-help">1. Dans les onglets, le bouton ▣ capture un graphique, un tableau ou les chiffres clés dans la boîte ci-dessous. 2. Coche les captures voulues puis « Nouvelle slide » : elles sont disposées automatiquement (taille des visuels et des textes adaptée). 3. Crée autant de slides que nécessaire, chacune avec sa sélection ; textes éditables directement sur la slide. Exports : Google Slides, PPTX, PNG 4K et SVG.</div>
       <div class="obs-presentation-layout">
         <aside class="obs-presentation-side">
+          ${presentationCaptureBox(slide)}
           <div class="obs-pres-side-head"><h3>Slides</h3><div class="obs-pres-side-actions"><button type="button" class="obs-card-action" data-pres-cover="1">+ Couverture</button><button type="button" class="obs-card-action danger" data-pres-clear="1">Vider</button></div></div>
           <div class="obs-pres-thumbs">${thumbs}</div>
           ${editor}
         </aside>
         <section class="obs-presentation-main">
           ${controls}
-          <div class="obs-pres-canvas-wrap">${presentationSlideMarkup(slide)}</div>
+          <div class="obs-pres-canvas-wrap"><div class="obs-pres-stage-fit" data-pres-stage-fit>${presentationSlideMarkup(slide)}</div></div>
         </section>
       </div>`;
   }
@@ -502,39 +644,44 @@
   }
   let exportCssCache='';
   function exportCss(){return exportCssCache||(exportCssCache=cssTextForExport().replace(/@import[^;]+;/g,''));}
-  async function svgMarkupForNode(node,width,height){
+  async function svgMarkupForNode(node,width,height,outW=width,outH=height){
     const clone=node.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
     await inlineExportImages(clone);
+    // L'aperçu réduit (transform) et sa position ne font pas partie du visuel exporté.
+    clone.style.transform='none'; clone.style.left='0'; clone.style.top='0'; clone.style.position='relative';
     clone.style.width=`${width}px`; clone.style.height=`${height}px`; clone.style.maxWidth=`${width}px`;
     const xhtml=`<div xmlns="http://www.w3.org/1999/xhtml"><style><![CDATA[${exportCss().replace(/\]\]>/g,'] ]>')}]]></style>${new XMLSerializer().serializeToString(clone)}</div>`;
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="0 0 ${width} ${height}"><foreignObject width="${width}" height="${height}">${xhtml}</foreignObject></svg>`;
   }
   const svgDataUrl=svg=>'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
   function loadImage(url){return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Rendu du visuel impossible.'));im.src=url;});}
   async function canvasFromNode(node,width,height,outW=width,outH=height){
-    const img=await loadImage(svgDataUrl(await svgMarkupForNode(node,width,height)));
+    const img=await loadImage(svgDataUrl(await svgMarkupForNode(node,width,height,outW,outH))); // rendu vectoriel directement à la taille de sortie
     const canvas=document.createElement('canvas');canvas.width=outW;canvas.height=outH;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,outW,outH);ctx.drawImage(img,0,0,outW,outH);return canvas;
   }
-  async function pngDataUrlFromNode(node,width=1920,height=1080){
-    return (await canvasFromNode(node,width,height)).toDataURL('image/png');
+  async function pngDataUrlFromNode(node,width=1920,height=1080,outW=width,outH=height){
+    return (await canvasFromNode(node,width,height,outW,outH)).toDataURL('image/png');
   }
+  // PPTX : la zone des visuels (disposition comprise) est rendue en image haute définition.
   async function bodyPngForSlide(slide){
-    if(!slide||slide.type==='cover'||!slide.contentHtml)return '';
+    if(!slide||slide.type==='cover'||!slideCaptures(slide).length)return '';
     const host=document.createElement('div');
-    host.className='obs-pres-ppt-body';
-    host.style.cssText='position:fixed;left:-20000px;top:0;width:1600px;height:760px;overflow:hidden;background:#fff;padding:22px;z-index:-9999;';
-    host.innerHTML=slide.contentHtml;
+    host.className='obs-pres-export-host';
+    host.style.cssText=`position:fixed;left:-20000px;top:0;width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;overflow:hidden;background:#fff;z-index:-9999;font-family:${slide.fontFamily||'Arial, sans-serif'}`;
+    host.innerHTML=presentationItemsMarkup(slide,false);
     document.body.appendChild(host);
     await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-    try{return await pngDataUrlFromNode(host,2400,1140);}finally{host.remove();}
+    fitPresentationItems(host);
+    try{return await pngDataUrlFromNode(host.querySelector('.obs-pres-items'),PRES_AREA.width,PRES_AREA.height,PRES_AREA.width*2,PRES_AREA.height*2);}finally{host.remove();}
   }
   function downloadBlob(blob,name){const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
   async function exportStageNode(node,filename,format='png'){
     if(!node)return;
     try{
-      if(format==='svg'){downloadBlob(new Blob([await svgMarkupForNode(node,3840,2160)],{type:'image/svg+xml;charset=utf-8'}),`${filename}.svg`);return;}
-      const canvas=await canvasFromNode(node,3840,2160);
+      // La slide est mise en page à sa taille réelle (1280×720) puis agrandie ×3 : rendu 4K identique à l'aperçu.
+      if(format==='svg'){downloadBlob(new Blob([await svgMarkupForNode(node,1280,720,3840,2160)],{type:'image/svg+xml;charset=utf-8'}),`${filename}.svg`);return;}
+      const canvas=await canvasFromNode(node,1280,720,3840,2160);
       const blob=await new Promise(res=>canvas.toBlob(res,'image/png'));
       if(!blob)throw new Error('Image PNG vide.');
       downloadBlob(blob,`${filename}.png`);
@@ -550,94 +697,10 @@
     const currentId=state.presentationActiveId,ids=state.presentationSlides.map(s=>s.id);let i=0;
     const next=()=>{if(i>=ids.length){state.presentationActiveId=currentId;savePresentationState();renderPage();return;}state.presentationActiveId=ids[i];savePresentationState();renderPage();requestAnimationFrame(()=>requestAnimationFrame(async()=>{await exportPresentationSlide(ids[i],format);i+=1;setTimeout(next,350);}));};next();
   }
-  function googleSlidesNumber(value){
-    const raw=String(value??'').replace(/\u00a0/g,' ').trim();
-    const m=raw.match(/-?[\d\s]+(?:[.,]\d+)?/);
-    if(!m)return null;
-    const n=Number(m[0].replace(/\s/g,'').replace(',','.'));
-    return Number.isFinite(n)?n:null;
-  }
-  function googleSlidesText(el){return String(el?.textContent||'').replace(/\s+/g,' ').trim();}
-  function googleSlidesVisualDescriptor(model){
-    if(!model||model.type==='cover'||!model.contentHtml)return {type:'empty'};
-    const host=document.createElement('div');host.innerHTML=model.contentHtml;
-    host.querySelectorAll('.obs-pres-head-tools,[data-add-presentation],.obs-table-pager,.obs-view-toggle,.obs-card-action').forEach(el=>el.remove());
-
-    const evolution=host.querySelector('.obs-evolution-multi');
-    if(evolution){
-      const seriesMap=new Map();
-      evolution.querySelectorAll('.obs-evolution-series circle title').forEach(t=>{
-        const s=googleSlidesText(t),m=s.match(/^(.*?)\s*·\s*(\d{4})\s*:\s*([\d\s.,]+)/);
-        if(!m)return;
-        const name=m[1].trim(),year=m[2],value=googleSlidesNumber(m[3]);
-        if(value===null)return;
-        if(!seriesMap.has(name))seriesMap.set(name,[]);
-        seriesMap.get(name).push({x:year,y:value});
-      });
-      const series=[...seriesMap.entries()].map(([name,points])=>({name,points:points.sort((a,b)=>Number(a.x)-Number(b.x))}));
-      if(series.length)return {type:'line',series};
-    }
-
-    const kpis=[...host.querySelectorAll('.obs-kpi')].map(el=>({label:googleSlidesText(el.querySelector('span')),value:googleSlidesText(el.querySelector('strong')),note:googleSlidesText(el.querySelector('small'))})).filter(x=>x.label||x.value);
-    if(kpis.length>=2)return {type:'kpi',items:kpis.slice(0,8)};
-
-    const table=host.querySelector('.obs-table, .obs-heatmap table, table');
-    if(table){
-      const headers=[...table.querySelectorAll('thead th')].map(googleSlidesText).slice(0,9);
-      const rows=[...table.querySelectorAll('tbody tr')].slice(0,15).map(tr=>[...tr.querySelectorAll('th,td')].map(googleSlidesText).slice(0,9));
-      if(headers.length||rows.length)return {type:'table',headers,rows};
-    }
-
-    const bars=[...host.querySelectorAll('.obs-bar-row')].map(el=>{
-      const label=googleSlidesText(el.querySelector('span:first-child'));
-      const valueText=googleSlidesText(el.querySelector('strong'));
-      return {label,valueText,value:googleSlidesNumber(valueText)};
-    }).filter(x=>x.label||x.valueText);
-    if(bars.length)return {type:'bars',items:bars.slice(0,15)};
-
-    const tunnel=[...host.querySelectorAll('.obs-tunnel-step')].map(el=>({label:googleSlidesText(el.querySelector('span')),value:googleSlidesText(el.querySelector('strong')),note:googleSlidesText(el.querySelector('small'))})).filter(x=>x.label);
-    if(tunnel.length)return {type:'tunnel',items:tunnel.slice(0,8)};
-
-    const tiles=[...host.querySelectorAll('.obs-data-tile,.obs-mini-treemap button,.obs-tag,.obs-compact-list-row')].map(el=>({label:googleSlidesText(el.querySelector('span'))||googleSlidesText(el).replace(/\s+[\d.,%]+.*$/,''),value:googleSlidesText(el.querySelector('b,strong')),note:googleSlidesText(el.querySelector('small'))})).filter(x=>x.label||x.value);
-    if(tiles.length)return {type:'tiles',items:tiles.slice(0,15)};
-
-    const gauge=host.querySelector('.obs-performance-gauge');
-    if(gauge){
-      return {type:'gauge',left:googleSlidesText(gauge.querySelector('.obs-gauge-scale span:first-child')),right:googleSlidesText(gauge.querySelector('.obs-gauge-scale span:last-child')),label:googleSlidesText(gauge.querySelector('.obs-gauge-project span')),value:googleSlidesText(gauge.querySelector('.obs-gauge-project strong')),note:googleSlidesText(gauge.querySelector('.obs-gauge-project small'))};
-    }
-
-    const beforeAfter=host.querySelector('.obs-before-after');
-    if(beforeAfter){
-      const items=[...beforeAfter.querySelectorAll(':scope > div')].map(el=>({label:googleSlidesText(el.querySelector('span')),value:googleSlidesText(el.querySelector('b'))}));
-      return {type:'beforeAfter',items,note:googleSlidesText(beforeAfter.querySelector(':scope > small'))};
-    }
-
-    const flow=host.querySelector('.obs-flow');
-    if(flow){
-      const readNodes=sel=>[...flow.querySelectorAll(sel)].map(el=>({label:googleSlidesText(el.querySelector('span')),value:googleSlidesText(el.querySelector('b')),note:googleSlidesText(el.querySelector('small'))})).filter(x=>x.label);
-      return {type:'flow',before:readNodes('.obs-flow-column.before .obs-flow-node').slice(0,10),after:readNodes('.obs-flow-column.after .obs-flow-node').slice(0,10),caption:googleSlidesText(host.querySelector('.obs-flow-caption'))};
-    }
-
-    const dpe=[...host.querySelectorAll('.obs-dpe-row')].map(el=>({label:googleSlidesText(el.querySelector('.obs-dpe-letter')),before:googleSlidesText(el.querySelector('.obs-dpe-bar:not(.after) strong')),after:googleSlidesText(el.querySelector('.obs-dpe-bar.after strong'))})).filter(x=>x.label);
-    if(dpe.length)return {type:'dpe',items:dpe};
-
-    const map=host.querySelector('.obs-map-stage,.obs-france-map');
-    if(map){
-      const labels=[...host.querySelectorAll('.obs-map-region-label,.obs-map-dept-label,.obs-map-major-city,.obs-map-city-name')].map(googleSlidesText).filter(Boolean);
-      const markers=[...host.querySelectorAll('.obs-map-marker,.obs-map-dep-op')].slice(0,40).map(el=>({label:googleSlidesText(el.querySelector('title'))||el.getAttribute('aria-label')||'',x:Number(el.getAttribute('cx')||el.getAttribute('x')||0),y:Number(el.getAttribute('cy')||el.getAttribute('y')||0),r:Number(el.getAttribute('r')||5)}));
-      return {type:'map',labels:[...new Set(labels)].slice(0,25),markers};
-    }
-
-    const metric=[...host.querySelectorAll('.obs-envelope-metrics > div,.obs-detail,.obs-hist-bin')].map(el=>({label:googleSlidesText(el.querySelector('span'))||googleSlidesText(el.querySelector('td:first-child')),value:googleSlidesText(el.querySelector('b,strong,.obs-hist-count'))||googleSlidesText(el.querySelector('td:last-child')),note:googleSlidesText(el.querySelector('small'))})).filter(x=>x.label||x.value);
-    if(metric.length)return {type:'tiles',items:metric.slice(0,15)};
-
-    const textItems=[...host.querySelectorAll('strong,b,th,td,span')].map(googleSlidesText).filter(t=>t&&t.length<180);
-    return {type:'list',items:[...new Set(textItems)].slice(0,22)};
-  }
   async function googleSlideSnapshot(model){
     const wrap=document.createElement('div');wrap.className='obs-google-slide-snapshot';wrap.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:-99999;';wrap.innerHTML=presentationSlideMarkup(model);document.body.appendChild(wrap);
     const node=wrap.querySelector('#obsPresentationStage');
-    try{await Promise.all([...node.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return (await canvasFromNode(node,1600,900)).toDataURL('image/jpeg',0.92);}finally{wrap.remove();}
+    try{fitPresentationItems(wrap);await Promise.all([...node.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return (await canvasFromNode(node,1280,720,1600,900)).toDataURL('image/jpeg',0.92);}finally{wrap.remove();}
   }
   async function buildGoogleSlidesPayload(){
     const slides=[];
@@ -690,7 +753,7 @@
         s.addText(String(model.legend||''),{x:1.92,y:1.02,w:8.7,h:.34,fontFace:font,fontSize:Math.max(10,Math.min(19,(Number(model.legendSize)||20)*.7)),color:'315D50',margin:0,fit:'shrink'});
         s.addText(String(model.confidentialText||''),{x:11.2,y:.18,w:1.45,h:.28,fontFace:font,fontSize:8.5,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0,fill:{color:'06402B'},fit:'shrink'});
         let body='';try{body=await bodyPngForSlide(model);}catch{}
-        if(body)s.addImage({data:body,x:.46,y:1.52,w:12.40,h:4.72,transparency:0});
+        if(body)s.addImage({data:body,x:.46,y:1.50,w:12.40,h:+(12.40*PRES_AREA.height/PRES_AREA.width).toFixed(3),transparency:0});
         else s.addText('Visuel indisponible lors de l’export – conserve la slide de l’Observatoire Prestaterre pour réexporter.',{x:1.0,y:3.2,w:11.3,h:.5,fontFace:font,fontSize:16,color:'728279',align:'center',margin:0});
         s.addShape(pptx.ShapeType.line,{x:.46,y:6.48,w:12.4,h:0,line:{color:'C9D8D1',width:1}});
         s.addText(String(model.scope||''),{x:.46,y:6.60,w:8.4,h:.48,fontFace:font,fontSize:Math.max(8.5,Math.min(12,(Number(model.footerSize)||16)*.65)),color:'38544A',margin:0,fit:'shrink'});
@@ -708,7 +771,7 @@
       if(!head || head.querySelector('.obs-pres-head-tools')) return;
       const wrap=document.createElement('div');
       wrap.className='obs-pres-head-tools';
-      wrap.innerHTML='<button type="button" class="obs-card-action obs-pres-add-btn obs-pres-icon-btn" data-add-presentation="1" title="Ajouter à la présentation" aria-label="Ajouter à la présentation">▣</button>';
+      wrap.innerHTML='<button type="button" class="obs-card-action obs-pres-add-btn obs-pres-icon-btn" data-add-presentation="1" title="Capturer pour la présentation" aria-label="Capturer pour la présentation">▣</button>';
       const mapActions=head.querySelector('.obs-map-head-actions');if(mapActions)mapActions.appendChild(wrap);else head.appendChild(wrap);
     });
   }
@@ -1936,6 +1999,7 @@
     updateFilterPanelBadge(requirementsMode);
     restoreUiScroll(scrollSnapshot);
     if(state.page==='territories') hydrateTerritoryMap(token);
+    if(state.page==='presentation'){ fitPresentationItems(pageEl); fitPresentationPreview(); }
     if(requirementsMode) window.NEWOSB_REQUIREMENTS?.afterRender?.();
   }
 
@@ -2909,6 +2973,14 @@
     if(SHARE && e.target.closest('[data-share-popup]')){SHARE.start(true);return;}
     if(SHARE && e.target.closest('[data-open-generator],[data-open-source],[data-add-presentation]')) return;
     const addPres=e.target.closest('[data-add-presentation]'); if(addPres){ addCurrentCardToPresentation(addPres).catch(err=>{console.error(err);alert('Ajout à la présentation impossible : '+(err?.message||err));}); return; }
+    if(e.target.closest('[data-pres-new-slide]')){createSlideFromSelection();return;}
+    const presAddTo=e.target.closest('[data-pres-add-to-slide]'); if(presAddTo){addSelectionToSlide(presAddTo.dataset.presAddToSlide);return;}
+    if(e.target.closest('[data-pres-capture-all]')){state.presentationCaptures.forEach(c=>state.presentationChecked.add(c.id));renderPage();return;}
+    if(e.target.closest('[data-pres-capture-none]')){state.presentationChecked.clear();renderPage();return;}
+    if(e.target.closest('[data-pres-captures-clear]')){clearPresentationCaptures();return;}
+    const capDel=e.target.closest('[data-pres-capture-delete]'); if(capDel){deletePresentationCapture(capDel.dataset.presCaptureDelete);return;}
+    const itemMove=e.target.closest('[data-pres-item-move][data-pres-item]'); if(itemMove){moveSlideItem(itemMove.dataset.presId,itemMove.dataset.presItem,itemMove.dataset.presItemMove==='up'?-1:1);return;}
+    const itemRemove=e.target.closest('[data-pres-item-remove]'); if(itemRemove){removeSlideItem(itemRemove.dataset.presId,itemRemove.dataset.presItemRemove);return;}
     const presSelect=e.target.closest('[data-pres-select]'); if(presSelect){ state.presentationActiveId=presSelect.dataset.presSelect; savePresentationState(); renderPage(); return; }
     const presDelete=e.target.closest('[data-pres-delete]'); if(presDelete){ deletePresentationSlide(presDelete.dataset.presDelete); return; }
     const presDup=e.target.closest('[data-pres-duplicate]'); if(presDup){ duplicatePresentationSlide(presDup.dataset.presDuplicate); return; }
@@ -2919,7 +2991,7 @@
     const presPptx=e.target.closest('[data-pres-export-pptx]'); if(presPptx){ exportPresentationPptx().catch(err=>{console.error(err);alert('Export PPTX impossible : '+(err?.message||err));}); return; }
     const presExport=e.target.closest('[data-pres-export][data-pres-id]'); if(presExport){ exportPresentationSlide(presExport.dataset.presId, presExport.dataset.presExport||'png'); return; }
     const presExportAll=e.target.closest('[data-pres-export-all]'); if(presExportAll){ exportAllPresentationSlides(presExportAll.dataset.presExportAll||'png'); return; }
-    const presFull=e.target.closest('[data-pres-fullscreen]'); if(presFull){ document.getElementById('obsPresentationStage')?.requestFullscreen?.(); return; }
+    const presFull=e.target.closest('[data-pres-fullscreen]'); if(presFull){ pageEl.querySelector('[data-pres-stage-fit]')?.requestFullscreen?.(); return; }
     const pageLink=e.target.closest('[data-page-link]'); if(pageLink){changePage(pageLink.dataset.pageLink);return;}
     const layer=e.target.closest('[data-map-layer]'); if(layer){const key=layer.dataset.mapLayer;if(Object.prototype.hasOwnProperty.call(state.mapLayers,key)){state.mapLayers[key]=!state.mapLayers[key];renderPage();}return;}
     const flow=e.target.closest('[data-flow-focus][data-flow-before]'); if(flow){const key=flow.dataset.flowFocus,val=decodeURIComponent(flow.dataset.flowBefore||'');if(state.flowFocus[key]!==undefined){state.flowFocus[key]=norm(state.flowFocus[key])===norm(val)?'':val;renderPage();}return;}
@@ -2955,16 +3027,17 @@
     const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
     const mapGroup=e.target.closest?.('[data-map-grouping-toggle]'); if(mapGroup){state.mapOperationGrouping=state.mapFocusRegion?'department':(mapGroup.checked?'region':'department');state.territorySummaryPage=1;renderPage();return;}
-    const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); renderPage(); return; }
+    const capCheck=e.target.closest?.('[data-pres-capture-check]'); if(capCheck){const id=capCheck.dataset.presCaptureCheck;if(capCheck.checked)state.presentationChecked.add(id);else state.presentationChecked.delete(id);preserveUiScroll(()=>renderPage());return;}
+    const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.type==='checkbox'?presField.checked:presField.value); renderPage(); return; }
     const metric=e.target.closest?.('[data-solution-metric]'); if(metric){state.solutionMetric=metric.value||'ubat';const top=pageEl.scrollTop;renderPage();requestAnimationFrame(()=>{pageEl.scrollTop=top;});return;}
   });
   pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
   pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
   pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
 
-  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
+  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField&&presField.type==='checkbox')return; if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const capTitle=e.target.closest?.('[data-pres-capture-title]'); if(capTitle){const c=presentationCapture(capTitle.dataset.presCaptureTitle);if(c){c.title=(capTitle.textContent||'').trim()||c.title;savePresentationState();}return;} const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
-  document.addEventListener('fullscreenchange',()=>{const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';});
+  document.addEventListener('fullscreenchange',()=>{if(state.page==='presentation')requestAnimationFrame(fitPresentationPreview);const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';});
   window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});

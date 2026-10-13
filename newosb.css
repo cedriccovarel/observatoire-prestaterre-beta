@@ -433,10 +433,8 @@ body.auth-granted .app-shell{height:100vh!important;min-height:0!important;overf
 .obs-card-action.danger{background:#fff4f2;border-color:#f0c4bd;color:#b34132}
 @media (max-width: 1260px){
   .obs-presentation-layout{grid-template-columns:1fr}
-  .obs-pres-stage{width:100%;min-width:980px}
 }
 @media (max-width: 900px){
-  .obs-pres-stage{min-width:760px}
   .obs-pres-top{grid-template-columns:140px 1fr}
 }
 
@@ -1358,3 +1356,56 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-map-pop li small i{font-style:normal}
 .obs-map-pop-empty{padding:12px;font-size:12px;color:#7a8a8d}
 .obs-map-pop footer{padding:8px 12px 12px;border-top:1px solid #eef3f0;display:flex;justify-content:flex-end}
+
+/* V6.24 : présentation — boîte de captures et slides composées */
+.obs-pres-captures{background:#fff;border:1px solid #d7e2dc;border-radius:16px;padding:12px;box-shadow:0 8px 24px rgba(6,64,43,.06);display:flex;flex-direction:column;gap:10px}
+.obs-pres-captures .obs-pres-side-head h3 small{font-size:12px;font-weight:800;color:#fff;background:#06402b;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:2px}
+.obs-pres-capture-list{list-style:none;margin:0;padding:0 2px 0 0;display:flex;flex-direction:column;gap:6px;max-height:360px;overflow:auto}
+.obs-pres-capture{position:relative;border:1px solid #e1ebe6;border-radius:12px;background:#fbfdfc;transition:border-color .12s,background .12s}
+.obs-pres-capture.is-checked{border-color:#16864f;background:#eef7f1}
+.obs-pres-capture>label{display:grid;grid-template-columns:18px 96px minmax(0,1fr);gap:9px;align-items:center;padding:7px 30px 7px 8px;cursor:pointer}
+.obs-pres-capture>label input{margin:0;accent-color:#06402b;width:16px;height:16px}
+.obs-pres-capture-thumb{display:block;width:96px;height:54px;border:1px solid #dbe7e1;border-radius:6px;overflow:hidden;background:#fff;pointer-events:none;position:relative}
+.obs-pres-capture-thumb .obs-pres-items,.obs-pres-capture-thumb .obs-pres-item,.obs-pres-capture-thumb .obs-pres-item-body,.obs-pres-capture-thumb .obs-pres-item-scaler{display:block}
+.obs-pres-capture-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.obs-pres-capture-text b{font-size:12.5px;color:#143226;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.obs-pres-capture-text small{font-size:11px;color:#6a7d75}
+.obs-pres-capture-del{position:absolute;right:6px;top:6px;border:0;background:transparent;color:#8a9a95;font-size:16px;line-height:1;width:22px;height:22px;border-radius:50%;cursor:pointer}
+.obs-pres-capture-del:hover{background:#fff1ed;color:#a13e28}
+.obs-pres-captures-empty{font-size:12.5px;color:#5d6f66;line-height:1.45;padding:10px;border:1px dashed #c9d8d1;border-radius:12px;background:#f8fbf9}
+.obs-pres-capture-actions{display:flex;gap:8px;flex-wrap:wrap}
+.obs-pres-primary{background:#06402b!important;border-color:#06402b!important;color:#fff!important}
+.obs-pres-capture-actions button[disabled],.obs-pres-side-actions button[disabled]{opacity:.45;cursor:not-allowed}
+.obs-pres-add-btn.is-captured{background:#16864f!important;color:#fff!important;border-color:#16864f!important}
+.obs-pres-editor-group{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid #e1ebe6;border-radius:12px;background:#f8fbf9}
+.obs-pres-editor-group>b{font-size:12px;color:#143226}
+.obs-pres-item-list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;counter-reset:presitem}
+.obs-pres-item-list li{display:grid;grid-template-columns:minmax(0,1fr) 26px 26px 26px;gap:4px;align-items:center;font-size:12px;color:#244c3c;background:#fff;border:1px solid #e1ebe6;border-radius:8px;padding:4px 4px 4px 8px;counter-increment:presitem}
+.obs-pres-item-list li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs-pres-item-list li span:before{content:counter(presitem) ". ";font-weight:800;color:#16864f}
+.obs-pres-item-list button{border:1px solid #d7e2dc;background:#fff;border-radius:6px;height:24px;cursor:pointer;color:#06402b;font-weight:800}
+.obs-pres-item-list button[disabled]{opacity:.35;cursor:default}
+.obs-pres-check{flex-direction:row!important;align-items:center;gap:8px!important}
+.obs-pres-muted{font-size:12px;color:#6a7d75;margin:0}
+.obs-pres-stage-standard .obs-pres-figure-wrap.is-multi{border-color:transparent;background:transparent}
+.obs-pres-items{position:relative;overflow:hidden;box-sizing:border-box}
+.obs-pres-item{position:absolute;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden}
+.obs-pres-items.is-multi .obs-pres-item{border:1px solid #d6e4dd;border-radius:12px;background:#fbfdfc}
+.obs-pres-item-head{display:flex;align-items:flex-end;padding:0 3px 6px;flex:none;box-sizing:border-box}
+.obs-pres-item-head b{font-size:var(--pres-item-title,16px);font-weight:800;color:#102D25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;outline:none;border-radius:5px}
+.obs-pres-item-head b:focus{background:#f2f8f4;box-shadow:0 0 0 2px rgba(6,64,43,.10)}
+.obs-pres-item-body{position:relative;overflow:hidden;min-height:0;flex:none}
+.obs-pres-item-scaler{position:absolute;left:0;top:0;transform-origin:0 0}
+.obs-pres-item-scaler .obs-card{box-shadow:none!important;border:0!important;background:transparent!important;padding:0!important;margin:0!important;min-height:0!important;height:auto!important}
+.obs-pres-item-scaler .obs-card-head,.obs-pres-item-scaler .obs-pres-head-tools,.obs-pres-item-scaler [data-add-presentation]{display:none!important}
+.obs-pres-item-scaler .obs-table-wrap{max-height:none!important;overflow:visible!important}
+.obs-pres-items-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:2px dashed #c9d8d1;border-radius:14px;color:#5d6f66;font-size:15px;text-align:center;padding:20px}
+.obs-pres-items-empty b{font-size:20px;color:#143226}
+
+/* Aperçu réduit à la largeur disponible ; en plein écran, la slide est agrandie pour remplir l'écran. */
+.obs-pres-stage-fit{position:relative;margin:0 auto}
+.obs-pres-stage-fit>.obs-pres-stage{position:absolute;left:0;top:0;flex:none}
+.obs-pres-canvas-wrap{overflow:hidden}
+.obs-pres-stage-fit:fullscreen{background:#0d1f19;width:100vw!important;height:100vh!important}
+/* Dans une slide, les zones défilantes s'affichent en entier (la mise à l'échelle se charge de la taille). */
+.obs-pres-item-scaler .obs-tunnel-scroll,.obs-pres-item-scaler .obs-status-year-chart,.obs-pres-item-scaler .obs-table-wrap,.obs-pres-item-scaler .req-table-wrap,.obs-pres-item-scaler .obs-heatmap{overflow:visible!important;max-height:none!important}

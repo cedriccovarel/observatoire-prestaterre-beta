@@ -1,5 +1,14 @@
 # Historique
 
+## V6.24
+
+**Présentation : boîte de captures et slides composées**
+- Le bouton ▣ (graphique, tableau, chiffres clés) ne crée plus directement une slide : il dépose une **capture** dans la boîte de l’onglet Présentation (aperçu miniature, onglet d’origine, date, nombre de slides qui l’utilisent). Les nouvelles captures arrivent cochées.
+- On coche les captures voulues puis **« Nouvelle slide »** : la slide les dispose automatiquement (1 à plusieurs visuels) en choisissant la grille qui remplit le mieux la zone, et adapte la taille des visuels (réduits ou agrandis proportionnellement, réorganisés à une largeur proche de l’original) et des titres. Autant de slides que nécessaire, chacune avec sa sélection ; « Ajouter à cette slide » complète la slide affichée.
+- Par slide : ordre des visuels (↑ ↓), retrait d’un visuel (il reste dans la boîte), disposition (Automatique, Mise en avant, 1 à 4 colonnes), titre au-dessus de chaque visuel (éditable sur la slide), taille des visuels. Titre, sur-titre, légende, périmètre, note et tailles de texte restent éditables.
+- Exports inchangés : Google Slides, PPTX, PNG 4K, SVG, par slide ou pour toute la présentation. Le PNG 4K et le SVG sont désormais mis en page à la taille réelle de la slide puis agrandis (rendu identique à l’aperçu). L’aperçu s’adapte à la largeur de l’écran ; « Plein écran » agrandit la slide.
+- Les présentations enregistrées par une version précédente sont reprises : chaque visuel devient une capture de la boîte, les slides sont conservées.
+
 ## V6.23
 
 **Carte territoriale (onglet Territoires)**
