@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.32 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.33 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -40,7 +40,8 @@
   const ui = {
     el: null, canvas: null, ctx: null, raf: 0, last: 0, t: 0, visible: false, openTimer: 0, closeTimer: 0,
     target: 0, shown: 0, known: false, onEnter: null, failed: false, loaded: false,
-    phases: null, phaseKey: '', puffs: [], flow: [], spawn: 0, sparks: [], tech: { x: 280, dir: -1 }, birds: []
+    phases: null, phaseKey: '', puffs: [], flow: [], spawn: 0, sparks: [], tech: { x: 280, dir: -1 }, birds: [],
+    truck: null, delivered: {}, dust: []
   };
 
   function build() {
@@ -363,9 +364,13 @@
     if (show <= 0.01) return;
     const mx = 352, top = 46, rise = ease(stageK(r, 1) * 4), mastTop = GROUND - (GROUND - top) * rise;
     ctx.save(); ctx.globalAlpha = show;
-    // mât en treillis
-    ctx.strokeStyle = '#d9a520'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(mx - 5, GROUND); ctx.lineTo(mx - 5, mastTop); ctx.moveTo(mx + 5, GROUND); ctx.lineTo(mx + 5, mastTop); ctx.stroke();
+    // V6.33 : lest béton au pied, membrures en relief (arête sombre + reflet), moufle sur le câble
+    const cb = ctx.createLinearGradient(0, GROUND - 9, 0, GROUND); cb.addColorStop(0, '#c9ccc7'); cb.addColorStop(1, '#8f938e');
+    ctx.fillStyle = cb; ctx.fillRect(mx - 14, GROUND - 9, 28, 9); ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(mx - 14, GROUND - 5, 28, 0.8); ctx.fillRect(mx - 0.4, GROUND - 9, 0.8, 9);
+    ctx.lineCap = 'round';
+    [['#8a6a12', 3.6], ['#e9b52c', 2.2]].forEach(([c, w]) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(mx - 5, GROUND - 9); ctx.lineTo(mx - 5, mastTop); ctx.moveTo(mx + 5, GROUND - 9); ctx.lineTo(mx + 5, mastTop); ctx.stroke(); });
+    ctx.strokeStyle = 'rgba(255,240,190,.55)'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(mx + 4.4, GROUND - 9); ctx.lineTo(mx + 4.4, mastTop); ctx.stroke();
+    ctx.lineCap = 'butt'; ctx.strokeStyle = '#d9a520';
     ctx.lineWidth = 1; ctx.beginPath();
     for (let y = GROUND; y > mastTop + 8; y -= 12) { ctx.moveTo(mx - 5, y); ctx.lineTo(mx + 5, y - 12); }
     ctx.stroke();
@@ -375,13 +380,15 @@
       ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(jx0, top); ctx.lineTo(jx1, top); ctx.moveTo(jx0 + 20, top + 7); ctx.lineTo(mx, top + 7); ctx.stroke();
       ctx.lineWidth = 1; ctx.beginPath(); for (let x = jx0 + 20; x < mx; x += 14) { ctx.moveTo(x, top + 7); ctx.lineTo(x + 7, top); ctx.lineTo(x + 14, top + 7); } ctx.stroke();
       ctx.beginPath(); ctx.moveTo(mx, top - 16); ctx.lineTo(jx0 + 20, top); ctx.moveTo(mx, top - 16); ctx.lineTo(jx1 - 6, top); ctx.stroke();
-      ctx.fillStyle = '#5f6b66'; ctx.fillRect(jx1 - 16, top + 1, 16, 12);
+      const cw = ctx.createLinearGradient(0, top + 1, 0, top + 13); cw.addColorStop(0, '#b9bdb8'); cw.addColorStop(1, '#7e837f');
+      ctx.fillStyle = cw; ctx.fillRect(jx1 - 16, top + 1, 16, 12); ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(jx1 - 16, top + 5, 16, 0.7); ctx.fillRect(jx1 - 16, top + 9, 16, 0.7);
       ctx.fillStyle = '#d9a520'; ctx.fillRect(mx - 8, top + 7, 16, 12); ctx.fillStyle = '#cfe7f2'; ctx.fillRect(mx - 5, top + 10, 8, 6);
       // chariot + câble + charge : va-et-vient lent au-dessus du bâtiment
       const k = 0.5 + 0.5 * Math.sin(t * 0.55), tx = 214 + k * 112, drop = 46 + 26 * (0.5 + 0.5 * Math.sin(t * 0.9 + 1)), sway = Math.sin(t * 1.7) * 2.5;
       ctx.fillStyle = '#3c4a45'; ctx.fillRect(tx - 5, top + 1, 10, 6);
       ctx.strokeStyle = '#3c4a45'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tx, top + 7); ctx.lineTo(tx + sway, top + drop); ctx.stroke();
       const i = stageIndex(r), lx = tx + sway, ly = top + drop;
+      ctx.fillStyle = '#f2c94c'; rr(ctx, lx - 3.5, ly - 7, 7, 5, 1); ctx.fill(); ctx.fillStyle = '#3c4a45'; ctx.fillRect(lx - 0.6, ly - 2, 1.2, 2);
       if (i === 1) { ctx.fillStyle = '#efe6cf'; ctx.fillRect(lx - 16, ly, 32, 12); ctx.strokeStyle = '#c9b98f'; ctx.strokeRect(lx - 16, ly, 32, 12); }
       else if (i === 2) { ctx.fillStyle = '#8cc0d6'; ctx.fillRect(lx - 9, ly, 18, 20); ctx.fillStyle = '#fff'; ctx.fillRect(lx - 1, ly, 2, 20); ctx.fillRect(lx - 9, ly + 9, 18, 2); }
       else if (i === 3) { ctx.fillStyle = '#284b63'; ctx.fillRect(lx - 15, ly, 30, 10); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.moveTo(lx - 5, ly); ctx.lineTo(lx - 5, ly + 10); ctx.moveTo(lx + 5, ly); ctx.lineTo(lx + 5, ly + 10); ctx.stroke(); }
@@ -419,17 +426,155 @@
   // V6.29 : palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide à
   // mesure que l'étape avance.
   function pallet(ctx, r) {
-    const i = stageIndex(r); if (i < 1 || i > 3) return;
+    const i = stageIndex(r); if (i < 1 || i > 4) return;
+    // V6.33 : la palette n'apparaît qu'une fois livrée par le camion (sauf animations réduites).
+    if (!reduced() && !ui.delivered[i]) return;
     const k = stageK(r, i), left = Math.max(0, Math.ceil((1 - k) * 5)), x = 372, y = GROUND;
-    const fade = Math.min(1, k * 8, (1 - k) * 8 + 0.15);
+    const fade = Math.min(1, (1 - k) * 8 + 0.15);
     ctx.save(); ctx.globalAlpha = Math.max(0.15, fade);
-    ctx.fillStyle = '#b8945f'; ctx.fillRect(x, y - 5, 40, 5); ctx.fillStyle = '#8f6f42'; ctx.fillRect(x + 3, y - 2, 6, 2); ctx.fillRect(x + 31, y - 2, 6, 2);
+    ctx.fillStyle = 'rgba(25,35,30,.22)'; ctx.beginPath(); ctx.ellipse(x + 16, y + 1, 26, 3, 0, 0, Math.PI * 2); ctx.fill();
+    const wood = ctx.createLinearGradient(0, y - 6, 0, y); wood.addColorStop(0, '#d2ad74'); wood.addColorStop(1, '#9a7442');
+    ctx.fillStyle = wood; ctx.fillRect(x, y - 6, 40, 3); ctx.fillRect(x + 1, y - 2, 6, 2); ctx.fillRect(x + 17, y - 2, 6, 2); ctx.fillRect(x + 33, y - 2, 6, 2);
+    ctx.fillStyle = 'rgba(70,50,25,.35)'; ctx.fillRect(x, y - 3, 40, 1); for (let px = x + 8; px < x + 40; px += 8) ctx.fillRect(px, y - 6, 0.7, 3);
     for (let n = 0; n < left; n++) {
-      const yy = y - 5 - (n + 1) * (i === 2 ? 7 : 5);
-      if (i === 1) { ctx.fillStyle = n % 2 ? '#efe6cf' : '#e6dbbe'; ctx.fillRect(x + 1, yy, 38, 5); }
-      else if (i === 2) { ctx.fillStyle = '#8cc0d6'; ctx.fillRect(x + 4, yy, 32, 6); ctx.fillStyle = '#fff'; ctx.fillRect(x + 19, yy, 2, 6); }
-      else { ctx.fillStyle = '#284b63'; ctx.fillRect(x + 1, yy, 38, 4); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x + 1, yy, 38, 1); }
+      const hh = i === 2 ? 7 : (i === 4 ? 6 : 5), yy = y - 6 - (n + 1) * hh;
+      cargoLayer(ctx, i, x + 20, yy, n);
     }
+    if (left > 0 && i !== 2) { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(x + 12, y - 6); ctx.lineTo(x + 12, y - 6 - left * (i === 4 ? 6 : 5)); ctx.moveTo(x + 28, y - 6); ctx.lineTo(x + 28, y - 6 - left * (i === 4 ? 6 : 5)); ctx.stroke(); }
+    ctx.restore();
+  }
+  // Une couche de matériau (centrée en cx, sommet en y) : isolant, fenêtre, panneau solaire, bac de sedum.
+  function cargoLayer(ctx, i, cx, y, n) {
+    if (i === 1) { const g = ctx.createLinearGradient(0, y, 0, y + 5); g.addColorStop(0, '#f6efd9'); g.addColorStop(1, '#d9caa0'); ctx.fillStyle = g; ctx.fillRect(cx - 19, y, 38, 5); ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(cx - 19, y, 38, 1); ctx.fillStyle = 'rgba(120,100,60,.25)'; ctx.fillRect(cx - 19, y + 4, 38, 1); }
+    else if (i === 2) { ctx.fillStyle = '#f4f6f5'; ctx.fillRect(cx - 16, y, 32, 7); const g = ctx.createLinearGradient(cx - 16, y, cx + 16, y + 7); g.addColorStop(0, '#9cc9dc'); g.addColorStop(0.5, '#d9eef6'); g.addColorStop(1, '#6fa6c0'); ctx.fillStyle = g; ctx.fillRect(cx - 14, y + 1, 13, 5); ctx.fillRect(cx + 1, y + 1, 13, 5); }
+    else if (i === 3) { const g = ctx.createLinearGradient(cx - 19, y, cx + 19, y + 4); g.addColorStop(0, '#1c3a52'); g.addColorStop(0.6, '#2f5f82'); g.addColorStop(1, '#5d8fb2'); ctx.fillStyle = g; ctx.fillRect(cx - 19, y, 38, 4); ctx.fillStyle = '#cfd8dd'; ctx.fillRect(cx - 19, y, 38, 0.8); ctx.fillRect(cx - 19, y, 0.8, 4); ctx.fillRect(cx + 18.2, y, 0.8, 4); }
+    else { ctx.fillStyle = '#3d3a36'; ctx.fillRect(cx - 18, y + 2, 36, 4); for (let k = 0; k < 9; k++) { ctx.fillStyle = (k + n) % 2 ? '#79b86e' : '#4f9a58'; ctx.beginPath(); ctx.arc(cx - 16 + k * 4, y + 2, 2.2, 0, Math.PI * 2); ctx.fill(); } }
+  }
+  function cargoHeight(i) { return i === 2 ? 21 : (i === 4 ? 18 : 15); }
+  // Charge complète du camion (3 couches), sommet en topY.
+  function cargo(ctx, i, cx, topY) {
+    const hh = i === 2 ? 7 : (i === 4 ? 6 : 5);
+    for (let n = 0; n < 3; n++) cargoLayer(ctx, i, cx, topY + n * hh, n);
+    if (i !== 2) { ctx.strokeStyle = 'rgba(40,40,40,.45)'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(cx - 8, topY); ctx.lineTo(cx - 8, topY + 3 * hh); ctx.moveTo(cx + 8, topY); ctx.lineTo(cx + 8, topY + 3 * hh); ctx.stroke(); }
+  }
+
+  // V6.33 : camion plateau de livraison avec bras de grue auxiliaire. À chaque étape (isolation,
+  // menuiseries, énergie, végétalisation), il arrive, se gare, dépose le matériau de l'étape sur la palette
+  // avec son bras, puis repart. Animation sur l'horloge (pas sur la progression) : elle reste fluide même
+  // si les données arrivent par à-coups. Animations réduites : camion garé, sans mouvement.
+  const TRUCK = { stop: 420, len: 122, arrive: 2.4, unfold: 3.0, lift: 4.6, fold: 5.2, leave: 7.8 };
+  function updateTruck(r, dt, still) {
+    const i = stageIndex(r);
+    if (still) return;
+    const tr = ui.truck;
+    if (tr) { tr.time += dt; if (tr.time >= TRUCK.lift) ui.delivered[tr.stage] = true; if (tr.time >= TRUCK.leave) ui.truck = null; return; }
+    if (i >= 1 && i <= 4 && !ui.delivered[i] && stageK(r, i) < 0.9) ui.truck = { stage: i, time: 0, dist: 0, puff: 0 };
+    else if (i >= 1 && i <= 4 && !ui.delivered[i]) ui.delivered[i] = true; // étape trop rapide : pas de livraison
+  }
+  function ik(px, py, l1, l2, tx, ty) {
+    let dx = tx - px, dy = ty - py, d = Math.hypot(dx, dy);
+    d = Math.max(Math.abs(l1 - l2) + 0.5, Math.min(l1 + l2 - 0.5, d));
+    const a = Math.atan2(dy, dx), b = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)));
+    const e1 = { x: px + Math.cos(a - b) * l1, y: py + Math.sin(a - b) * l1 }, e2 = { x: px + Math.cos(a + b) * l1, y: py + Math.sin(a + b) * l1 };
+    const e = e1.y < e2.y ? e1 : e2, a2 = Math.atan2(ty - e.y, tx - e.x);
+    return { e, tip: { x: e.x + Math.cos(a2) * l2, y: e.y + Math.sin(a2) * l2 } };
+  }
+  function wheel(ctx, cx, cy, rad, ang) {
+    const g = ctx.createRadialGradient(cx - 1, cy - 1, 1, cx, cy, rad); g.addColorStop(0, '#3a3d3c'); g.addColorStop(0.75, '#232524'); g.addColorStop(1, '#141615');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+    const rim = ctx.createRadialGradient(cx - 1, cy - 1, 0.5, cx, cy, rad * 0.55); rim.addColorStop(0, '#f2f4f3'); rim.addColorStop(1, '#8e9592');
+    ctx.fillStyle = rim; ctx.beginPath(); ctx.arc(cx, cy, rad * 0.55, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5d6461'; for (let k = 0; k < 5; k++) { const a = ang + k * Math.PI * 2 / 5; ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rad * 0.33, cy + Math.sin(a) * rad * 0.33, 0.8, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#2b2f2d'; ctx.beginPath(); ctx.arc(cx, cy, rad * 0.14, 0, Math.PI * 2); ctx.fill();
+  }
+  function truck(ctx, r, t, dt, still) {
+    let tr = ui.truck;
+    if (still) { const i = stageIndex(r); if (i < 1 || i > 4) return; tr = { stage: i, time: TRUCK.fold + 0.01, dist: 0, parked: true }; }
+    if (!tr) return;
+    const T = tr.time, L = TRUCK.len;
+    let x;
+    if (T < TRUCK.arrive) { const u = T / TRUCK.arrive; x = TRUCK.stop + (W + 40 - TRUCK.stop) * Math.pow(1 - u, 2.2); }
+    else if (T < TRUCK.fold || tr.parked) x = TRUCK.stop;
+    else { const u = (T - TRUCK.fold) / (TRUCK.leave - TRUCK.fold); x = TRUCK.stop - (TRUCK.stop + L + 30) * u * u; }
+    const prev = tr.x === undefined ? x : tr.x; tr.dist = (tr.dist || 0) + (prev - x); tr.x = x;
+    const speed = dt > 0 ? Math.abs(prev - x) / dt : 0, braking = T > TRUCK.arrive - 0.7 && T < TRUCK.arrive + 0.6;
+    const yW = GROUND + 1, rad = 7.5, ang = tr.dist / rad, bounce = speed > 5 ? Math.sin(t * 22) * 0.35 : 0;
+    // poussière soulevée par les roues arrière et fumée d'échappement au démarrage
+    if (!still && speed > 25 && Math.random() < dt * 30) ui.dust.push({ x: x + L - 18 + Math.random() * 10, y: yW + 4, vx: 10 + Math.random() * 14, vy: -6 - Math.random() * 6, age: 0, s: 3 + Math.random() * 3, c: '170,150,120' });
+    if (!still && T > TRUCK.fold - 0.2 && T < TRUCK.fold + 1.4 && Math.random() < dt * 14) ui.dust.push({ x: x + 33, y: yW - 1, vx: 8 + Math.random() * 6, vy: -9 - Math.random() * 5, age: 0, s: 2.5 + Math.random() * 2, c: '110,114,112' });
+    ctx.save();
+    // ombre portée (soleil en haut à droite → ombre vers la gauche)
+    ctx.save(); try { ctx.filter = 'blur(2px)'; } catch {} ctx.fillStyle = 'rgba(20,28,24,.30)'; ctx.beginPath(); ctx.ellipse(x + L / 2 - 8, yW + rad - 0.5, L / 2 + 6, 4.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.translate(0, bounce);
+    // châssis
+    ctx.fillStyle = '#2a2e2c'; ctx.fillRect(x + 6, yW - 8, L - 8, 5);
+    // plateau : plancher bois + ridelles basses
+    const bedX = x + 36, bedW = L - 37, bedY = yW - 14;
+    const bw = ctx.createLinearGradient(0, bedY, 0, bedY + 6); bw.addColorStop(0, '#c49a62'); bw.addColorStop(1, '#8b6a3e');
+    ctx.fillStyle = bw; ctx.fillRect(bedX, bedY, bedW, 6);
+    ctx.fillStyle = '#7d8783'; ctx.fillRect(bedX, bedY - 4, bedW, 4); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(bedX, bedY - 4, bedW, 1);
+    ctx.fillStyle = '#5c6562'; for (let px = bedX; px <= bedX + bedW - 2; px += 21) ctx.fillRect(px, bedY - 5, 2, 5);
+    ctx.fillStyle = '#d64535'; ctx.fillRect(x + L - 2, bedY + 1, 2, 4); // feu arrière
+    // garde-boue et roues (avant, tandem arrière)
+    const wheels = [x + 17, x + L - 30, x + L - 14];
+    ctx.fillStyle = '#1f2321'; wheels.forEach((wx, k) => { ctx.beginPath(); ctx.arc(wx, yW, rad + 2, Math.PI, 0); ctx.lineTo(wx + rad + 2, yW - 2); ctx.lineTo(wx - rad - 2, yW - 2); ctx.closePath(); if (k === 0) ctx.fill(); });
+    ctx.fillRect(x + L - 41, yW - 10, 38, 3);
+    wheels.forEach(wx => wheel(ctx, wx, yW, rad, -ang));
+    // cabine : carrosserie claire en dégradé, pare-brise reflétant le ciel, chauffeur, rétroviseur
+    const cab = ctx.createLinearGradient(x, yW - 40, x + 34, yW);
+    cab.addColorStop(0, '#ffffff'); cab.addColorStop(0.55, '#e7ecea'); cab.addColorStop(1, '#b9c2be');
+    ctx.fillStyle = cab; ctx.beginPath(); ctx.moveTo(x + 2, yW - 4); ctx.lineTo(x + 1, yW - 24); ctx.quadraticCurveTo(x + 2, yW - 38, x + 10, yW - 39); ctx.lineTo(x + 34, yW - 39); ctx.lineTo(x + 35, yW - 4); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,70,66,.35)'; ctx.lineWidth = 0.7; ctx.stroke();
+    ctx.fillStyle = C.green2; ctx.fillRect(x + 1.5, yW - 15, 33.5, 3); // bande de couleur
+    const ws = ctx.createLinearGradient(x + 2, yW - 37, x + 14, yW - 22); ws.addColorStop(0, '#dff0f8'); ws.addColorStop(0.5, '#8fb7cc'); ws.addColorStop(1, '#4d6f82');
+    ctx.fillStyle = ws; ctx.beginPath(); ctx.moveTo(x + 3, yW - 23); ctx.quadraticCurveTo(x + 3.5, yW - 35, x + 10, yW - 36); ctx.lineTo(x + 14, yW - 36); ctx.lineTo(x + 14, yW - 23); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#5f8296'; rr(ctx, x + 16, yW - 36, 15, 12, 1.5); ctx.fill();
+    ctx.fillStyle = '#2f3d4a'; ctx.beginPath(); ctx.arc(x + 22, yW - 29, 3.4, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(x + 18.5, yW - 26.5, 7, 3); // chauffeur
+    ctx.fillStyle = '#f2c94c'; ctx.beginPath(); ctx.arc(x + 22, yW - 30.5, 3.5, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.beginPath(); ctx.moveTo(x + 17, yW - 35); ctx.lineTo(x + 22, yW - 35); ctx.lineTo(x + 17, yW - 27); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,70,66,.4)'; ctx.beginPath(); ctx.moveTo(x + 15, yW - 22); ctx.lineTo(x + 15, yW - 5); ctx.stroke(); ctx.fillStyle = '#7d8783'; ctx.fillRect(x + 25, yW - 20, 4, 1.2);
+    ctx.fillStyle = '#3a403e'; ctx.fillRect(x - 3, yW - 33, 1.5, 9); ctx.fillRect(x - 4.5, yW - 33, 3, 6); // rétroviseur
+    ctx.fillStyle = '#3a403e'; ctx.fillRect(x - 1, yW - 8, 8, 4); // pare-chocs
+    ctx.fillStyle = '#fff3c4'; ctx.fillRect(x + 0.5, yW - 11, 3, 3); ctx.fillStyle = '#f0a030'; ctx.fillRect(x + 0.5, yW - 14, 3, 2);
+    ctx.fillStyle = '#4b5250'; ctx.fillRect(x + 33, yW - 9, 4, 1.5); // pot d'échappement
+    // feux de freinage
+    if (braking && !tr.parked) { const g = ctx.createRadialGradient(x + L - 1, bedY + 3, 0.5, x + L - 1, bedY + 3, 8); g.addColorStop(0, 'rgba(255,70,50,.9)'); g.addColorStop(1, 'rgba(255,70,50,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + L - 1, bedY + 3, 8, 0, Math.PI * 2); ctx.fill(); }
+    // bras de grue auxiliaire (deux segments, vérin) qui dépose la charge sur la palette
+    const pv = { x: x + 38, y: yW - 34 }, l1 = 40, l2 = 36, h = cargoHeight(tr.stage);
+    const bedTop = { x: x + 80, y: bedY - 4 - h }, palTop = { x: 392, y: GROUND - 6 - h }, rest = { x: pv.x + 64, y: pv.y + 14 };
+    let hook = null, load = null;
+    if (T < TRUCK.arrive) load = bedTop;
+    else if (T < TRUCK.unfold) { const u = ease((T - TRUCK.arrive) / (TRUCK.unfold - TRUCK.arrive)); hook = { x: rest.x + (bedTop.x - rest.x) * u, y: rest.y + (bedTop.y - 9 - rest.y) * u }; load = bedTop; }
+    else if (T < TRUCK.lift) { const u = ease((T - TRUCK.unfold) / (TRUCK.lift - TRUCK.unfold)); load = { x: bedTop.x + (palTop.x - bedTop.x) * u, y: bedTop.y + (palTop.y - bedTop.y) * u - 26 * Math.sin(Math.PI * u) }; hook = { x: load.x, y: load.y - 9 }; }
+    else if (T < TRUCK.fold && !tr.parked) { const u = ease((T - TRUCK.lift) / (TRUCK.fold - TRUCK.lift)); hook = { x: palTop.x + (rest.x - palTop.x) * u, y: palTop.y - 9 + (rest.y - palTop.y + 9) * u }; }
+    const tgt = hook || rest, arm = ik(pv.x, pv.y, l1, l2, tgt.x, tgt.y);
+    ctx.fillStyle = '#4a5250'; ctx.fillRect(pv.x - 3, pv.y, 6, bedY - 4 - pv.y);
+    ctx.lineCap = 'round';
+    const seg = (a, b, w) => { ctx.strokeStyle = '#9a6d12'; ctx.lineWidth = w + 1.4; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.strokeStyle = '#e0a62a'; ctx.lineWidth = w; ctx.stroke(); ctx.strokeStyle = 'rgba(255,240,190,.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y - w / 3); ctx.lineTo(b.x, b.y - w / 3); ctx.stroke(); };
+    seg(pv, arm.e, 4.6); seg(arm.e, arm.tip, 3.6);
+    ctx.strokeStyle = '#c9d0cd'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(pv.x + 2, pv.y + 6); ctx.lineTo((pv.x + arm.e.x) / 2 + 2, (pv.y + arm.e.y) / 2 + 2); ctx.stroke(); // vérin
+    ctx.fillStyle = '#3a403e'; [pv, arm.e].forEach(j => { ctx.beginPath(); ctx.arc(j.x, j.y, 2.2, 0, Math.PI * 2); ctx.fill(); });
+    ctx.lineCap = 'butt';
+    if (hook && load) { ctx.strokeStyle = '#2b2f2d'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(arm.tip.x, arm.tip.y); ctx.lineTo(load.x - 10, load.y); ctx.moveTo(arm.tip.x, arm.tip.y); ctx.lineTo(load.x + 10, load.y); ctx.stroke(); }
+    if (load) { if (load !== bedTop) { ctx.fillStyle = 'rgba(20,28,24,.18)'; ctx.beginPath(); ctx.ellipse(load.x - 4, GROUND - 1, 16, 2.5, 0, 0, Math.PI * 2); ctx.fill(); } cargo(ctx, tr.stage, load.x, load.y); }
+    ctx.restore();
+  }
+  function dust(ctx, dt) {
+    ui.dust.forEach(d => { d.age += dt; d.x += d.vx * dt; d.y += d.vy * dt; d.vy *= 0.97; const a = 0.35 * (1 - d.age / 1.4), rr2 = d.s * (1 + d.age * 1.6); if (a <= 0) return; const g = ctx.createRadialGradient(d.x, d.y, 0.5, d.x, d.y, rr2); g.addColorStop(0, `rgba(${d.c},${a})`); g.addColorStop(1, `rgba(${d.c},0)`); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, rr2, 0, Math.PI * 2); ctx.fill(); });
+    ui.dust = ui.dust.filter(d => d.age < 1.4);
+  }
+  // Cônes de signalisation posés avec la clôture.
+  function cones(ctx, r) {
+    const show = Math.min(ease(stageK(r, 1) * 3), 1 - ease(stageK(r, 4) * 2)); if (show <= 0.01) return;
+    ctx.save(); ctx.globalAlpha = show;
+    [252, 342].forEach(cx => {
+      const y = GROUND + 3;
+      ctx.fillStyle = 'rgba(20,28,24,.22)'; ctx.beginPath(); ctx.ellipse(cx - 2, y + 1, 7, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2e3230'; ctx.fillRect(cx - 6, y - 2, 12, 2.5);
+      const g = ctx.createLinearGradient(cx - 4, 0, cx + 4, 0); g.addColorStop(0, '#c4421c'); g.addColorStop(0.45, '#ff7a3d'); g.addColorStop(1, '#b23a18');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(cx - 4.5, y - 2); ctx.lineTo(cx - 1, y - 15); ctx.lineTo(cx + 1, y - 15); ctx.lineTo(cx + 4.5, y - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.beginPath(); ctx.moveTo(cx - 3.3, y - 6); ctx.lineTo(cx - 2.3, y - 10); ctx.lineTo(cx + 2.3, y - 10); ctx.lineTo(cx + 3.3, y - 6); ctx.closePath(); ctx.fill();
+    });
     ctx.restore();
   }
 
@@ -590,6 +735,10 @@
     pallet(ctx, r);
     building(ctx, r, t);
     fence(ctx, r);
+    cones(ctx, r);
+    updateTruck(r, dt, still);
+    truck(ctx, r, t, dt, still);
+    dust(ctx, dt);
     // émissions : moins nombreuses à mesure que le chantier avance
     ui.spawn += dt;
     if (!still && ui.spawn > 0.22 + r * 1.4 && ui.puffs.length < 12 && r < 0.97) {
@@ -678,7 +827,7 @@
     ui.el.querySelector('[data-loader-close]').hidden = true;
     ui.el.querySelector('[data-loader-hide]').hidden = false;
     ui.el.classList.remove('is-failed', 'is-done');
-    if (!ui.visible) { ui.target = 0; ui.shown = 0; ui.known = false; ui.puffs = []; ui.flow = []; ui.sparks = []; ui.birds = []; ui.tech = { x: 300, dir: -1 }; }
+    if (!ui.visible) { ui.target = 0; ui.shown = 0; ui.known = false; ui.puffs = []; ui.flow = []; ui.sparks = []; ui.birds = []; ui.tech = { x: 300, dir: -1 }; ui.truck = null; ui.delivered = {}; ui.dust = []; }
     const phases = Array.isArray(opts.phases) ? opts.phases.filter(p => p && p.key).map(p => ({ key: String(p.key), label: String(p.label || p.key), weight: Math.max(0.01, Number(p.weight) || 1) })) : [];
     ui.phases = phases.length > 1 ? phases : null; ui.phaseKey = ui.phases ? ui.phases[0].key : '';
     renderPhases();

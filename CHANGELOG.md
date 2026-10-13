@@ -1,5 +1,14 @@
 # Historique
 
+## V6.33
+
+- **Écran de chargement, grande passe de réalisme** :
+  - **camion de livraison** : à chaque étape (isolation, menuiseries, énergie, végétalisation), un camion plateau arrive, freine (feux stop), déplie son bras de grue auxiliaire, dépose le matériau de l’étape sur la palette (isolant, fenêtres, panneaux solaires, bacs de sedum), replie le bras et repart. Roues qui tournent, suspension, chauffeur en cabine, pare-brise qui reflète le ciel, poussière et fumée d’échappement au démarrage, ombre portée ;
+  - la palette n’apparaît qu’une fois livrée ; palette en bois et matériaux en volume (film, sangles, cadres) ;
+  - grue plus réaliste : lest béton, membrures en relief, contrepoids en blocs, moufle sur le câble ;
+  - cônes de signalisation posés avec la clôture de chantier ;
+  - animations réduites : camion garé, sans mouvement.
+
 ## V6.32
 
 - **Export Google Slides entièrement modifiable**, comme celui d’Obslide : chaque slide de l’onglet Présentation est convertie en objets natifs (zones de texte modifiables aux mêmes coupures de lignes, formes et dégradés, images d’origine, graphiques SVG vectoriels avec leurs textes) par le moteur d’export d’Obslide (`obslide-pptx.js`, copie de la V1.1.0). Le fichier est converti en présentation Google Slides par le script Apps Script OPERATIONS (API Google Drive) et s’ouvre dans la fenêtre Google, comme avant.
