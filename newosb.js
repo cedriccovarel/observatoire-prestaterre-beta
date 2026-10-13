@@ -296,8 +296,11 @@
   }
   function generatorLaunchScope(){
     const ops=filteredOperations();
+    // Codes réels : en mode anonymisé, les codes affichés sont des pseudonymes qu'Obslide ne connaît pas.
+    let operationCodes=[...new Set(ops.map(o=>String(o.code||'').trim()).filter(Boolean))];
+    if(privacy()?.enabled?.()&&runtime().connected){const real=engine.resolveRealCodes?.(operationCodes);if(real?.codes?.length)operationCodes=real.codes;}
     return {
-      operationCodes:[...new Set(ops.map(o=>String(o.code||'').trim()).filter(Boolean))],
+      operationCodes,
       count:ops.length,
       summary:activeFilterScopeText(),
       sourcePage:state.page,

@@ -1,5 +1,10 @@
 # Historique
 
+## V6.26
+
+- **Les filtres de l’Observatoire sont repris dans le générateur de rapports (Obslide)** : le bouton « Générateur de rapports » transmet la liste des opérations affichées (filtres globaux, filtres d’analyse, recherche) ; Obslide V29.9.1 ne garde que ces opérations dans ses slides connectées et dans ses slides Exigences, et affiche « Périmètre Observatoire » (retirable avec ×).
+- En mode anonymisé, les vrais codes d’opérations sont transmis (les pseudonymes ne sont pas connus d’Obslide).
+
 ## V6.25
 
 - **Présentation — plus de saut** : cocher une capture ne redessine plus la page (la liste et la page restent en place) ; lors des autres actions, la zone d’aperçu garde sa taille pendant le réaffichage, la page ne remonte plus.
