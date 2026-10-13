@@ -795,7 +795,9 @@
   function exportVisibleRows(){
     const parts=Object.keys(state.filters).filter(k=>filterValues(k).length).map(k=>`${FILTER_LABELS[k]||k} : ${filterValues(k).map(v=>k==='period'?(v==='pre2024'?'Avant 2024':v==='2025plus'?'2025–2026':v):filterOut(k,v)).join(', ')}`);
     if(state.requirement)parts.push(`Exigence : ${state.requirement}`);
-    return {rows:filteredRows().map(r=>({...r})),summary:parts.join(' · ')||'Toutes les exigences',evaluations:evaluations(filteredRows()).length};
+    // Cible et code calculés ici (mêmes règles que l'onglet Exigences : catalogue, intitulé de référence, numéro…).
+    const rows=filteredRows().map(r=>({...r,target:rowTarget(r),requirementCode:r.requirementCode||[r.requirement,r.associatedRequirementReferenceTitle,r.requirementReference,r.requirementLabel,r.requirementNumber].map(reqCode).find(Boolean)||''}));
+    return {rows,summary:parts.join(' · ')||'Toutes les exigences',evaluations:evaluations(rows).length};
   }
   window.addEventListener('newosb:privacychange',emit);
   // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.

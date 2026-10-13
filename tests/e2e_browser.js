@@ -628,7 +628,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(await page.evaluate(() => document.querySelectorAll('.obs-map-dep').length === 7 && !document.querySelector('.obs-france-map.is-focused')), '« ← Retour France » revient à la carte entière');
       check(errors.length === 0, 'carte : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
-    console.log('\nK. Générateur de rapports : Obslide reçoit les données de l’Observatoire (V6.28)');
+    console.log('\nK. Générateur de rapports : Obslide reçoit les données de l’Observatoire (V6.29)');
     { // Comme en production, l'Observatoire et Obslide sont servis sur la même origine (cedriccovarel.github.io).
       const GH = 'https://cedriccovarel.github.io', OBS = GH + '/observatoire-prestaterre-beta';
       const OBSLIDE_DIR = process.env.OBSLIDE_DIR || '';
@@ -655,7 +655,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const got = await gen.waitForFunction(() => window.__got, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
         const codes = (got?.operationCodes || []).slice().sort().join(',');
         const evs = new Set((got?.requirements?.rows || []).map(r => r[0])).size;
-        check(got && String(got.operationRows.length) === shown && got.operationCount === got.operationRows.length && codes === 'OP-1,OP-2,OP-7' && String(evs) === reqKpi.dossiers && String(got.requirements.evaluations) === reqKpi.dossiers && got.requirements.rows.every(r => r[6] === 'BEE Logement Neuf') && /Référentiel : BEE Logement Neuf/.test(got.requirements.summary), `Obslide reçoit les opérations filtrées (${codes}) et les exigences affichées par l’onglet Exigences (${evs} dossiers, onglet : ${reqKpi.dossiers}), sans import`);
+        check(got && String(got.operationRows.length) === shown && got.operationCount === got.operationRows.length && codes === 'OP-1,OP-2,OP-7' && String(evs) === reqKpi.dossiers && String(got.requirements.evaluations) === reqKpi.dossiers && got.requirements.rows.every(r => r[6] === 'BEE Logement Neuf') && /Référentiel : BEE Logement Neuf/.test(got.requirements.summary) && got.requirements.headers[12] === 'Cible' && got.requirements.rows.every(r => /^[1-4]$/.test(r[12])), `Obslide reçoit les opérations filtrées (${codes}) et les exigences affichées par l’onglet Exigences (${evs} dossiers, onglet : ${reqKpi.dossiers}), sans import, cible 1 à 4 transmise pour chaque ligne`);
         const stored = await page.evaluate(() => Object.keys(localStorage).map(k => k + '=' + localStorage.getItem(k).length).join(' '));
         check(!/Les Jardins|EVA-OP/.test(await page.evaluate(() => JSON.stringify(localStorage))), `aucune donnée d’opération ni d’exigence écrite dans le stockage du navigateur (${stored.slice(0, 160)})`);
         await gen.close();

@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.28 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.29 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -256,6 +256,23 @@
     ctx.restore();
   }
 
+  // V6.29 : palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide à
+  // mesure que l'étape avance.
+  function pallet(ctx, r) {
+    const i = stageIndex(r); if (i < 1 || i > 3) return;
+    const k = stageK(r, i), left = Math.max(0, Math.ceil((1 - k) * 5)), x = 372, y = GROUND;
+    const fade = Math.min(1, k * 8, (1 - k) * 8 + 0.15);
+    ctx.save(); ctx.globalAlpha = Math.max(0.15, fade);
+    ctx.fillStyle = '#b8945f'; ctx.fillRect(x, y - 5, 40, 5); ctx.fillStyle = '#8f6f42'; ctx.fillRect(x + 3, y - 2, 6, 2); ctx.fillRect(x + 31, y - 2, 6, 2);
+    for (let n = 0; n < left; n++) {
+      const yy = y - 5 - (n + 1) * (i === 2 ? 7 : 5);
+      if (i === 1) { ctx.fillStyle = n % 2 ? '#efe6cf' : '#e6dbbe'; ctx.fillRect(x + 1, yy, 38, 5); }
+      else if (i === 2) { ctx.fillStyle = '#8cc0d6'; ctx.fillRect(x + 4, yy, 32, 6); ctx.fillStyle = '#fff'; ctx.fillRect(x + 19, yy, 2, 6); }
+      else { ctx.fillStyle = '#284b63'; ctx.fillRect(x + 1, yy, 38, 4); ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x + 1, yy, 38, 1); }
+    }
+    ctx.restore();
+  }
+
   // Technicien : se déplace vers le poste de travail de l'étape en cours.
   function techTarget(r) {
     const i = stageIndex(r);
@@ -348,6 +365,7 @@
     tree(ctx, 612, ease(stageK(r, 4) * 1.3 - 0.25) * 0.85, t);
     tree(ctx, 404, ease(stageK(r, 4) * 1.3 - 0.45) * 0.7, t);
     crane(ctx, r, still ? 0 : t);
+    pallet(ctx, r);
     building(ctx, r, t);
     fence(ctx, r);
     // émissions : moins nombreuses à mesure que le chantier avance

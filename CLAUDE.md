@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.29 | Palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide avec l'avancement de l'étape. |
 | V6.28 | Clôture de chantier (grillage) et panneau « Rénovation en cours », posés avec l'échafaudage, retirés à la végétalisation. |
 | V6.27 | Grue de chantier : montée avec l'isolation, livre le matériau de l'étape (isolant, fenêtre, panneau solaire), démontée à la végétalisation ; feu clignotant. |
 

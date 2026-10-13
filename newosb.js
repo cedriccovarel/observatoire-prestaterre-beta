@@ -324,7 +324,7 @@
   // Données remises à Obslide quand il s'ouvre depuis le bouton « Générateur de rapports » : opérations
   // affichées (filtres globaux) et lignes RAPPORT affichées par l'onglet Exigences (ses filtres), anonymisées si besoin.
   // Transmises de fenêtre à fenêtre, en mémoire, uniquement à la même origine (rien n'est stocké).
-  const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année'];
+  const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année','Cible'];
   function generatorHandoffData(scope){
     const P=privacy(),anon=!!P?.enabled?.();
     // Lignes source (une par opération affichée, anonymisées si besoin) : Obslide les convertit avec son propre
@@ -335,7 +335,7 @@
     const visible=window.NEWOSB_REQUIREMENTS?.status?.().connected?window.NEWOSB_REQUIREMENTS.exportVisibleRows?.():null;
     const rows=(visible?.rows||[]).map(r=>{
       const x=anon&&P.anonymizeRequirementRow?{...P.anonymizeRequirementRow(r),evaluationCode:P.evaluationCode?P.evaluationCode(r.evaluationCode):P.id(r.evaluationCode,'EVA')}:r;
-      return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||''].map(v=>String(v??''));
+      return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||'',x.target||''].map(v=>String(v??''));
     });
     return {operationRows,operationCodes,operationCount:ops.length,requirements:rows.length?{headers:OBSLIDE_REQ_HEADERS,rows,summary:visible.summary,evaluations:visible.evaluations}:null,anonymized:anon,summary:scope?.summary||''};
   }

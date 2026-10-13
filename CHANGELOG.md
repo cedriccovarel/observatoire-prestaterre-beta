@@ -1,5 +1,10 @@
 # Historique
 
+## V6.29
+
+- **Obslide — cibles des exigences** : l’Observatoire transmet la cible (1 à 4) de chaque exigence, calculée avec ses propres règles (catalogue du référentiel, intitulé de référence « 1.2.3 … », numéro, thème) ; la slide Exigences d’Obslide l’utilise, d’où une répartition par cible identique à l’onglet Exigences. Pour un export RAPPORT importé à la main, Obslide lit aussi la cible dans une colonne « Cible » ou dans le premier chiffre de l’intitulé (« 1 - … », « 2. … ») ou de l’intitulé de référence (Obslide V29.9.4).
+- **Écran de chargement** : palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide à mesure que l’étape avance.
+
 ## V6.28
 
 - **Pont Observatoire → Obslide corrigé** :
