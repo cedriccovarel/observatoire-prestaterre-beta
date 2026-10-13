@@ -14,6 +14,15 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   `NODE_PATH=/opt/node22/lib/node_modules node tests/e2e_browser.js` (scénario I).
 - Noter l'amélioration dans le journal ci-dessous et dans `CHANGELOG.md`.
 
+### Amélioration prévue pour la prochaine mise à jour
+
+Demandée par l'utilisateur après la V6.30 : lors de la **prochaine mise à jour qui ne porte pas que sur
+l'animation**, l'amélioration de l'écran de chargement consistera à le rendre **encore plus réaliste, tendant vers
+le photoréalisme**. Pistes : éclairage directionnel cohérent avec le soleil, textures procédurales (enduit, brique,
+tuiles, bois, herbe), ombres douces et occlusion ambiante, perspective atmosphérique, reflets du ciel dans les
+vitres, matériaux et personnage plus détaillés. Le tout reste dessiné en canvas (aucune image ni ressource
+externe), fluide et compatible `prefers-reduced-motion`. Retirer ce paragraphe une fois l'amélioration livrée.
+
 ### Journal des améliorations de l'animation
 
 | Version | Amélioration |
