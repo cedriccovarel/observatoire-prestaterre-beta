@@ -337,6 +337,15 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.selectOption('[data-pres-field="layout"]', 'feature'); await page.waitForTimeout(300);
       const feat = await page.evaluate(() => { const its = [...document.querySelectorAll('#obsPresentationStage .obs-pres-item')]; return its.length === 3 && its[0].offsetHeight > its[1].offsetHeight * 1.8 && its[1].offsetLeft > its[0].offsetLeft; });
       check(feat, 'disposition « Mise en avant » : un grand visuel et les autres empilés à côté');
+      const order = () => page.$$eval('#obsPresentationStage .obs-pres-item-head b', bs => bs.map(b => b.textContent).join(' | '));
+      const o1 = await order();
+      await page.dragAndDrop('#obsPresentationStage .obs-pres-item:nth-child(1) [data-pres-drag-item]', '#obsPresentationStage .obs-pres-item:nth-child(3)'); await page.waitForTimeout(400);
+      const o2 = await order(), t = o1.split(' | ');
+      check(o2 === [t[1], t[2], t[0]].join(' | '), `glisser-déposer sur la slide : le visuel prend la place de celui où il est déposé (${o1} → ${o2})`);
+      await page.dragAndDrop('.obs-pres-item-list li:nth-child(3)', '.obs-pres-item-list li:nth-child(1)'); await page.waitForTimeout(400);
+      check(await order() === o1, 'glisser-déposer dans la liste de l’éditeur : ordre rétabli');
+      const jump = await page.evaluate(async () => { const sc = document.scrollingElement, pg = document.getElementById('obsPage'); pg.scrollTop = 160; sc.scrollTop = 120; const box = document.querySelector('[data-pres-stage-fit]'); const before = [pg.scrollTop, sc.scrollTop, box.offsetHeight]; const cb = document.querySelector('[data-pres-capture-check]'); cb.click(); await new Promise(r => setTimeout(r, 300)); const after = [pg.scrollTop, sc.scrollTop, document.querySelector('[data-pres-stage-fit]').offsetHeight]; const btn = document.querySelector('[data-pres-new-slide]').textContent; cb.click(); return { before, after, btn, same: document.querySelector('[data-pres-stage-fit]') === box }; });
+      check(JSON.stringify(jump.before) === JSON.stringify(jump.after) && jump.same && /Nouvelle slide \(1\)/.test(jump.btn), `cocher une capture ne fait plus sauter la page (${JSON.stringify(jump)})`);
       await page.click('[data-pres-item-remove]'); await page.waitForTimeout(300);
       check(await page.evaluate(() => document.querySelectorAll('#obsPresentationStage .obs-pres-item').length === 2 && document.querySelectorAll('[data-pres-capture-check]').length === 4), 'retirer un visuel de la slide le garde dans la boîte');
       await page.click('[data-pres-select]:nth-child(2)'); await page.waitForTimeout(300);
@@ -363,6 +372,12 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(pres.length === 1 && pres[0].slides.length === 3 && pres[0].slides.every(sl => sl.images.length === 1 && sl.images[0].type === 'image/jpeg' && sl.images[0].bytes > 5000), `Google Slides : présentation créée avec ${pres[0]?.slides.length || 0} slides rendues en image`);
       if (popup) await popup.waitForURL(/docs\.google\.com/, { timeout: 10000 }).catch(() => {});
       check(popup && /docs\.google\.com\/presentation/.test(popup.url()), 'Google Slides : la présentation s’ouvre dans la fenêtre du pont (' + (popup && popup.url()) + ')');
+      // Générateur de rapports : ouvre la dernière version d'Obslide ; repli sur generator.html si elle ne répond pas.
+      let obslideUp = true;
+      await context.route('https://cedriccovarel.github.io/obslide/**', r => obslideUp ? r.fulfill({ contentType: 'text/html', body: '<title>Obslide</title>ok' }) : r.fulfill({ status: 404, body: 'Not found' }));
+      const openGen = async () => { const pp = context.waitForEvent('page', { timeout: 15000 }); await page.click('#obsGeneratorBtn'); const w = await pp; await w.waitForURL(u => !/^about:blank/.test(String(u)), { timeout: 15000 }).catch(() => {}); const u = w.url(); await w.close(); return u; };
+      const genUp = await openGen(); obslideUp = false; const genDown = await openGen();
+      check(/^https:\/\/cedriccovarel\.github\.io\/obslide\/\?newosbScope=newosb_/.test(genUp) && /\/generator\.html\?newosbScope=newosb_/.test(genDown), `« Générateur de rapports » ouvre la dernière version d’Obslide, avec repli sur la copie intégrée (${genUp} | ${genDown.replace(origin, '')})`);
       // Présentation enregistrée par une version précédente (un visuel par slide) : reprise sans perte.
       await page.evaluate(() => localStorage.setItem('newosb_v0518_presentation', JSON.stringify({ slides: [{ id: 'cover_1', type: 'cover', title: 'Ancienne' }, { id: 'slide_old', type: 'content', title: 'Ancien graphique', kicker: 'K', legend: 'L', scope: 'S', contentHtml: '<div class="obs-card"><p>Visuel ancien</p></div>' }], activeId: 'slide_old', counter: 2 })));
       await page.reload(); await page.waitForFunction(() => window.NEWOSB_ENGINE); await page.click('button[data-page="presentation"]'); await page.waitForTimeout(500);

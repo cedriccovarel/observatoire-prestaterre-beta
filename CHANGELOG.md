@@ -1,5 +1,11 @@
 # Historique
 
+## V6.25
+
+- **Présentation — plus de saut** : cocher une capture ne redessine plus la page (la liste et la page restent en place) ; lors des autres actions, la zone d’aperçu garde sa taille pendant le réaffichage, la page ne remonte plus.
+- **Ordre des visuels d’une slide** : glisser-déposer directement sur la slide (poignée ⠿ en haut à droite de chaque visuel, déposé sur un autre visuel il prend sa place) ou dans la liste « Visuels de la slide » de l’éditeur ; les flèches ↑ ↓ restent disponibles. Les poignées n’apparaissent pas dans les exports.
+- **Générateur de rapports** : le bouton (et la carte de l’onglet Rapports & exports) ouvre la dernière version d’Obslide, publiée depuis le dépôt `obslide` (https://cedriccovarel.github.io/obslide/). Si ce site ne répond pas, la copie intégrée `generator.html` s’ouvre à la place.
+
 ## V6.24
 
 **Présentation : boîte de captures et slides composées**

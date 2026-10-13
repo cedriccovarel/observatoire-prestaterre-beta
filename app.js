@@ -16,6 +16,8 @@ const MAP_GEOJSON_URLS = [
     'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/departements-version-simplifiee.geojson',
     'https://etalab-datasets.geo.data.gouv.fr/contours-administratifs/latest/geojson/departements-1000m.geojson'
   ];
+  // Dernière version d'Obslide (générateur de rapports), publiée par GitHub Pages depuis le dépôt obslide.
+  const OBSLIDE_URL = 'https://cedriccovarel.github.io/obslide/';
   const REGION_GEOJSON_URLS = [
     'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-version-simplifiee.geojson',
     'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/regions-version-simplifiee.geojson',
@@ -7429,17 +7431,24 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     disconnect:dataDisconnect,
     refresh(){return dataConnect();},
     sourceConfigured(){try{return JSON.parse(localStorage.getItem(DATA_SOURCE_STORAGE_KEY)||'null');}catch{return null;}},
+    // V6.25 : le bouton « Générateur de rapports » ouvre la dernière version d'Obslide (site publié du dépôt
+    // obslide). Si ce site ne répond pas, la copie intégrée generator.html est ouverte à la place.
     openGenerator(scope){
-      let url='generator.html';
+      let query='';
       try{
         if(scope&&Array.isArray(scope.operationCodes)){
           const token=`newosb_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
           const payload={...scope,token,createdAt:Date.now()};
           localStorage.setItem(DATA_GENERATOR_SCOPE_STORAGE_KEY,JSON.stringify(payload));
-          url+=`?newosbScope=${encodeURIComponent(token)}`;
+          query=`?newosbScope=${encodeURIComponent(token)}`;
         }else localStorage.removeItem(DATA_GENERATOR_SCOPE_STORAGE_KEY);
       }catch(e){console.warn('NEWOSB transfert filtres vers OSBslide:',e);}
-      window.open(url,'_blank','noopener');
+      const latest=OBSLIDE_URL+query,legacy=new URL('generator.html'+query,location.href).href;
+      // Fenêtre ouverte pendant le clic (sinon bloquée), puis dirigée vers la bonne adresse.
+      const w=window.open('about:blank','_blank');
+      if(!w){window.open(latest,'_blank','noopener');return;}
+      try{w.opener=null;}catch{}
+      fetch(OBSLIDE_URL,{method:'HEAD',cache:'no-store'}).then(r=>r.ok?latest:legacy,()=>legacy).then(u=>{try{w.location.replace(u);}catch{w.location.href=u;}});
     },
     // V6.14 : prepareGoogleSlides() doit être appelé dans le gestionnaire du clic (ouverture de la fenêtre Google).
     prepareGoogleSlides(){

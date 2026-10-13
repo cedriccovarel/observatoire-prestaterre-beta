@@ -357,6 +357,14 @@
     trigger.classList.add('is-captured');setTimeout(()=>trigger.classList.remove('is-captured'),1200);
     try{engine.toast?.(`Capture ajoutée : ${title} · ${state.presentationCaptures.length} dans la boîte de l’onglet Présentation`);}catch{}
   }
+  // Cocher une capture ne redessine pas la page (pas de saut) : seuls la ligne et les boutons sont mis à jour.
+  function updateCaptureSelectionUi(){
+    const n=checkedCaptureIds().length;
+    pageEl.querySelectorAll('[data-pres-capture-check]').forEach(cb=>{const on=state.presentationChecked.has(cb.dataset.presCaptureCheck);cb.checked=on;cb.closest('.obs-pres-capture')?.classList.toggle('is-checked',on);});
+    const nb=pageEl.querySelector('[data-pres-new-slide]');if(nb){nb.disabled=!n;nb.textContent=`＋ Nouvelle slide${n?` (${n})`:''}`;}
+    const ab=pageEl.querySelector('[data-pres-add-to-slide]');if(ab)ab.disabled=!n;
+    const none=pageEl.querySelector('[data-pres-capture-none]');if(none)none.disabled=!n;
+  }
   function presentationCapture(id){return state.presentationCaptures.find(c=>c.id===id)||null;}
   function slideCaptures(slide){return (slide?.captureIds||[]).map(presentationCapture).filter(Boolean);}
   function captureUseCount(id){return state.presentationSlides.filter(s=>(s.captureIds||[]).includes(id)).length;}
@@ -394,6 +402,12 @@
     const slide=state.presentationSlides.find(s=>s.id===slideId);if(!slide)return;
     const list=slide.captureIds||[],i=list.indexOf(capId),j=i+delta;if(i<0||j<0||j>=list.length)return;
     [list[i],list[j]]=[list[j],list[i]];savePresentationState();renderPage();
+  }
+  // Glisser-déposer : un visuel déposé sur un autre prend sa place (sur la slide ou dans la liste de l'éditeur).
+  function placeSlideItem(slideId,capId,targetId){
+    const slide=state.presentationSlides.find(s=>s.id===slideId);if(!slide||capId===targetId)return;
+    const list=slide.captureIds||[],from=list.indexOf(capId),to=list.indexOf(targetId);if(from<0||to<0)return;
+    list.splice(from,1);list.splice(to,0,capId);savePresentationState();renderPage();
   }
   function removeSlideItem(slideId,capId){
     const slide=state.presentationSlides.find(s=>s.id===slideId);if(!slide)return;
@@ -490,7 +504,8 @@
     const caps=slideCaptures(slide),n=caps.length;
     if(!n)return `<div class="obs-pres-items is-empty" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px"><div class="obs-pres-items-empty"><b>Slide sans visuel</b><span>Coche des captures dans la boîte, à gauche, puis « Ajouter à cette slide ».</span></div></div>`;
     const rects=presentationLayout(caps,slide),ts=presItemTitleSize(n,slide),scale=Math.max(.5,Math.min(1,(Number(slide.bodyScale)||100)/100));
-    return `<div class="obs-pres-items ${n>1?'is-multi':'is-single'}" data-pres-scale="${scale}" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;--pres-item-title:${ts}px">${caps.map((c,i)=>{const r=rects[i];return `<section class="obs-pres-item" style="left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;padding:${r.pad/2}px">${r.head?`<header class="obs-pres-item-head" style="height:${r.head}px"><b ${editable?`contenteditable="true" spellcheck="false" data-pres-capture-title="${attr(c.id)}"`:''}>${esc(c.title)}</b></header>`:''}<div class="obs-pres-item-body" style="height:calc(100% - ${r.head}px)"><div class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}" style="width:${Math.max(120,Number(c.w)||1100)}px">${c.contentHtml||''}</div></div></section>`;}).join('')}</div>`;
+    const dnd=editable&&n>1;
+    return `<div class="obs-pres-items ${n>1?'is-multi':'is-single'}" data-pres-scale="${scale}" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;--pres-item-title:${ts}px">${caps.map((c,i)=>{const r=rects[i];return `<section class="obs-pres-item" style="left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;padding:${r.pad/2}px" ${dnd?`data-pres-drop-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}"`:''}>${dnd?`<span class="obs-pres-item-grip" draggable="true" data-pres-drag-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" title="Glisser sur un autre visuel pour échanger leur place" aria-hidden="true">⠿</span>`:''}${r.head?`<header class="obs-pres-item-head" style="height:${r.head}px"><b ${editable?`contenteditable="true" spellcheck="false" data-pres-capture-title="${attr(c.id)}"`:''}>${esc(c.title)}</b></header>`:''}<div class="obs-pres-item-body" style="height:calc(100% - ${r.head}px)"><div class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}" style="width:${Math.max(120,Number(c.w)||1100)}px">${c.contentHtml||''}</div></div></section>`;}).join('')}</div>`;
   }
   // Mise à l'échelle de chaque visuel dans sa case (le contenu est rendu à sa largeur d'origine, puis réduit
   // ou agrandi proportionnellement et centré). Appelée après chaque affichage et avant chaque export.
@@ -522,6 +537,7 @@
     stage.style.left='';stage.style.top='';
     const avail=box.parentElement.clientWidth-parseFloat(getComputedStyle(box.parentElement).paddingLeft||0)-parseFloat(getComputedStyle(box.parentElement).paddingRight||0);
     const k=Math.max(.35,Math.min(1,avail/1280));
+    state.presPreviewScale=k;
     stage.style.transform=k<1?`scale(${k.toFixed(4)})`:'';stage.style.transformOrigin='0 0';
     box.style.width=`${Math.round(1280*k)}px`;box.style.height=`${Math.round(720*k)}px`;
   }
@@ -566,9 +582,9 @@
       </div>`;
     }
     const caps=slideCaptures(slide),n=caps.length;
-    const items=n?`<ol class="obs-pres-item-list">${caps.map((c,i)=>`<li><span>${esc(shorten(c.title,46))}</span><button type="button" title="Monter" aria-label="Monter ${attr(c.title)}" data-pres-item-move="up" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i?'':'disabled'}>↑</button><button type="button" title="Descendre" aria-label="Descendre ${attr(c.title)}" data-pres-item-move="down" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i<n-1?'':'disabled'}>↓</button><button type="button" title="Retirer de la slide" aria-label="Retirer ${attr(c.title)} de la slide" data-pres-item-remove="${attr(c.id)}" data-pres-id="${attr(slide.id)}">×</button></li>`).join('')}</ol>`:'<p class="obs-pres-muted">Aucun visuel sur cette slide.</p>';
+    const items=n?`<ol class="obs-pres-item-list">${caps.map((c,i)=>`<li draggable="true" data-pres-drag-item="${attr(c.id)}" data-pres-drop-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" title="Glisser pour changer l’ordre"><span>${esc(shorten(c.title,46))}</span><button type="button" title="Monter" aria-label="Monter ${attr(c.title)}" data-pres-item-move="up" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i?'':'disabled'}>↑</button><button type="button" title="Descendre" aria-label="Descendre ${attr(c.title)}" data-pres-item-move="down" data-pres-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" ${i<n-1?'':'disabled'}>↓</button><button type="button" title="Retirer de la slide" aria-label="Retirer ${attr(c.title)} de la slide" data-pres-item-remove="${attr(c.id)}" data-pres-id="${attr(slide.id)}">×</button></li>`).join('')}</ol>`:'<p class="obs-pres-muted">Aucun visuel sur cette slide.</p>';
     return `<div class="obs-pres-editor-card"><h3>Édition de la slide</h3>
-      <div class="obs-pres-editor-group"><b>Visuels de la slide (${n})</b>${items}
+      <div class="obs-pres-editor-group"><b>Visuels de la slide (${n})</b>${n>1?'<small class="obs-pres-muted">Glisse un visuel (ici ou sur la slide avec ⠿) ou utilise ↑ ↓ pour changer l’ordre.</small>':''}${items}
         <label>Disposition<select data-pres-field="layout" data-pres-id="${attr(slide.id)}">${PRES_LAYOUTS.map(([v,l])=>`<option value="${v}" ${String(slide.layout||'auto')===v?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
         <label class="obs-pres-check"><input type="checkbox" data-pres-field="showItemTitles" data-pres-id="${attr(slide.id)}" ${(n>1?slide.showItemTitles!==false:!!slide.showItemTitles)?'checked':''}><span>Titre au-dessus de chaque visuel</span></label>
       </div>
@@ -591,7 +607,7 @@
     const list=caps.length?caps.map(c=>{const used=captureUseCount(c.id);return `<li class="obs-pres-capture ${state.presentationChecked.has(c.id)?'is-checked':''}"><label><input type="checkbox" data-pres-capture-check="${attr(c.id)}" ${state.presentationChecked.has(c.id)?'checked':''}><span class="obs-pres-capture-thumb" aria-hidden="true"><span class="obs-pres-items" data-pres-scale="1" style="width:100%;height:100%;position:relative"><span class="obs-pres-item" style="left:0;top:0;width:100%;height:100%"><span class="obs-pres-item-body" style="height:100%"><span class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}">${c.contentHtml||''}</span></span></span></span></span><span class="obs-pres-capture-text"><b>${esc(shorten(c.title,60))}</b><small>${esc([pageLabel(c.sourcePage),new Date(c.createdAt).toLocaleDateString('fr-FR')].filter(Boolean).join(' · '))}${used?` · sur ${used} slide${used>1?'s':''}`:''}</small></span></label><button type="button" class="obs-pres-capture-del" data-pres-capture-delete="${attr(c.id)}" title="Supprimer la capture" aria-label="Supprimer la capture ${attr(c.title)}">×</button></li>`;}).join(''):'<li class="obs-pres-captures-empty">La boîte est vide. Dans les autres onglets, clique sur ▣ en haut d’un graphique, d’un tableau ou des chiffres clés pour le capturer ici.</li>';
     return `<section class="obs-pres-captures" aria-label="Boîte de captures">
       <div class="obs-pres-side-head"><h3>Captures <small>${fmt(caps.length)}</small></h3><div class="obs-pres-side-actions">${caps.length?`<button type="button" class="obs-card-action" data-pres-capture-all="1">Tout cocher</button><button type="button" class="obs-card-action" data-pres-capture-none="1" ${checked?'':'disabled'}>Aucune</button><button type="button" class="obs-card-action danger" data-pres-captures-clear="1" title="Vider la boîte">Vider</button>`:''}</div></div>
-      <ul class="obs-pres-capture-list">${list}</ul>
+      <ul class="obs-pres-capture-list" data-scroll-key="pres-captures">${list}</ul>
       <div class="obs-pres-capture-actions"><button type="button" class="obs-card-action obs-pres-primary" data-pres-new-slide="1" ${checked?'':'disabled'}>＋ Nouvelle slide${checked?` (${checked})`:''}</button>${canAdd?`<button type="button" class="obs-card-action" data-pres-add-to-slide="${attr(slide.id)}" ${checked?'':'disabled'}>Ajouter à cette slide</button>`:''}</div>
     </section>`;
   }
@@ -607,12 +623,12 @@
         <aside class="obs-presentation-side">
           ${presentationCaptureBox(slide)}
           <div class="obs-pres-side-head"><h3>Slides</h3><div class="obs-pres-side-actions"><button type="button" class="obs-card-action" data-pres-cover="1">+ Couverture</button><button type="button" class="obs-card-action danger" data-pres-clear="1">Vider</button></div></div>
-          <div class="obs-pres-thumbs">${thumbs}</div>
+          <div class="obs-pres-thumbs" data-scroll-key="pres-slides">${thumbs}</div>
           ${editor}
         </aside>
         <section class="obs-presentation-main">
           ${controls}
-          <div class="obs-pres-canvas-wrap"><div class="obs-pres-stage-fit" data-pres-stage-fit>${presentationSlideMarkup(slide)}</div></div>
+          <div class="obs-pres-canvas-wrap"><div class="obs-pres-stage-fit" data-pres-stage-fit style="width:${Math.round(1280*(state.presPreviewScale||.7))}px;height:${Math.round(720*(state.presPreviewScale||.7))}px">${presentationSlideMarkup(slide)}</div></div>
         </section>
       </div>`;
   }
@@ -647,6 +663,8 @@
   async function svgMarkupForNode(node,width,height,outW=width,outH=height){
     const clone=node.cloneNode(true);
     clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
+    clone.querySelectorAll('.obs-pres-item-grip').forEach(el=>el.remove()); // poignées de glisser-déposer : interface seulement
+    clone.querySelectorAll('.is-drop-target,.is-dragging').forEach(el=>el.classList.remove('is-drop-target','is-dragging'));
     await inlineExportImages(clone);
     // L'aperçu réduit (transform) et sa position ne font pas partie du visuel exporté.
     clone.style.transform='none'; clone.style.left='0'; clone.style.top='0'; clone.style.position='relative';
@@ -1969,7 +1987,7 @@
 
 
   function renderReports(){
-    return `${pageHead('reports')}<div class="obs-report-cards"><article class="obs-report-card"><div class="icon">▣</div><h3>Générateur de rapports</h3><p>Retrouver le générateur V29.7.13 complet : slides 16:9, présentation et exports PNG / SVG / PDF.</p><button data-open-generator="1">Ouvrir le générateur ↗</button></article><article class="obs-report-card"><div class="icon">⇩</div><h3>Exporter la sélection</h3><p>Exporter les opérations correspondant aux filtres globaux et analytiques actuels pour retraitement dans Excel.</p><button data-export-current="csv">Exporter CSV</button></article><article class="obs-report-card"><div class="icon">⌁</div><h3>Source projets / opérations</h3><p>Connecter ou actualiser le Google Sheet / Apps Script commun à l’Observatoire et au générateur.</p><button data-open-source="1">Gérer la source</button></article><article class="obs-report-card"><div class="icon">▤</div><h3>Source exigences</h3><p>La rubrique Exigences dispose de sa propre source Google Sheet et lit exclusivement l’onglet RAPPORT.</p><button data-page-link="requirements">Ouvrir Exigences →</button></article></div>`;
+    return `${pageHead('reports')}<div class="obs-report-cards"><article class="obs-report-card"><div class="icon">▣</div><h3>Générateur de rapports</h3><p>Ouvre la dernière version d’Obslide : slides 16:9, slides Exigences, cartographie, exports PPTX fidèle, PNG / SVG / PDF et Google Slides.</p><button data-open-generator="1">Ouvrir le générateur ↗</button></article><article class="obs-report-card"><div class="icon">⇩</div><h3>Exporter la sélection</h3><p>Exporter les opérations correspondant aux filtres globaux et analytiques actuels pour retraitement dans Excel.</p><button data-export-current="csv">Exporter CSV</button></article><article class="obs-report-card"><div class="icon">⌁</div><h3>Source projets / opérations</h3><p>Connecter ou actualiser le Google Sheet / Apps Script commun à l’Observatoire et au générateur.</p><button data-open-source="1">Gérer la source</button></article><article class="obs-report-card"><div class="icon">▤</div><h3>Source exigences</h3><p>La rubrique Exigences dispose de sa propre source Google Sheet et lit exclusivement l’onglet RAPPORT.</p><button data-page-link="requirements">Ouvrir Exigences →</button></article></div>`;
   }
 
   function renderPage(options={}){
@@ -1997,9 +2015,9 @@
     if(demoBanner) demoBanner.hidden=isolatedMode ? true : runtime().connected;
     if(!isolatedMode){ countEl.textContent=fmt(filteredOperations().length); renderFilterDependencies(); }
     updateFilterPanelBadge(requirementsMode);
+    if(state.page==='presentation'){ fitPresentationItems(pageEl); fitPresentationPreview(); }
     restoreUiScroll(scrollSnapshot);
     if(state.page==='territories') hydrateTerritoryMap(token);
-    if(state.page==='presentation'){ fitPresentationItems(pageEl); fitPresentationPreview(); }
     if(requirementsMode) window.NEWOSB_REQUIREMENTS?.afterRender?.();
   }
 
@@ -2975,8 +2993,8 @@
     const addPres=e.target.closest('[data-add-presentation]'); if(addPres){ addCurrentCardToPresentation(addPres).catch(err=>{console.error(err);alert('Ajout à la présentation impossible : '+(err?.message||err));}); return; }
     if(e.target.closest('[data-pres-new-slide]')){createSlideFromSelection();return;}
     const presAddTo=e.target.closest('[data-pres-add-to-slide]'); if(presAddTo){addSelectionToSlide(presAddTo.dataset.presAddToSlide);return;}
-    if(e.target.closest('[data-pres-capture-all]')){state.presentationCaptures.forEach(c=>state.presentationChecked.add(c.id));renderPage();return;}
-    if(e.target.closest('[data-pres-capture-none]')){state.presentationChecked.clear();renderPage();return;}
+    if(e.target.closest('[data-pres-capture-all]')){state.presentationCaptures.forEach(c=>state.presentationChecked.add(c.id));updateCaptureSelectionUi();return;}
+    if(e.target.closest('[data-pres-capture-none]')){state.presentationChecked.clear();updateCaptureSelectionUi();return;}
     if(e.target.closest('[data-pres-captures-clear]')){clearPresentationCaptures();return;}
     const capDel=e.target.closest('[data-pres-capture-delete]'); if(capDel){deletePresentationCapture(capDel.dataset.presCaptureDelete);return;}
     const itemMove=e.target.closest('[data-pres-item-move][data-pres-item]'); if(itemMove){moveSlideItem(itemMove.dataset.presId,itemMove.dataset.presItem,itemMove.dataset.presItemMove==='up'?-1:1);return;}
@@ -3027,12 +3045,18 @@
     const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
     const mapGroup=e.target.closest?.('[data-map-grouping-toggle]'); if(mapGroup){state.mapOperationGrouping=state.mapFocusRegion?'department':(mapGroup.checked?'region':'department');state.territorySummaryPage=1;renderPage();return;}
-    const capCheck=e.target.closest?.('[data-pres-capture-check]'); if(capCheck){const id=capCheck.dataset.presCaptureCheck;if(capCheck.checked)state.presentationChecked.add(id);else state.presentationChecked.delete(id);preserveUiScroll(()=>renderPage());return;}
+    const capCheck=e.target.closest?.('[data-pres-capture-check]'); if(capCheck){const id=capCheck.dataset.presCaptureCheck;if(capCheck.checked)state.presentationChecked.add(id);else state.presentationChecked.delete(id);updateCaptureSelectionUi();return;}
     const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.type==='checkbox'?presField.checked:presField.value); renderPage(); return; }
     const metric=e.target.closest?.('[data-solution-metric]'); if(metric){state.solutionMetric=metric.value||'ubat';const top=pageEl.scrollTop;renderPage();requestAnimationFrame(()=>{pageEl.scrollTop=top;});return;}
   });
   pageEl.addEventListener('keyup',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleKeyup?.(e)) return;});
   pageEl.addEventListener('pointerdown',e=>{const input=e.target.closest?.('[data-req-filter-search]');if(input)e.stopPropagation();});
+  let presDrag=null;
+  pageEl.addEventListener('dragstart',e=>{const d=e.target.closest?.('[data-pres-drag-item]');if(!d)return;presDrag={slide:d.dataset.presId,cap:d.dataset.presDragItem};try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',presDrag.cap);}catch{}d.closest('.obs-pres-item,li')?.classList.add('is-dragging');});
+  pageEl.addEventListener('dragover',e=>{const t=e.target.closest?.('[data-pres-drop-item]');if(!presDrag||!t||t.dataset.presId!==presDrag.slide)return;e.preventDefault();try{e.dataTransfer.dropEffect='move';}catch{}pageEl.querySelectorAll('.is-drop-target').forEach(x=>{if(x!==t)x.classList.remove('is-drop-target');});if(t.dataset.presDropItem!==presDrag.cap)t.classList.add('is-drop-target');});
+  pageEl.addEventListener('dragleave',e=>{const t=e.target.closest?.('[data-pres-drop-item]');if(t&&!t.contains(e.relatedTarget))t.classList.remove('is-drop-target');});
+  pageEl.addEventListener('drop',e=>{const t=e.target.closest?.('[data-pres-drop-item]');if(!presDrag||!t)return;e.preventDefault();const d=presDrag;presDrag=null;placeSlideItem(d.slide,d.cap,t.dataset.presDropItem);});
+  pageEl.addEventListener('dragend',()=>{presDrag=null;pageEl.querySelectorAll('.is-dragging,.is-drop-target').forEach(x=>x.classList.remove('is-dragging','is-drop-target'));});
   pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
 
   pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField&&presField.type==='checkbox')return; if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const capTitle=e.target.closest?.('[data-pres-capture-title]'); if(capTitle){const c=presentationCapture(capTitle.dataset.presCaptureTitle);if(c){c.title=(capTitle.textContent||'').trim()||c.title;savePresentationState();}return;} const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});

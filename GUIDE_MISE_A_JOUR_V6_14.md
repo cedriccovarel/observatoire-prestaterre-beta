@@ -88,6 +88,10 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.25 — Ordre des visuels et lien vers Obslide
+
+Mise à jour du site uniquement. Le bouton « Générateur de rapports » ouvre https://cedriccovarel.github.io/obslide/ : le dépôt `obslide` doit être publié par GitHub Pages (Settings → Pages → branche `main`, dossier racine). À défaut, la copie intégrée `generator.html` est ouverte.
+
 ## V6.24 — Présentation : boîte de captures et slides composées
 
 Mise à jour du site uniquement (aucun script Apps Script à changer). Utilisation : ▣ sur un graphique ou un tableau pour le capturer ; dans l’onglet Présentation, cocher les captures puis « Nouvelle slide ».

@@ -1409,3 +1409,12 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-pres-stage-fit:fullscreen{background:#0d1f19;width:100vw!important;height:100vh!important}
 /* Dans une slide, les zones défilantes s'affichent en entier (la mise à l'échelle se charge de la taille). */
 .obs-pres-item-scaler .obs-tunnel-scroll,.obs-pres-item-scaler .obs-status-year-chart,.obs-pres-item-scaler .obs-table-wrap,.obs-pres-item-scaler .req-table-wrap,.obs-pres-item-scaler .obs-heatmap{overflow:visible!important;max-height:none!important}
+/* V6.25 : réordonner les visuels par glisser-déposer */
+.obs-pres-item-grip{position:absolute;right:6px;top:6px;z-index:3;width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.92);border:1px solid #cfe0d8;color:#06402b;font-size:15px;line-height:1;cursor:grab;opacity:.55;transition:opacity .12s}
+.obs-pres-item:hover .obs-pres-item-grip{opacity:1}
+.obs-pres-item-grip:active{cursor:grabbing}
+.obs-pres-item.is-dragging,.obs-pres-item-list li.is-dragging{opacity:.45}
+.obs-pres-item.is-drop-target{outline:3px dashed #16864f;outline-offset:-3px;background:#eef7f1}
+.obs-pres-item-list li{cursor:grab}
+.obs-pres-item-list li.is-drop-target{border-color:#16864f;background:#eef7f1;box-shadow:0 0 0 2px rgba(22,134,79,.2)}
+.obs-pres-stage-fit>.obs-pres-stage{transform-origin:0 0}
