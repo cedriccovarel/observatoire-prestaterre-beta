@@ -790,9 +790,14 @@
   function setOpenFilter(key,open){if(open)state.openFilter=String(key||'');else if(!key||state.openFilter===key)state.openFilter='';}
   function status(){return {via:state.via||'',connected:state.connected,count:evaluations(state.rows).length,url:state.url,loading:state.loading,error:state.error,errorKind:state.errorKind,loadedAt:state.loadedAt,hasKey:!!bridge?.hasKey?.()};}
   function auditInfo(){const f=filteredRows(),ev=evaluations(f),occ=occurrenceRows(f);return {connected:state.connected,source:'RAPPORT',rows:state.rows.length,filteredRows:f.length,evaluations:ev.length,occurrences:occ.length,loadedAt:state.loadedAt};}
+  // V6.27 : lignes RAPPORT des opérations transmises au générateur de rapports (Obslide), codes réels.
+  function exportRows(codes){
+    const set=new Set((codes||[]).map(c=>norm(c)).filter(Boolean));
+    return state.rows.filter(r=>set.has(norm(r.operationCode))).map(r=>({...r}));
+  }
   window.addEventListener('newosb:privacychange',emit);
   // V6.14 : getOperationRequirements renvoie un instantané figé, indépendant des filtres de l'onglet Exigences.
-  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,loadViaOperations,shareFilters,setOpenFilter,disconnect,status,auditInfo,getOperationRequirements,
+  window.NEWOSB_REQUIREMENTS={render,afterRender,handleClick,handleChange,handleInput,handleKeyup,load,loadShare,loadViaOperations,shareFilters,setOpenFilter,disconnect,status,auditInfo,getOperationRequirements,exportRows,
     // Accès de test / diagnostic, sans exposer l'état mutable.
     _compatSnapshot(){const m=compatModel();return m.error?{error:m.error}:{context:m.ctx?.key||'',contexts:m.bouquets.contexts.map(c=>({key:c.key,operations:c.operations,top:c.top.map(i=>({code:i.code,operations:i.operations,frequency:i.frequency}))})),ranked:(m.analysis?.ranked||[]).map(r=>({id:r.id,pct:r.pct,covered:r.covered,required:r.required})),results:(m.analysis?.results||[]).map(r=>({id:r.id,status:r.status,pct:r.pct,covered:r.covered,required:r.required})),manual:state.compat.manualMention};}};
 })();

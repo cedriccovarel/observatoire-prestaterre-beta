@@ -34,7 +34,7 @@ rr('OP-4', 'EVA-OP-4', 'Bailleur B', 'BEE Logement Rénovation', '18/06/2025', [
 rr('OP-1', 'EVA-OP-1-ANC', 'Promoteur A', 'BEE Logement Neuf', '01/02/2023', ['1.1.1', '4.B.2']);
 for (let i = 0; i < 40; i++) rr('OP-X' + i, 'EVA-X' + i, 'Promoteur Z', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.1.1']);
 
-async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {}, delayMs = 0, noConnect = false } = {}) {
+async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {}, delayMs = 0, noConnect = false, beforeGoto = null } = {}) {
   const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties }, extraSheets });
   const gsReq = loadGs('Code_Exigences.gs', { matrix: RAPPORT, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
   const context = await browser.newContext({ acceptDownloads: true, viewport: viewport || { width: 1280, height: 900 } });
@@ -57,6 +57,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
   page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', d => { errors.push('DIALOG ' + d.message()); d.dismiss().catch(() => {}); });
   await page.addInitScript(() => { sessionStorage.setItem('prestaterre-observatoire-v21-auth', '1'); });
+  if (beforeGoto) await beforeGoto(context);
   await page.goto(origin + '/index.html');
   await page.waitForFunction(() => window.NEWOSB_ENGINE && window.NEWOSB_RULES);
   if (!noConnect) await page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; return window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: noKey ? '' : KEY });
@@ -626,6 +627,49 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.click('[data-map-reset-region]'); await page.waitForTimeout(500);
       check(await page.evaluate(() => document.querySelectorAll('.obs-map-dep').length === 7 && !document.querySelector('.obs-france-map.is-focused')), '« ← Retour France » revient à la carte entière');
       check(errors.length === 0, 'carte : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
+      await context.close(); }
+    console.log('\nK. Générateur de rapports : Obslide reçoit les données de l’Observatoire (V6.27)');
+    { // Comme en production, l'Observatoire et Obslide sont servis sur la même origine (cedriccovarel.github.io).
+      const GH = 'https://cedriccovarel.github.io', OBS = GH + '/observatoire-prestaterre-beta';
+      const OBSLIDE_DIR = process.env.OBSLIDE_DIR || '';
+      const STUB = `<!doctype html><title>Obslide (simulé)</title><script>window.__got=null;const t=new URLSearchParams(location.search).get('newosbScope');addEventListener('message',e=>{if(e.origin===location.origin&&e.source===opener&&e.data&&e.data.type==='newosb-generator-data')window.__got=e.data;});opener&&opener.postMessage({type:'obslide-ready',token:t},location.origin);<\/script>ok`;
+      const serve = async ctx => ctx.route(GH + '/**', r => {
+        const u = new URL(r.request().url()); let f = null;
+        if (u.pathname.startsWith('/observatoire-prestaterre-beta/')) f = path.join(ROOT, decodeURIComponent(u.pathname.slice('/observatoire-prestaterre-beta/'.length)) || 'index.html');
+        else if (u.pathname.startsWith('/obslide/')) { if (!OBSLIDE_DIR) return r.fulfill({ contentType: 'text/html', body: STUB }); f = path.join(OBSLIDE_DIR, decodeURIComponent(u.pathname.slice('/obslide/'.length)) || 'index.html'); }
+        if (!f || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return r.fulfill({ status: 404, body: '' });
+        return r.fulfill({ contentType: TYPES[path.extname(f)] || 'application/octet-stream', body: fs.readFileSync(f) });
+      });
+      const { page, context, errors } = await scenario(browser, OBS, { NEWOSB_ALLOWED_ORIGINS: GH }, { extraSheets: { RAPPORT }, beforeGoto: serve });
+      await page.waitForFunction(() => window.NEWOSB_REQUIREMENTS?.status?.().connected, null, { timeout: 30000 }).catch(() => {});
+      await page.evaluate(() => { const i = [...document.querySelectorAll('[data-global-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
+      const shown = await page.textContent('#obsFilterCount');
+      const pp = context.waitForEvent('page', { timeout: 15000 }); await page.click('#obsGeneratorBtn'); const gen = await pp;
+      gen.on('pageerror', e => errors.push('Obslide : ' + e.message));
+      await gen.waitForURL(/\/obslide\//, { timeout: 15000 }).catch(() => {});
+      if (!OBSLIDE_DIR) {
+        const got = await gen.waitForFunction(() => window.__got, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
+        const codes = (got?.operations || []).map(o => o.code).sort().join(',');
+        check(got && String(got.operations.length) === shown && codes === 'OP-1,OP-2,OP-7' && got.requirements?.rows?.length > 0 && got.requirements.rows.every(r => ['OP-1', 'OP-2', 'OP-7'].includes(r[1])), `Obslide reçoit les opérations filtrées (${codes}) et leurs lignes RAPPORT (${got?.requirements?.rows?.length || 0}), sans import`);
+        const stored = await page.evaluate(() => Object.keys(localStorage).map(k => k + '=' + localStorage.getItem(k).length).join(' '));
+        check(!/Les Jardins|EVA-OP/.test(await page.evaluate(() => JSON.stringify(localStorage))), `aucune donnée d’opération ni d’exigence écrite dans le stockage du navigateur (${stored.slice(0, 160)})`);
+        await gen.close();
+        await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(true)); await page.waitForTimeout(300);
+        const pp2 = context.waitForEvent('page', { timeout: 15000 }); await page.click('#obsGeneratorBtn'); const gen2 = await pp2;
+        const got2 = await gen2.waitForFunction(() => window.__got, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
+        const txt = JSON.stringify(got2 || {});
+        check(got2 && got2.anonymized && got2.operations.length > 0 && !/Promoteur A|Les Jardins|EVA-OP-1/.test(txt) && got2.requirements.rows.every(r => got2.operations.some(o => o.code === r[1])), 'mode anonymisé : Obslide reçoit des données anonymisées, codes d’opération cohérents entre opérations et exigences');
+        await gen2.close();
+      } else {
+        await gen.waitForFunction(() => /Données de l’Observatoire/.test(document.getElementById('dataFeedback')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
+        const fb = await gen.evaluate(() => document.getElementById('dataFeedback')?.textContent || '');
+        check(/Données de l’Observatoire : 3 opérations · \d+ dossiers? d’exigences/.test(fb), 'Obslide réel : ' + fb);
+        await gen.selectOption('#addSlideSelect', 'requirements'); await gen.waitForTimeout(800);
+        const req = await gen.evaluate(() => ({ svg: document.querySelector('#slide svg, .slide svg, svg')?.textContent || '', body: document.body.innerText }));
+        check(/dossier/.test(req.svg) && !/Importe|importer l’export/i.test(req.svg), 'Obslide réel : la slide Exigences affiche les données de l’Observatoire sans import — ' + req.svg.slice(0, 120));
+        await gen.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'obslide_handoff.png') }).catch(() => {});
+      }
+      check(errors.length === 0, 'remise des données à Obslide : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
     console.log('\nI. Écran de chargement : chantier de rénovation, une seule barre pour OPERATIONS + RAPPORT (V6.23)');
     { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noConnect: true, delayMs: 900, extraSheets: { RAPPORT } });

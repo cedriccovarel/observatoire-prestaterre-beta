@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.23 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.27 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -196,6 +196,42 @@
   // Petites étincelles (fenêtre posée, panneau installé).
   function burst(x, y, color) { if (reduced()) return; for (let i = 0; i < 7; i++) { const a = Math.random() * Math.PI * 2, v = 30 + Math.random() * 40; ui.sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, age: 0, color }); } }
 
+  // V6.27 : grue de chantier. Elle se monte avec l'isolation, livre le matériau de l'étape en cours
+  // (panneau isolant, fenêtre, panneau solaire) au-dessus du bâtiment, puis est démontée à la végétalisation.
+  function crane(ctx, r, t) {
+    const show = Math.min(ease(stageK(r, 1) * 3), 1 - ease(stageK(r, 4) * 1.8));
+    if (show <= 0.01) return;
+    const mx = 352, top = 46, rise = ease(stageK(r, 1) * 4), mastTop = GROUND - (GROUND - top) * rise;
+    ctx.save(); ctx.globalAlpha = show;
+    // mât en treillis
+    ctx.strokeStyle = '#d9a520'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(mx - 5, GROUND); ctx.lineTo(mx - 5, mastTop); ctx.moveTo(mx + 5, GROUND); ctx.lineTo(mx + 5, mastTop); ctx.stroke();
+    ctx.lineWidth = 1; ctx.beginPath();
+    for (let y = GROUND; y > mastTop + 8; y -= 12) { ctx.moveTo(mx - 5, y); ctx.lineTo(mx + 5, y - 12); }
+    ctx.stroke();
+    if (rise > 0.98) {
+      // flèche, contre-flèche, lest, cabine
+      const jx0 = 200, jx1 = mx + 62;
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(jx0, top); ctx.lineTo(jx1, top); ctx.moveTo(jx0 + 20, top + 7); ctx.lineTo(mx, top + 7); ctx.stroke();
+      ctx.lineWidth = 1; ctx.beginPath(); for (let x = jx0 + 20; x < mx; x += 14) { ctx.moveTo(x, top + 7); ctx.lineTo(x + 7, top); ctx.lineTo(x + 14, top + 7); } ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(mx, top - 16); ctx.lineTo(jx0 + 20, top); ctx.moveTo(mx, top - 16); ctx.lineTo(jx1 - 6, top); ctx.stroke();
+      ctx.fillStyle = '#5f6b66'; ctx.fillRect(jx1 - 16, top + 1, 16, 12);
+      ctx.fillStyle = '#d9a520'; ctx.fillRect(mx - 8, top + 7, 16, 12); ctx.fillStyle = '#cfe7f2'; ctx.fillRect(mx - 5, top + 10, 8, 6);
+      // chariot + câble + charge : va-et-vient lent au-dessus du bâtiment
+      const k = 0.5 + 0.5 * Math.sin(t * 0.55), tx = 214 + k * 112, drop = 46 + 26 * (0.5 + 0.5 * Math.sin(t * 0.9 + 1)), sway = Math.sin(t * 1.7) * 2.5;
+      ctx.fillStyle = '#3c4a45'; ctx.fillRect(tx - 5, top + 1, 10, 6);
+      ctx.strokeStyle = '#3c4a45'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tx, top + 7); ctx.lineTo(tx + sway, top + drop); ctx.stroke();
+      const i = stageIndex(r), lx = tx + sway, ly = top + drop;
+      if (i === 1) { ctx.fillStyle = '#efe6cf'; ctx.fillRect(lx - 16, ly, 32, 12); ctx.strokeStyle = '#c9b98f'; ctx.strokeRect(lx - 16, ly, 32, 12); }
+      else if (i === 2) { ctx.fillStyle = '#8cc0d6'; ctx.fillRect(lx - 9, ly, 18, 20); ctx.fillStyle = '#fff'; ctx.fillRect(lx - 1, ly, 2, 20); ctx.fillRect(lx - 9, ly + 9, 18, 2); }
+      else if (i === 3) { ctx.fillStyle = '#284b63'; ctx.fillRect(lx - 15, ly, 30, 10); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.moveTo(lx - 5, ly); ctx.lineTo(lx - 5, ly + 10); ctx.moveTo(lx + 5, ly); ctx.lineTo(lx + 5, ly + 10); ctx.stroke(); }
+      else { ctx.strokeStyle = '#3c4a45'; ctx.beginPath(); ctx.arc(lx, ly + 3, 3, 0, Math.PI); ctx.stroke(); }
+      // feu clignotant en bout de flèche
+      if (Math.sin(t * 4) > 0) { ctx.fillStyle = '#e8483a'; ctx.beginPath(); ctx.arc(jx0, top - 2, 2.2, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.restore();
+  }
+
   // Technicien : se déplace vers le poste de travail de l'étape en cours.
   function techTarget(r) {
     const i = stageIndex(r);
@@ -287,6 +323,7 @@
     tree(ctx, 470, ease(stageK(r, 4) * 1.3), t);
     tree(ctx, 612, ease(stageK(r, 4) * 1.3 - 0.25) * 0.85, t);
     tree(ctx, 404, ease(stageK(r, 4) * 1.3 - 0.45) * 0.7, t);
+    crane(ctx, r, still ? 0 : t);
     building(ctx, r, t);
     // émissions : moins nombreuses à mesure que le chantier avance
     ui.spawn += dt;

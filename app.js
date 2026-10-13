@@ -18,6 +18,17 @@ const MAP_GEOJSON_URLS = [
   ];
   // Dernière version d'Obslide (générateur de rapports), publiée par GitHub Pages depuis le dépôt obslide.
   const OBSLIDE_URL = 'https://cedriccovarel.github.io/obslide/';
+  // V6.27 : remise des données à Obslide. Obslide (même origine) envoie {type:'obslide-ready', token} à la
+  // fenêtre qui l'a ouvert ; on répond, à cette fenêtre seulement et pour cette origine seulement, avec les
+  // opérations affichées et les lignes RAPPORT correspondantes. Rien n'est écrit dans le stockage.
+  const dataGeneratorHandoffs=new Map();
+  window.addEventListener('message',e=>{
+    if(e.origin!==location.origin||e.data?.type!=='obslide-ready')return;
+    const h=dataGeneratorHandoffs.get(String(e.data.token||''));
+    if(!h||e.source!==h.win)return;
+    try{if(!h.payload)h.payload=h.build();h.win.postMessage({type:'newosb-generator-data',token:e.data.token,...h.payload},location.origin);}
+    catch(err){console.warn('NEWOSB remise des données à Obslide :',err);}
+  });
   const REGION_GEOJSON_URLS = [
     'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions-version-simplifiee.geojson',
     'https://cdn.jsdelivr.net/gh/gregoiredavid/france-geojson@master/regions-version-simplifiee.geojson',
@@ -7433,7 +7444,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     sourceConfigured(){try{return JSON.parse(localStorage.getItem(DATA_SOURCE_STORAGE_KEY)||'null');}catch{return null;}},
     // V6.25 : le bouton « Générateur de rapports » ouvre la dernière version d'Obslide (site publié du dépôt
     // obslide). Si ce site ne répond pas, la copie intégrée generator.html est ouverte à la place.
-    openGenerator(scope){
+    openGenerator(scope,buildData){
       let query='';
       try{
         if(scope&&Array.isArray(scope.operationCodes)){
@@ -7444,10 +7455,13 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
         }else localStorage.removeItem(DATA_GENERATOR_SCOPE_STORAGE_KEY);
       }catch(e){console.warn('NEWOSB transfert filtres vers OSBslide:',e);}
       const latest=OBSLIDE_URL+query,legacy=new URL('generator.html'+query,location.href).href;
-      // Fenêtre ouverte pendant le clic (sinon bloquée), puis dirigée vers la bonne adresse.
+      // Fenêtre ouverte pendant le clic (sinon bloquée), puis dirigée vers la bonne adresse. Elle garde le lien
+      // vers l'Observatoire : Obslide y demande les données déjà chargées (voir dataGeneratorHandoff).
       const w=window.open('about:blank','_blank');
-      if(!w){window.open(latest,'_blank','noopener');return;}
-      try{w.opener=null;}catch{}
+      if(!w){window.open(latest,'_blank');return;}
+      const token=(query.match(/newosbScope=([^&]+)/)||[])[1];
+      if(token&&typeof buildData==='function')dataGeneratorHandoffs.set(decodeURIComponent(token),{win:w,build:buildData,payload:null});
+      while(dataGeneratorHandoffs.size>3)dataGeneratorHandoffs.delete(dataGeneratorHandoffs.keys().next().value);
       fetch(OBSLIDE_URL,{method:'HEAD',cache:'no-store'}).then(r=>r.ok?latest:legacy,()=>legacy).then(u=>{try{w.location.replace(u);}catch{w.location.href=u;}});
     },
     // V6.14 : prepareGoogleSlides() doit être appelé dans le gestionnaire du clic (ouverture de la fenêtre Google).

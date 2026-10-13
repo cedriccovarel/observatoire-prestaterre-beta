@@ -88,6 +88,10 @@ C’est un **projet Apps Script distinct** (celui du classeur RAPPORT) : ses pro
 - Le pourcentage est une **couverture des critères par les sélections**, pas une probabilité ni une validation : l’obtention d’une mention reste soumise à la validation des exigences, aux prérequis et aux seuils.
 - Règles disponibles : **BEE Logement Neuf 04/05/2026** (24 mentions) et **BEE Logement Rénovation 18/06/2025** (7 mentions). Non disponibles : BEE Logement Rénovation **04/05/2026**, BEE Tertiaire Neuf, BEE Tertiaire Exploitation → « Version non couverte ». Détail règle par règle : `docs/reference/TRACABILITE_MENTIONS_V6_14.md`.
 
+## V6.27 — Obslide reçoit les données de l’Observatoire
+
+Mise à jour du site et d’Obslide (V29.9.2). Charger les données dans l’Observatoire, filtrer, puis cliquer « Générateur de rapports » : Obslide affiche « Données de l’Observatoire : N opérations · M dossiers d’exigences ». Garder l’onglet de l’Observatoire ouvert pendant l’ouverture d’Obslide (c’est lui qui transmet les données). Aucune clé ni donnée n’est enregistrée dans Obslide.
+
 ## V6.26 — Filtres repris dans Obslide
 
 Mise à jour du site et d’Obslide (V29.9.1, dépôt `obslide`). Ouvrir le générateur depuis le bouton « Générateur de rapports » de l’Observatoire : le périmètre filtré est appliqué (valable 24 h). Obslide garde sa propre source de données ; pour les slides Exigences, réimporter l’export RAPPORT une fois (le code d’opération y est désormais lu).

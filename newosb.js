@@ -321,6 +321,19 @@
       crossFilters:state.crossFilters.map(f=>({key:f.key,value:f.value,label:f.label}))
     };
   }
+  // V6.27 : données remises à Obslide quand il s'ouvre depuis le bouton « Générateur de rapports » :
+  // opérations affichées (anonymisées si le mode est actif) et lignes RAPPORT de ces opérations.
+  // Transmises de fenêtre à fenêtre, en mémoire, uniquement à la même origine (rien n'est stocké).
+  const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année'];
+  function generatorHandoffData(scope){
+    const P=privacy(),anon=!!P?.enabled?.();
+    let operations=[];try{operations=JSON.parse(JSON.stringify(filteredOperations()));}catch{}
+    const rows=(window.NEWOSB_REQUIREMENTS?.exportRows?.(scope?.operationCodes||[])||[]).map(r=>{
+      const x=anon&&P.anonymizeRequirementRow?{...P.anonymizeRequirementRow(r),evaluationCode:P.evaluationCode?P.evaluationCode(r.evaluationCode):P.id(r.evaluationCode,'EVA')}:r;
+      return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||''].map(v=>String(v??''));
+    });
+    return {operations,requirements:rows.length?{headers:OBSLIDE_REQ_HEADERS,rows}:null,anonymized:anon,summary:scope?.summary||''};
+  }
   async function cloneAsPortableHtml(node){
     const clone=node.cloneNode(true);
     clone.querySelectorAll('[data-add-presentation], .obs-evolution-basis, .obs-pres-head-tools, .obs-kpi-group-pres-btn, .obs-table-pager, .req-pager, .obs-view-toggle, .req-view-toggle, .obs-table-search').forEach(el=>el.remove());
@@ -2980,7 +2993,7 @@
   document.getElementById('obsSourceBtn')?.addEventListener('click',()=>engine.showDataSource());
   document.getElementById('obsDemoConnect')?.addEventListener('click',()=>engine.showDataSource());
   document.getElementById('obsRefreshBtn')?.addEventListener('click',async()=>{if(runtime().connected||engine.sourceConfigured()){try{await engine.refresh();}catch{}}else engine.showDataSource();});
-  document.getElementById('obsGeneratorBtn')?.addEventListener('click',()=>engine.openGenerator(generatorLaunchScope()));
+  document.getElementById('obsGeneratorBtn')?.addEventListener('click',()=>{const scope=generatorLaunchScope();engine.openGenerator(scope,()=>generatorHandoffData(scope));});
   document.querySelectorAll('[data-obs-drawer-close="1"]').forEach(el=>el.addEventListener('click',closeDrawer));
   drawerTabs?.addEventListener('click',e=>{const b=e.target.closest('[data-drawer-tab]');if(!b)return;state.drawerTab=b.dataset.drawerTab;renderDrawer();});
   drawerBody?.addEventListener('click',e=>{const gm=e.target.closest('[data-group-moa]');if(gm){state.activeGroupMoa=gm.dataset.groupMoa;state.operationsPage=1;renderDrawer();return;}const gb=e.target.closest('[data-group-back]');if(gb){state.activeGroupMoa='';state.operationsPage=1;renderDrawer();return;}const opPager=e.target.closest('[data-table-page="operations"][data-page]');if(opPager&&state.activeMoaGroup){state.operationsPage=Math.max(1,Number(opPager.dataset.page)||1);renderDrawer();return;}const opLink=e.target.closest('[data-op-code]');if(opLink&&state.activeMoaGroup){openOperation(opLink.dataset.opCode);return;}const view=e.target.closest('[data-table-view="raw"][data-view]');if(view){state.rawView=view.dataset.view==='tiles'?'tiles':'list';renderDrawer();return;}const pager=e.target.closest('[data-table-page="raw"][data-page]');if(!pager)return;state.rawPage=Math.max(1,Number(pager.dataset.page)||1);renderDrawer();});
@@ -3037,7 +3050,7 @@
     const tag=e.target.closest('[data-tag-kind][data-tag-name]'); if(tag){const ops=filteredOperations().filter(o=>operationHasTag(o,tag.dataset.tagKind,tag.dataset.tagName));engine.openExplorer(tag.dataset.tagName,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const tagChip=e.target.closest('[data-tag-filter][data-tag-value]'); if(tagChip){const kind=tagChip.dataset.tagFilter,val=tagChip.dataset.tagValue;const ops=filteredOperations().filter(o=>operationHasTag(o,kind,val));engine.openExplorer(val,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const op=e.target.closest('[data-op-code]'); if(op){openOperation(op.dataset.opCode);return;}
-    if(e.target.closest('[data-open-generator]')){engine.openGenerator(generatorLaunchScope());return;}
+    if(e.target.closest('[data-open-generator]')){const scope=generatorLaunchScope();engine.openGenerator(scope,()=>generatorHandoffData(scope));return;}
     if(e.target.closest('[data-open-source]')){engine.showDataSource();return;}
     if(e.target.closest('[data-export-current]')){exportCurrentCsv();return;}
   });

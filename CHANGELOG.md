@@ -1,5 +1,11 @@
 # Historique
 
+## V6.27
+
+- **Obslide reçoit les données de l’Observatoire** : ouvert depuis « Générateur de rapports », Obslide demande à la fenêtre de l’Observatoire les opérations filtrées et les lignes RAPPORT de ces opérations. Plus d’import à faire pour les slides Exigences, ni de source à connecter dans Obslide. Échange de fenêtre à fenêtre, en mémoire, limité à la même origine (rien n’est enregistré) ; en mode anonymisé, les données transmises sont anonymisées. Obslide V29.9.2.
+- **Écran de chargement** : une grue de chantier se monte avec l’isolation, livre le matériau de l’étape en cours (panneau isolant, fenêtre, panneau solaire) au-dessus du bâtiment, puis est démontée pendant la végétalisation.
+- Nouvelle règle de projet (`CLAUDE.md`) : chaque mise à jour apporte une petite amélioration de l’animation de chargement.
+
 ## V6.26
 
 - **Les filtres de l’Observatoire sont repris dans le générateur de rapports (Obslide)** : le bouton « Générateur de rapports » transmet la liste des opérations affichées (filtres globaux, filtres d’analyse, recherche) ; Obslide V29.9.1 ne garde que ces opérations dans ses slides connectées et dans ses slides Exigences, et affiche « Périmètre Observatoire » (retirable avec ×).
