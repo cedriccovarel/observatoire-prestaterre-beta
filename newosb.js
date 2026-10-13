@@ -1199,8 +1199,8 @@
   }
 
   function tableViewToggle(kind,view,modes=['list','bar']){
-    const labels={list:'Liste',bar:'Barres',histogram:'Histogramme',tiles:'Tuiles',map:'Carte',matrix:'Matrice',pie:'Camembert'};
-    const icons={list:'☷',bar:'▥',histogram:'▤',tiles:'▦',map:'⌖',matrix:'▦',pie:'<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8V1.8A6.2 6.2 0 0 1 14.2 8Z" fill="currentColor"/></svg>'};
+    const labels={list:'Liste',bar:'Barres',histogram:'Histogramme',tiles:'Tuiles',map:'Carte',matrix:'Matrice',pie:'Camembert',summary:'Récapitulatif par label'};
+    const icons={list:'☷',bar:'▥',histogram:'▤',tiles:'▦',map:'⌖',matrix:'▦',pie:'<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8V1.8A6.2 6.2 0 0 1 14.2 8Z" fill="currentColor"/></svg>',summary:'<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M1.5 6h13M6 6v8" stroke="currentColor" stroke-width="1.5"/><path d="M8 9h4.5M8 11.5h3" stroke="currentColor" stroke-width="1.3"/></svg>'};
     return `<div class="obs-view-toggle obs-table-view-toggle" role="group" aria-label="Mode d’affichage">${modes.map(m=>`<button type="button" class="${view===m?'is-active':''}" data-table-view="${attr(kind)}" data-view="${attr(m)}" title="${attr(labels[m]||m)}">${icons[m]||'●'}</button>`).join('')}</div>`;
   }
   function tableBarRows(items,{name=x=>x.name,value=x=>x.value,secondary=x=>'',crossKey='',crossValue=x=>x.name,crossLabel=x=>x.name,total=0}={}){
@@ -1539,7 +1539,7 @@
       <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>MENTIONS</span><h2>Mentions et labels</h2></div><div class="obs-card-head-tools">${tableSearchHtml('mention',state.mentionSearch,'Rechercher une mention…')}${tableViewToggle('mention',state.mentionTableView,['list','bar','tiles','pie'])}</div></div>${tagTable(mentionUniverse,'mention')}</article>
       <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>PERFORMANCES</span><h2>Niveaux de performance</h2></div><div class="obs-card-head-tools">${tableSearchHtml('performance',state.performanceSearch,'Rechercher une performance…')}${tableViewToggle('performance',state.performanceTableView,['list','bar','tiles','pie'])}</div></div>${tagTable(perfUniverse,'performance')}</article>
     </div>
-    <article class="obs-card"><div class="obs-card-head"><div><span>CROISEMENT</span><h2>Mentions × performances</h2></div><div class="obs-card-head-tools"><small>Sélection personnalisable + matrice rapide</small>${tableViewToggle('performance-matrix',state.performanceMatrixView,['list','matrix'])}</div></div>${tagMatrix(ops,idx)}</article>`;
+    <article class="obs-card"><div class="obs-card-head"><div><span>CROISEMENT</span><h2>Mentions × performances</h2></div><div class="obs-card-head-tools"><small>Sélection personnalisable + matrice rapide</small>${tableViewToggle('performance-matrix',state.performanceMatrixView,['list','matrix','pie','summary'])}</div></div>${tagMatrix(ops,idx)}</article>`;
   }
 
   function tagTable(ops,kind){
@@ -1606,10 +1606,40 @@
       const model=paged(scopedCombos,state.performanceMatrixPage,15);state.performanceMatrixPage=model.page;
       return `${selector}<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Mention</th><th>Performance</th><th>Opérations</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>{const value=`${x.mention}\u0001${x.performance}`;return `<tr class="obs-cross-row ${activeCross('mentionPerformance',value)?'is-active':''}" ${crossAttrs('mentionPerformance',value,`${x.mention} + ${x.performance}`)}><td><strong>${escLines(x.mention)}</strong></td><td>${escLines(x.performance)}</td><td>${fmt(x.value)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`}).join('')}</tbody></table>${paginationHtml('performance-matrix',model)}</div>`;
     }
+    if(state.performanceMatrixView==='pie'||state.performanceMatrixView==='summary') return selector+matrixByLabel(state.performanceMatrixView,allM,allP,pairCount);
     const selectedM=allM.filter(x=>matrixSelectionHas('mention',x.name)), selectedP=allP.filter(x=>matrixSelectionHas('performance',x.name));
     const topM=state.performanceMatrixMentions.length?selectedM:allM.slice(0,6), topP=state.performanceMatrixPerformances.length?selectedP:allP.slice(0,6);
     const visibleM=topM.slice(0,12), visibleP=topP.slice(0,12), max=Math.max(1,...visibleM.flatMap(m=>visibleP.map(p=>pairCount(m.name,p.name))));
     return `${selector}<div class="obs-heatmap obs-performance-heatmap"><table><thead><tr><th>Mention ↓</th>${visibleP.map(p=>`<th class="${matrixSelectionHas('performance',p.name)?'is-selected-axis':''}" title="${attr(p.name)}">${esc(shorten(p.name,14))}</th>`).join('')}</tr></thead><tbody>${visibleM.map(m=>`<tr class="${matrixSelectionHas('mention',m.name)?'is-selected-axis':''}"><th title="${attr(m.name)}">${esc(shorten(m.name,18))}</th>${visibleP.map(p=>{const v=pairCount(m.name,p.name),value=`${m.name}\u0001${p.name}`,active=activeCross('mentionPerformance',value),selected=matrixSelectionHas('mention',m.name)&&matrixSelectionHas('performance',p.name);return `<td class="${v?'':'is-zero'} ${active?'is-active':''} ${selected?'is-target-cell':''}" style="--heat:${v/max}" ${v?crossAttrs('mentionPerformance',value,`${m.name} + ${p.name}`):''}>${fmt(v)}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>${(topM.length>visibleM.length||topP.length>visibleP.length)?'<div class="obs-table-note">Affichage matriciel limité à 12 mentions × 12 performances ; la sélection complète reste appliquée aux calculs et aux transitions DPE/GES.</div>':''}`;
+  }
+
+  // V6.31 : « Mentions × performances » vu par label — un camembert des performances par label, ou un
+  // tableau récapitulatif des performances les plus fréquentes pour chaque label. Les cases cochées
+  // restreignent les labels et les performances pris en compte ; sans case cochée, les labels les plus
+  // fréquents et toutes les performances sont affichés.
+  function matrixByLabel(view,allM,allP,pairCount){
+    const ms=matrixSelectionValues('mention'), ps=matrixSelectionValues('performance');
+    const labels=(ms.length?allM.filter(x=>matrixSelectionHas('mention',x.name)):allM).slice(0,view==='pie'?(ms.length?12:6):(ms.length?40:15));
+    const perfs=ps.length?allP.filter(x=>matrixSelectionHas('performance',x.name)):allP;
+    const rank=new Map(allP.map((x,i)=>[x.name,i])), color=n=>rank.has(n)?tagPaletteColor(rank.get(n)):'#c9d3cf';
+    const scope=ps.length?`des ${fmt(ps.length)} performance${ps.length>1?'s':''} cochée${ps.length>1?'s':''}`:'de toutes les performances';
+    const hiddenLabels=(ms.length?ms.length:allM.length)-labels.length;
+    const rows=labels.map(m=>{const items=perfs.map(p=>({name:p.name,value:pairCount(m.name,p.name)})).filter(x=>x.value>0).sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'fr'));return {m,items,occ:items.reduce((a,x)=>a+x.value,0)};});
+    const cellAttrs=(m,p)=>{const value=`${m}\u0001${p}`;return `class="${activeCross('mentionPerformance',value)?'is-active':''}" ${crossAttrs('mentionPerformance',value,`${m} + ${p}`)}`;};
+    const more=hiddenLabels>0?`<div class="obs-table-note">${fmt(hiddenLabels)} autre${hiddenLabels>1?'s':''} label${hiddenLabels>1?'s':''} non affiché${hiddenLabels>1?'s':''} : cochez les labels voulus pour les voir.</div>`:'';
+    if(view==='pie'){
+      const cards=rows.map(({m,items,occ})=>{
+        if(!occ) return `<section class="obs-label-pie"><header><strong title="${attr(m.name)}">${esc(m.name)}</strong><small>${fmt(m.value)} opération${m.value>1?'s':''}</small></header><div class="obs-empty">Aucune ${ps.length?'performance cochée':'performance'} pour ce label.</div></section>`;
+        const shown=items.slice(0,6), rest=items.slice(6).reduce((a,x)=>a+x.value,0);
+        let acc=0; const stops=[]; const legend=[];
+        [...shown,...(rest?[{name:'Autres',value:rest,isOther:true}]:[])].forEach(x=>{const c=x.isOther?'#c9d3cf':color(x.name),a=100*acc/occ;acc+=x.value;stops.push(`${c} ${a.toFixed(2)}% ${(100*acc/occ).toFixed(2)}%`);
+          legend.push(x.isOther?`<div class="obs-pie-legend-static"><i style="background:${c}"></i><span>Autres</span><strong>${fmt(x.value)}<small>${fmt(pct(x.value,occ),1)} %</small></strong></div>`:`<button type="button" ${cellAttrs(m.name,x.name)}><i style="background:${c}"></i><span title="${attr(x.name)}">${esc(x.name)}</span><strong>${fmt(x.value)}<small>${fmt(pct(x.value,occ),1)} %</small></strong></button>`);});
+        return `<section class="obs-label-pie"><header><strong title="${attr(m.name)}">${esc(m.name)}</strong><small>${fmt(m.value)} opération${m.value>1?'s':''}</small></header><div class="obs-pie-layout"><div class="obs-pie-chart" style="background:conic-gradient(${stops.join(',')})" role="img" aria-label="Performances du label ${attr(m.name)}"></div><div class="obs-pie-legend">${legend.join('')}</div></div></section>`;
+      }).join('');
+      return `<div class="obs-label-pies">${cards}</div><p class="obs-pie-note">Pour chaque label, part ${scope} parmi ses opérations. Parts calculées sur les occurrences : une opération peut cumuler plusieurs niveaux de performance.</p>${more}`;
+    }
+    const body=rows.map(({m,items})=>`<tr><th scope="row" title="${attr(m.name)}">${escLines(m.name)}</th><td>${fmt(m.value)}</td>${[0,1,2].map(i=>{const x=items[i];return x?`<td><button type="button" ${cellAttrs(m.name,x.name)}><i style="background:${color(x.name)}"></i><span title="${attr(x.name)}">${esc(x.name)}</span><b>${fmt(x.value)} · ${fmt(pct(x.value,m.value),0)} %</b></button></td>`:'<td class="is-zero">—</td>';}).join('')}<td>${fmt(items.length)}</td></tr>`).join('');
+    return `<div class="obs-table-wrap obs-label-summary"><table class="obs-table"><thead><tr><th>Label / mention</th><th>Opérations</th><th>1<sup>re</sup> performance</th><th>2<sup>e</sup> performance</th><th>3<sup>e</sup> performance</th><th>Performances distinctes</th></tr></thead><tbody>${body}</tbody></table></div><p class="obs-pie-note">Performances les plus fréquentes pour chaque label, parmi ${scope}. Le pourcentage indique la part des opérations du label qui ont cette performance.</p>${more}`;
   }
 
   function solutionCardView(cardKey){ return state.solutionViews?.[cardKey]==='pie'?'pie':'bar'; }

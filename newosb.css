@@ -1424,3 +1424,21 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-table-tiles.is-colored .obs-table-tile strong{color:var(--tile-color,#06402b)}
 .obs-table-tiles.is-colored .obs-table-tile:hover,.obs-table-tiles.is-colored .obs-table-tile.is-active{border-color:var(--tile-color,#78aa8f);box-shadow:0 8px 22px var(--tile-tint2,rgba(6,64,43,.08))}
 .obs-pie-note{margin:10px 0 0;font-size:11.5px;color:#61776c}
+/* V6.31 : croisement Mentions × performances vu par label (camemberts, récapitulatif) */
+.obs-label-pies{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:12px}
+.obs-label-pie{border:1px solid #e1ebe6;border-radius:12px;padding:10px 12px;background:#fbfdfc;min-width:0}
+.obs-label-pie header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:4px}
+.obs-label-pie header strong{color:#06402b;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs-label-pie header small{color:#71847b;font-size:10px;font-weight:700;white-space:nowrap}
+.obs-label-pie .obs-pie-layout{grid-template-columns:110px minmax(0,1fr);gap:10px;padding:4px 0 0}
+.obs-label-pie .obs-pie-chart{width:106px}
+.obs-label-summary{margin-top:12px}
+.obs-label-summary th[scope=row]{color:#06402b;font-weight:800;max-width:220px;text-transform:none;letter-spacing:0;font-size:12px;background:transparent;text-align:left}
+.obs-label-pie .obs-pie-legend span{white-space:normal;line-height:1.2}
+.obs-label-summary td button{display:grid;grid-template-columns:9px minmax(0,1fr);column-gap:6px;align-items:center;width:100%;border:0;background:transparent;padding:4px 6px;border-radius:8px;text-align:left;cursor:pointer;color:#315d50}
+.obs-label-summary td button:hover,.obs-label-summary td button.is-active{background:#edf5f1}
+.obs-label-summary td button i{width:9px;height:9px;border-radius:50%;grid-row:1 / span 2}
+.obs-label-summary td button span{font-size:11px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs-label-summary td button b{grid-column:2;font-size:10px;color:#71847b;font-weight:700}
+.obs-label-summary td.is-zero{color:#a8b3ad}
+@media(max-width:760px){.obs-label-pies{grid-template-columns:1fr}.obs-label-pie .obs-pie-layout{grid-template-columns:96px minmax(0,1fr)}.obs-label-pie .obs-pie-chart{width:92px}}

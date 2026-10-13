@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.30 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.31 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -64,6 +64,30 @@
 
   // --------------------------------------------------------------- dessin
   function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  // V6.31 (photoréalisme) : textures procédurales générées une seule fois (grain d'enduit, gazon, ciel de
+  // vitrage), puis réutilisées comme motifs. Aucune image ni ressource externe.
+  function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  const TEX = {};
+  function texture(name, w, h, paint) {
+    if (TEX[name] !== undefined) return TEX[name];
+    try {
+      const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+      paint(g, w, h); TEX[name] = ui.ctx.createPattern(c, 'repeat');
+    } catch { TEX[name] = null; }
+    return TEX[name];
+  }
+  // grain fin (enduit, pierre, trottoir) : pixels clairs et sombres semi-transparents
+  const grain = () => texture('grain', 96, 96, (g, w, h) => {
+    const rnd = rng(7), img = g.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) { const v = rnd(), light = v > 0.5; img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = light ? 255 : 0; img.data[i * 4 + 3] = Math.round(Math.abs(v - 0.5) * 2 * 34); }
+    g.putImageData(img, 0, 0);
+    for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(0,0,0,${0.03 + rnd() * 0.04})`; g.beginPath(); g.arc(rnd() * w, rnd() * h, 2 + rnd() * 6, 0, Math.PI * 2); g.fill(); }
+  });
+  // gazon : brins de longueur et de teinte variées, ombrés à la base
+  const lawn = () => texture('lawn', 120, 40, (g, w, h) => {
+    const rnd = rng(11); g.fillStyle = '#4f8f57'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) { const x = rnd() * w, y = rnd() * h, l = 2 + rnd() * 4, tone = rnd(); g.strokeStyle = `rgb(${Math.round(60 + tone * 70)},${Math.round(120 + tone * 70)},${Math.round(62 + tone * 40)})`; g.lineWidth = 0.7; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 2, y - l); g.stroke(); }
+  });
   // V6.30 (réalisme) : fumée de CO₂ diffuse (volutes à bords flous qui s'étalent puis se dissipent en
   // étant aspirées), au lieu de nuages pleins.
   function smoke(ctx, x, y, s, age, seed) {
@@ -107,12 +131,28 @@
   }
   // Silhouette de ville lointaine, estompée par la perspective atmosphérique.
   const SKYLINE = [[0, 22], [26, 34], [48, 18], [70, 40], [92, 28], [118, 46], [140, 24], [166, 36], [196, 20], [228, 30], [252, 50], [274, 26], [300, 38], [330, 22], [356, 44], [380, 30], [404, 24], [430, 52], [452, 34], [480, 26], [506, 40], [530, 22], [556, 32], [584, 46], [608, 28], [634, 20]];
+  const SKYLINE2 = [[0, 30, 1], [40, 58, 0], [64, 44, 1], [98, 70, 0], [128, 52, 1], [170, 40, 0], [214, 62, 1], [250, 48, 0], [292, 74, 1], [330, 56, 0], [368, 46, 1], [404, 66, 0], [446, 50, 1], [488, 78, 0], [522, 54, 1], [566, 42, 0], [600, 64, 1]];
+  // Deux plans de ville : le plus lointain très estompé, le plus proche avec des fenêtres ; la brume
+  // (perspective atmosphérique) se lève avec le chantier.
   function backdrop(ctx, r) {
     const k = ease(r);
     ctx.fillStyle = `rgba(${Math.round(150 + 30 * k)},${Math.round(160 + 34 * k)},${Math.round(168 + 40 * k)},${0.42 - 0.1 * k})`;
     ctx.beginPath(); ctx.moveTo(0, GROUND);
     SKYLINE.forEach(([x, h], i) => { const nx = (SKYLINE[i + 1] || [W + 20])[0]; ctx.lineTo(x, GROUND - h); ctx.lineTo(nx - 3, GROUND - h); ctx.lineTo(nx - 3, GROUND - h * 0.6); });
     ctx.lineTo(W, GROUND); ctx.closePath(); ctx.fill();
+    // plan intermédiaire : immeubles plus nets, face éclairée et face à l'ombre, fenêtres
+    SKYLINE2.forEach(([x, h, lit], i) => {
+      const nx = (SKYLINE2[i + 1] || [W + 30])[0], w = Math.min(34, nx - x - 6), top = GROUND - h * 0.62;
+      if (x + w < B.x + B.w + 20 && x > B.x - 30) return; // masqué par le bâtiment : inutile de le dessiner
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      g.addColorStop(0, `rgba(${Math.round(132 + 40 * k)},${Math.round(140 + 44 * k)},${Math.round(146 + 50 * k)},.55)`); g.addColorStop(1, `rgba(${Math.round(160 + 40 * k)},${Math.round(166 + 44 * k)},${Math.round(170 + 46 * k)},.55)`);
+      ctx.fillStyle = g; ctx.fillRect(x, top, w, GROUND - top);
+      ctx.fillStyle = `rgba(255,255,255,${0.14 + 0.1 * k})`;
+      for (let yy = top + 5; yy < GROUND - 6; yy += 7) for (let xx = x + 4; xx < x + w - 4; xx += 6) if (((xx * 7 + yy * 3 + lit) % 5) > 1) ctx.fillRect(xx, yy, 2.4, 3);
+    });
+    const haze = ctx.createLinearGradient(0, GROUND - 80, 0, GROUND);
+    haze.addColorStop(0, 'rgba(230,236,238,0)'); haze.addColorStop(1, `rgba(${Math.round(222 + 10 * k)},${Math.round(220 + 16 * k)},${Math.round(208 + 26 * k)},${0.5 - 0.2 * k})`);
+    ctx.fillStyle = haze; ctx.fillRect(0, GROUND - 80, W, 80);
   }
   // Sol : trottoir (joints, bordure) puis terre / pelouse ; ombre portée du bâtiment (soleil en haut à droite).
   function ground(ctx, r, t) {
@@ -125,8 +165,16 @@
     for (let x = 6; x < W; x += 22) { ctx.moveTo(x, GROUND); ctx.lineTo(x - 3, GROUND + 9); }
     ctx.stroke();
     ctx.fillStyle = 'rgba(120,118,108,.35)'; ctx.fillRect(0, GROUND + 9, W, 1.5);
+    // V6.31 : grain du trottoir et de la terre, gazon texturé qui s'étend à la végétalisation
+    const gp = grain(); if (gp) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = gp; ctx.fillRect(0, GROUND, W, H - GROUND); ctx.restore(); }
+    const lp = lawn(), lawnK = ease(stageK(r, 4) * 1.2);
+    if (lp && lawnK > 0) {
+      ctx.save(); ctx.globalAlpha = lawnK; ctx.fillStyle = lp; ctx.translate(0, GROUND + 11); ctx.fillRect(0, 0, W, H - GROUND - 11);
+      const fade = ctx.createLinearGradient(0, 0, 0, H - GROUND - 11); fade.addColorStop(0, 'rgba(255,255,240,.18)'); fade.addColorStop(1, 'rgba(20,50,30,.18)'); ctx.fillStyle = fade; ctx.fillRect(0, 0, W, H - GROUND - 11);
+      ctx.restore();
+    }
     const sh = 0.10 + 0.10 * k;
-    ctx.fillStyle = `rgba(30,40,36,${sh})`; ctx.beginPath(); ctx.moveTo(B.x + B.w + 14, GROUND); ctx.lineTo(B.x + B.w - 22, GROUND + 15); ctx.lineTo(B.x - 34, GROUND + 15); ctx.lineTo(B.x, GROUND); ctx.closePath(); ctx.fill();
+    ctx.save(); try { ctx.filter = 'blur(2.5px)'; } catch {} ctx.fillStyle = `rgba(30,40,36,${sh + 0.06})`; ctx.beginPath(); ctx.moveTo(B.x + B.w + 14, GROUND); ctx.lineTo(B.x + B.w - 22, GROUND + 15); ctx.lineTo(B.x - 34, GROUND + 15); ctx.lineTo(B.x, GROUND); ctx.closePath(); ctx.fill(); ctx.restore();
     const grass = ease(stageK(r, 4));
     if (grass > 0) {
       ctx.lineWidth = 1.2;
@@ -177,6 +225,11 @@
     // bandeaux d'étage
     ctx.fillStyle = 'rgba(255,255,255,.35)'; for (let j = 1; j < 3; j++) ctx.fillRect(B.x, B.y + j * (B.h / 3) - 1, B.w, 2);
     ctx.fillStyle = 'rgba(0,0,0,.06)'; for (let j = 1; j < 3; j++) ctx.fillRect(B.x, B.y + j * (B.h / 3) + 1, B.w, 1.5);
+    // V6.31 : matière de la façade (grain de l'enduit ou de la pierre) et lumière rasante du soleil
+    const fp = grain(); if (fp) { ctx.save(); ctx.globalAlpha = 0.5 - 0.3 * ins; ctx.fillStyle = fp; ctx.fillRect(B.x, B.y, B.w, B.h); ctx.beginPath(); ctx.moveTo(R, B.y); ctx.lineTo(R + DEPTH.x, B.y + DEPTH.y); ctx.lineTo(R + DEPTH.x, base + DEPTH.y); ctx.lineTo(R, base); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    const lightK = 0.3 + 0.7 * ease(r), lg = ctx.createLinearGradient(B.x, B.y, R, base);
+    lg.addColorStop(0, `rgba(40,36,30,${0.12})`); lg.addColorStop(0.6, 'rgba(255,250,235,0)'); lg.addColorStop(1, `rgba(255,236,200,${0.16 * lightK})`);
+    ctx.fillStyle = lg; ctx.fillRect(B.x, B.y, B.w, B.h);
     // salissures / fissures tant que la façade n'est pas isolée
     if (s1 < 1) {
       ctx.globalAlpha = 0.5 * (1 - s1); ctx.strokeStyle = '#5d5248'; ctx.lineWidth = 1.2;
@@ -234,6 +287,14 @@
       ctx.fillStyle = mix([70, 64, 58], [250, 250, 248], k); ctx.fillRect(w.x + 10, w.y + 1, 2, 22); ctx.fillRect(w.x + 1, w.y + 11, 20, 2);
       ctx.strokeStyle = mix([70, 64, 58], [250, 250, 248], k); ctx.lineWidth = 1.2; ctx.strokeRect(w.x + 1, w.y + 1, 20, 22);
       if (k > 0.5) { ctx.strokeStyle = `rgba(255,255,255,${0.35 * k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(w.x + 3, w.y + 9); ctx.lineTo(w.x + 8, w.y + 3); ctx.moveTo(w.x + 13, w.y + 20); ctx.lineTo(w.x + 19, w.y + 14); ctx.stroke(); }
+      // V6.31 : reflet d'un nuage qui glisse sur le vitrage, intérieur plus sombre en bas (profondeur)
+      if (k > 0) {
+        ctx.save(); ctx.beginPath(); ctx.rect(w.x + 1, w.y + 1, 20, 22); ctx.clip();
+        const cx = w.x + ((t * 6 + i * 13) % 44) - 12, cg = ctx.createRadialGradient(cx, w.y + 7, 1, cx, w.y + 7, 10);
+        cg.addColorStop(0, `rgba(255,255,255,${0.45 * k})`); cg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = cg; ctx.fillRect(w.x, w.y, 22, 24);
+        const dg2 = ctx.createLinearGradient(0, w.y + 12, 0, w.y + 24); dg2.addColorStop(0, 'rgba(20,30,40,0)'); dg2.addColorStop(1, `rgba(20,30,40,${0.28 * k})`); ctx.fillStyle = dg2; ctx.fillRect(w.x, w.y + 12, 22, 12);
+        ctx.restore();
+      }
       ctx.fillStyle = mix([150, 140, 126], [236, 232, 222], ins); ctx.fillRect(w.x - 3, w.y + 24, 28, 3); // appui
       ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(w.x - 2, w.y + 27, 26, 2);
       if (k > 0 && k < 1 && !w.flashed) { w.flashed = true; burst(w.x + 11, w.y + 12, '#ffffff'); }
@@ -430,6 +491,30 @@
     ctx.restore();
   }
 
+  // V6.31 (photoréalisme) : passe d'éclairage globale — lumière chaude venue du soleil (mélange
+  // « soft-light »), rayons très discrets quand le ciel est dégagé, vignettage léger comme une optique.
+  function lighting(ctx, r, t) {
+    const k = ease(r);
+    ctx.save();
+    try { ctx.globalCompositeOperation = 'soft-light'; } catch {}
+    const warm = ctx.createRadialGradient(SUN.x, SUN.y, 10, SUN.x, SUN.y, 520);
+    warm.addColorStop(0, `rgba(255,214,150,${0.30 + 0.35 * k})`); warm.addColorStop(0.5, `rgba(255,226,180,${0.10 + 0.12 * k})`); warm.addColorStop(1, 'rgba(40,60,80,.22)');
+    ctx.fillStyle = warm; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    if (k > 0.35) {
+      ctx.save(); ctx.globalAlpha = (k - 0.35) * 0.16; ctx.translate(SUN.x, SUN.y);
+      for (let i = 0; i < 5; i++) {
+        const a = 2.0 + i * 0.22 + Math.sin(t * 0.2 + i) * 0.02, rg = ctx.createLinearGradient(0, 0, Math.cos(a) * 300, Math.sin(a) * 300);
+        rg.addColorStop(0, 'rgba(255,246,220,1)'); rg.addColorStop(1, 'rgba(255,246,220,0)');
+        ctx.fillStyle = rg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a - 0.04) * 300, Math.sin(a - 0.04) * 300); ctx.lineTo(Math.cos(a + 0.04) * 300, Math.sin(a + 0.04) * 300); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.62);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(10,20,16,.20)');
+    ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  }
+
   // Capteur de CO₂ et barre de chargement remplie de carbone capté.
   function intake(ctx, t, active) {
     ctx.fillStyle = C.green; rr(ctx, INTAKE.x - 14, INTAKE.y - 14, 28, 28, 6); ctx.fill();
@@ -515,6 +600,7 @@
       return false;
     });
     technician(ctx, r, t, dt);
+    lighting(ctx, r, still ? 0 : t);
     intake(ctx, t, sucking);
     // granulés : du capteur vers la barre
     ui.flow.forEach(f => {

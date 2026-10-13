@@ -140,6 +140,17 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         check(pie.chart && pie.legend > 0 && pie.note, `${kind} : vue camembert avec légende (${pie.legend} entrées)`);
         await page.evaluate(k => document.querySelector(`[data-table-view="${k}"][data-view="list"]`).click(), kind); await page.waitForTimeout(200);
       }
+      // --- V6.31 : croisement Mentions × performances vu par label (camemberts, récapitulatif) ---
+      await page.evaluate(() => document.querySelector('[data-table-view="performance-matrix"][data-view="pie"]').click()); await page.waitForTimeout(300);
+      const lp = await page.evaluate(() => { const card = document.querySelector('[data-table-view="performance-matrix"]').closest('.obs-card'); return { pies: card.querySelectorAll('.obs-label-pie .obs-pie-chart').length, links: card.querySelectorAll('.obs-label-pie button[data-cross-key="mentionPerformance"]').length }; });
+      check(lp.pies > 0 && lp.links > 0, `croisement : un camembert par label (${lp.pies} camemberts, ${lp.links} performances cliquables)`);
+      await page.evaluate(() => document.querySelector('[data-table-view="performance-matrix"][data-view="summary"]').click()); await page.waitForTimeout(300);
+      const firstLabel = await page.evaluate(() => document.querySelector('[data-performance-matrix-check="mention"]').value);
+      await page.evaluate(() => document.querySelector('[data-performance-matrix-check="mention"]').click()); await page.waitForTimeout(400);
+      const sm = await page.evaluate(() => { const card = document.querySelector('[data-table-view="performance-matrix"]').closest('.obs-card'); const rows = [...card.querySelectorAll('.obs-label-summary tbody tr')]; return { n: rows.length, first: rows[0]?.querySelector('th')?.textContent.trim(), top: rows[0]?.querySelectorAll('td button').length || 0 }; });
+      check(sm.n === 1 && sm.first === firstLabel && sm.top > 0, `récapitulatif par label : suit les cases cochées (${sm.n} ligne « ${sm.first} », ${sm.top} performances)`);
+      await page.evaluate(() => document.querySelector('[data-matrix-clear="mention"]').click()); await page.waitForTimeout(300);
+      await page.evaluate(() => document.querySelector('[data-table-view="performance-matrix"][data-view="matrix"]').click()); await page.waitForTimeout(300);
       // --- Filtres du haut de page : même défaut de défilement corrigé ---
       await page.evaluate(() => { const d = [...document.querySelectorAll('#obsFilters details')].find(x => x.querySelector('[data-global-filter-search="referential"]')); d.open = true; });
       await page.waitForTimeout(200);

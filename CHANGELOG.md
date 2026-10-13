@@ -1,5 +1,18 @@
 # Historique
 
+## V6.31
+
+- **Croisement Mentions × performances** : deux nouvelles vues à côté de la liste et de la matrice.
+  - **Camembert par label** : un camembert par label (ou mention) montre la répartition de ses performances. Les cases cochées choisissent les labels et les performances affichés ; sans case cochée, les 6 labels les plus fréquents et toutes les performances sont montrés. Cliquer sur une performance de la légende filtre la page sur ce couple label + performance.
+  - **Récapitulatif par label** : un tableau donne, pour chaque label, son nombre d’opérations, ses trois performances les plus fréquentes (nombre et part des opérations du label) et le nombre de performances distinctes. Les mêmes cases à cocher s’appliquent.
+  - Les couleurs des performances sont celles des tuiles et du camembert de la carte « Niveaux de performance ».
+- **Écran de chargement, rendu tendant vers le photoréalisme** :
+  - textures procédurales (grain de l’enduit et de la pierre, trottoir, gazon dense), générées une fois sans aucune image externe ;
+  - lumière chaude du soleil sur toute la scène, rayons discrets quand le ciel se dégage, léger vignettage ;
+  - ombre portée du bâtiment adoucie ;
+  - second plan de ville avec fenêtres, brume d’horizon (perspective atmosphérique) qui se lève avec le chantier ;
+  - reflets de nuages qui glissent sur les vitrages neufs et profondeur intérieure des fenêtres.
+
 ## V6.30
 
 - **Labels et performances** :

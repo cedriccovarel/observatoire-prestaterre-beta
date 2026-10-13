@@ -14,21 +14,13 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   `NODE_PATH=/opt/node22/lib/node_modules node tests/e2e_browser.js` (scénario I).
 - Noter l'amélioration dans le journal ci-dessous et dans `CHANGELOG.md`.
 
-### Amélioration prévue pour la prochaine mise à jour
-
-Demandée par l'utilisateur après la V6.30 : lors de la **prochaine mise à jour qui ne porte pas que sur
-l'animation**, l'amélioration de l'écran de chargement consistera à le rendre **encore plus réaliste, tendant vers
-le photoréalisme**. Pistes : éclairage directionnel cohérent avec le soleil, textures procédurales (enduit, brique,
-tuiles, bois, herbe), ombres douces et occlusion ambiante, perspective atmosphérique, reflets du ciel dans les
-vitres, matériaux et personnage plus détaillés. Le tout reste dessiné en canvas (aucune image ni ressource
-externe), fluide et compatible `prefers-reduced-motion`. Retirer ce paragraphe une fois l'amélioration livrée.
-
 ### Journal des améliorations de l'animation
 
 | Version | Amélioration |
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.31 | Rendu tendant vers le photoréalisme : textures procédurales (enduit, pierre, trottoir, gazon), lumière chaude du soleil et rayons, vignettage, ombre adoucie, second plan de ville et brume d'horizon, reflets de nuages sur les vitrages. |
 | V6.30 | Rendu plus réaliste : ciel dégradé et soleil, silhouette de ville, bâtiment en relief (mur latéral, tuiles, reflets des fenêtres), ombres, fumée diffuse, technicien en gilet haute visibilité avec ombre et balancement des bras. |
 | V6.29 | Palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide avec l'avancement de l'étape. |
 | V6.28 | Clôture de chantier (grillage) et panneau « Rénovation en cours », posés avec l'échafaudage, retirés à la végétalisation. |
