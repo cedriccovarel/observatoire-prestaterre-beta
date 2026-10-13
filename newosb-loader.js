@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.29 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.30 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -64,102 +64,188 @@
 
   // --------------------------------------------------------------- dessin
   function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
-  function cloud(ctx, x, y, s, color, alpha) {
-    ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.beginPath();
-    ctx.arc(x, y, 9 * s, 0, Math.PI * 2); ctx.arc(x + 10 * s, y - 4 * s, 11 * s, 0, Math.PI * 2); ctx.arc(x + 21 * s, y, 8 * s, 0, Math.PI * 2); ctx.arc(x + 10 * s, y + 5 * s, 9 * s, 0, Math.PI * 2);
-    ctx.fill(); ctx.globalAlpha = 1;
+  // V6.30 (réalisme) : fumée de CO₂ diffuse (volutes à bords flous qui s'étalent puis se dissipent en
+  // étant aspirées), au lieu de nuages pleins.
+  function smoke(ctx, x, y, s, age, seed) {
+    const grow = 1 + Math.min(1, age / 1.6) * 0.5, fade = clamp(Math.min(age / 0.25, 1)) * 0.78;
+    for (let i = 0; i < 4; i++) {
+      const a = seed * 1.7 + i * 1.9 + age * 0.8, rad = (8 + (i % 2) * 4) * s * grow;
+      const cx = x + 10 * s + Math.cos(a) * 7 * s, cy = y + Math.sin(a) * 4 * s;
+      const g = ctx.createRadialGradient(cx, cy, rad * 0.15, cx, cy, rad);
+      g.addColorStop(0, `rgba(96,104,101,${0.55 * fade})`); g.addColorStop(0.6, `rgba(120,128,125,${0.28 * fade})`); g.addColorStop(1, 'rgba(140,148,145,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+    }
   }
-
-  // Ciel brumeux qui s'éclaircit, nuages qui défilent, soleil en fin de chantier.
+  // V6.30 (réalisme) : nuage volumineux, éclairé par le haut, base plus sombre.
+  function softCloud(ctx, x, y, s, k) {
+    const blobs = [[0, 0, 13], [14, -7, 16], [30, -2, 13], [44, 2, 10], [20, 5, 14]];
+    blobs.forEach(([dx, dy, rad]) => {
+      const cx = x + dx * s, cy = y + dy * s, rr2 = rad * s, g = ctx.createRadialGradient(cx - rr2 * 0.3, cy - rr2 * 0.5, rr2 * 0.1, cx, cy, rr2);
+      g.addColorStop(0, `rgba(255,255,255,${0.75 + 0.2 * k})`); g.addColorStop(0.7, mix([214, 214, 210], [240, 244, 247], k)); g.addColorStop(1, 'rgba(225,228,230,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr2, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+  const SUN = { x: 560, y: 54 };
+  // Ciel en trois tons (zénith → horizon), soleil voilé par la pollution au début puis net, brume qui se dissipe.
   function sky(ctx, r, t) {
     const k = ease(r);
     const g = ctx.createLinearGradient(0, 0, 0, GROUND);
-    g.addColorStop(0, mix([214, 214, 206], [208, 233, 244], k)); g.addColorStop(1, mix([236, 234, 226], [240, 248, 243], k));
+    g.addColorStop(0, mix([170, 176, 180], [104, 166, 212], k)); g.addColorStop(0.55, mix([204, 203, 196], [176, 212, 234], k)); g.addColorStop(1, mix([226, 220, 206], [228, 240, 238], k));
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND);
-    const sun = ease(stageK(r, 4) * 1.4);
-    if (sun > 0) {
-      ctx.globalAlpha = sun; ctx.fillStyle = '#ffd56b'; ctx.beginPath(); ctx.arc(560, 52, 20, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#ffd56b'; ctx.lineWidth = 2;
-      for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 + t * 0.4; ctx.beginPath(); ctx.moveTo(560 + Math.cos(a) * 26, 52 + Math.sin(a) * 26); ctx.lineTo(560 + Math.cos(a) * 34, 52 + Math.sin(a) * 34); ctx.stroke(); }
-      ctx.globalAlpha = 1;
-    }
+    // soleil et halo (intensité croissante)
+    const sunK = 0.25 + 0.75 * k, halo = ctx.createRadialGradient(SUN.x, SUN.y, 4, SUN.x, SUN.y, 90);
+    halo.addColorStop(0, `rgba(255,244,214,${0.55 * sunK})`); halo.addColorStop(0.35, `rgba(255,236,190,${0.18 * sunK})`); halo.addColorStop(1, 'rgba(255,236,190,0)');
+    ctx.fillStyle = halo; ctx.fillRect(SUN.x - 90, SUN.y - 90, 180, 180);
+    ctx.fillStyle = `rgba(255,${Math.round(236 + 14 * k)},${Math.round(200 + 30 * k)},${0.45 + 0.55 * k})`; ctx.beginPath(); ctx.arc(SUN.x, SUN.y, 13, 0, Math.PI * 2); ctx.fill();
     for (let i = 0; i < 4; i++) {
-      const x = ((i * 190 + t * (8 + i * 3)) % (W + 120)) - 60, y = 30 + i * 17;
-      cloud(ctx, x, y, 1.1 + (i % 2) * 0.4, mix([180, 180, 172], [255, 255, 255], k), 0.75);
+      const x = ((i * 190 + t * (5 + i * 2)) % (W + 160)) - 80, y = 26 + i * 15;
+      softCloud(ctx, x, y, 0.9 + (i % 2) * 0.35, k);
     }
+    // brume de pollution sur l'horizon, dissipée par le chantier
+    const smog = 0.42 * (1 - k);
+    if (smog > 0.01) { const h = ctx.createLinearGradient(0, GROUND - 90, 0, GROUND); h.addColorStop(0, 'rgba(176,160,132,0)'); h.addColorStop(1, `rgba(176,160,132,${smog})`); ctx.fillStyle = h; ctx.fillRect(0, GROUND - 90, W, 90); }
   }
-
+  // Silhouette de ville lointaine, estompée par la perspective atmosphérique.
+  const SKYLINE = [[0, 22], [26, 34], [48, 18], [70, 40], [92, 28], [118, 46], [140, 24], [166, 36], [196, 20], [228, 30], [252, 50], [274, 26], [300, 38], [330, 22], [356, 44], [380, 30], [404, 24], [430, 52], [452, 34], [480, 26], [506, 40], [530, 22], [556, 32], [584, 46], [608, 28], [634, 20]];
+  function backdrop(ctx, r) {
+    const k = ease(r);
+    ctx.fillStyle = `rgba(${Math.round(150 + 30 * k)},${Math.round(160 + 34 * k)},${Math.round(168 + 40 * k)},${0.42 - 0.1 * k})`;
+    ctx.beginPath(); ctx.moveTo(0, GROUND);
+    SKYLINE.forEach(([x, h], i) => { const nx = (SKYLINE[i + 1] || [W + 20])[0]; ctx.lineTo(x, GROUND - h); ctx.lineTo(nx - 3, GROUND - h); ctx.lineTo(nx - 3, GROUND - h * 0.6); });
+    ctx.lineTo(W, GROUND); ctx.closePath(); ctx.fill();
+  }
+  // Sol : trottoir (joints, bordure) puis terre / pelouse ; ombre portée du bâtiment (soleil en haut à droite).
   function ground(ctx, r, t) {
-    ctx.fillStyle = mix([206, 204, 190], [214, 234, 219], ease(r)); ctx.fillRect(0, GROUND, W, H - GROUND);
-    ctx.fillStyle = mix([168, 162, 146], [126, 184, 140], ease(r)); ctx.fillRect(0, GROUND, W, 3);
+    const k = ease(r);
+    const g = ctx.createLinearGradient(0, GROUND, 0, H);
+    g.addColorStop(0, mix([196, 192, 180], [196, 226, 204], k)); g.addColorStop(1, mix([170, 166, 152], [150, 196, 160], k));
+    ctx.fillStyle = g; ctx.fillRect(0, GROUND, W, H - GROUND);
+    ctx.fillStyle = mix([206, 204, 198], [222, 224, 220], k); ctx.fillRect(0, GROUND, W, 9);
+    ctx.strokeStyle = 'rgba(120,120,112,.28)'; ctx.lineWidth = 0.7; ctx.beginPath();
+    for (let x = 6; x < W; x += 22) { ctx.moveTo(x, GROUND); ctx.lineTo(x - 3, GROUND + 9); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(120,118,108,.35)'; ctx.fillRect(0, GROUND + 9, W, 1.5);
+    const sh = 0.10 + 0.10 * k;
+    ctx.fillStyle = `rgba(30,40,36,${sh})`; ctx.beginPath(); ctx.moveTo(B.x + B.w + 14, GROUND); ctx.lineTo(B.x + B.w - 22, GROUND + 15); ctx.lineTo(B.x - 34, GROUND + 15); ctx.lineTo(B.x, GROUND); ctx.closePath(); ctx.fill();
     const grass = ease(stageK(r, 4));
     if (grass > 0) {
-      ctx.strokeStyle = C.leaf; ctx.lineWidth = 1.4;
-      for (let i = 0; i < 58; i++) { const x = 8 + i * 11 + (i % 3) * 2; if (x > W - 6) break; const h = (4 + (i % 4) * 1.5) * grass, sway = Math.sin(t * 2 + i) * 1.2; ctx.beginPath(); ctx.moveTo(x, GROUND + 1); ctx.lineTo(x + sway, GROUND + 1 - h); ctx.stroke(); }
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 64; i++) { const x = 4 + i * 10 + (i % 3) * 2; if (x > W - 4) break; const h = (4 + (i % 4) * 1.6) * grass, sway = Math.sin(t * 2 + i) * 1.1; ctx.strokeStyle = i % 2 ? C.leaf : C.leaf2; ctx.beginPath(); ctx.moveTo(x, GROUND + 11); ctx.lineTo(x + sway, GROUND + 11 - h); ctx.stroke(); }
     }
   }
 
+  // Arbre : tronc effilé, branches, feuillage en touffes ombrées, ombre au sol.
   function tree(ctx, x, s, t) {
     if (s <= 0) return;
-    const h = 46 * s, sway = Math.sin(t * 1.3 + x) * 1.5 * s;
-    ctx.fillStyle = '#7a5a3c'; ctx.fillRect(x - 2.5 * s, GROUND - h, 5 * s, h);
-    ctx.fillStyle = C.leaf2; ctx.beginPath(); ctx.arc(x + sway, GROUND - h - 8 * s, 18 * s, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = C.leaf; ctx.beginPath(); ctx.arc(x - 8 * s + sway, GROUND - h - 2 * s, 12 * s, 0, Math.PI * 2); ctx.arc(x + 9 * s + sway, GROUND - h - 4 * s, 12 * s, 0, Math.PI * 2); ctx.fill();
+    const h = 46 * s, sway = Math.sin(t * 1.3 + x) * 1.5 * s, base = GROUND + 4;
+    ctx.fillStyle = 'rgba(30,40,36,.14)'; ctx.beginPath(); ctx.ellipse(x - 10 * s, base + 2, 22 * s, 4 * s, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#6e4f34'; ctx.beginPath(); ctx.moveTo(x - 3.2 * s, base); ctx.lineTo(x - 1.4 * s, base - h); ctx.lineTo(x + 1.4 * s, base - h); ctx.lineTo(x + 3.2 * s, base); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#6e4f34'; ctx.lineWidth = 1.6 * s; ctx.beginPath(); ctx.moveTo(x, base - h * 0.6); ctx.lineTo(x - 9 * s, base - h * 0.85); ctx.moveTo(x, base - h * 0.7); ctx.lineTo(x + 8 * s, base - h * 0.95); ctx.stroke();
+    const clusters = [[-9, -4, 12], [9, -6, 12], [0, -14, 15], [-4, 2, 11], [6, 1, 10]];
+    clusters.forEach(([dx, dy, rad]) => {
+      const cx = x + (dx + sway) * s, cy = base - h + dy * s, rr2 = rad * s, g = ctx.createRadialGradient(cx + rr2 * 0.35, cy - rr2 * 0.4, rr2 * 0.1, cx, cy, rr2);
+      g.addColorStop(0, '#8cc98f'); g.addColorStop(0.55, C.leaf); g.addColorStop(1, '#2f6e44');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, rr2, 0, Math.PI * 2); ctx.fill();
+    });
   }
 
   function windowsPos() { const out = []; for (let j = 0; j < 3; j++) for (let i = 0; i < 4; i++) out.push({ x: B.x + 20 + i * 42, y: B.y + 16 + j * 38, j }); return out; }
   const WINDOWS = windowsPos();
 
+  const DEPTH = { x: 14, y: -8 }; // profondeur du mur latéral (perspective)
   function building(ctx, r, t) {
     const s0 = stageK(r, 0), s1 = stageK(r, 1), s2 = stageK(r, 2), s3 = stageK(r, 3), s4 = stageK(r, 4);
-    // façade d'origine
+    const R = B.x + B.w, base = GROUND;
+    // mur latéral en perspective (éclairé par le soleil à droite), puis façade
+    const sideDirty = [178, 166, 148], sideClean = [248, 244, 232], ins = ease(s1);
+    ctx.fillStyle = mix(sideDirty, sideClean, ins); ctx.beginPath(); ctx.moveTo(R, B.y); ctx.lineTo(R + DEPTH.x, B.y + DEPTH.y); ctx.lineTo(R + DEPTH.x, base + DEPTH.y); ctx.lineTo(R, base); ctx.closePath(); ctx.fill();
     ctx.fillStyle = mix(C.stoneDirty, [176, 166, 150], s0 * 0.3); ctx.fillRect(B.x, B.y, B.w, B.h);
-    // isolation par l'extérieur : bandes posées de bas en haut
+    // joints de pierre de la façade d'origine (s'effacent sous l'isolant)
+    if (ins < 1) {
+      ctx.strokeStyle = `rgba(92,82,70,${0.22 * (1 - ins)})`; ctx.lineWidth = 0.6; ctx.beginPath();
+      for (let y = B.y + 6, row = 0; y < base; y += 6, row++) { ctx.moveTo(B.x, y); ctx.lineTo(R, y); for (let x = B.x + (row % 2 ? 7 : 0); x < R; x += 14) { ctx.moveTo(x, y - 6); ctx.lineTo(x, y); } }
+      ctx.stroke();
+    }
+    // isolation par l'extérieur : bandes posées de bas en haut (enduit clair, léger relief)
     for (let j = 0; j < 3; j++) {
       const k = ease(s1 * 3 - (2 - j)); if (k <= 0) continue;
       const y = B.y + j * (B.h / 3), w = B.w * k;
-      ctx.fillStyle = mix(C.render, [246, 242, 230], s4); ctx.fillRect(B.x, y, w, B.h / 3 + 0.5);
-      if (k < 1) { ctx.fillStyle = '#c8d8cc'; ctx.fillRect(B.x + w - 3, y, 3, B.h / 3); }
+      const g = ctx.createLinearGradient(0, y, 0, y + B.h / 3); g.addColorStop(0, mix(C.render, [250, 247, 238], s4)); g.addColorStop(1, mix([226, 219, 202], [238, 233, 220], s4));
+      ctx.fillStyle = g; ctx.fillRect(B.x, y, w, B.h / 3 + 0.5);
+      if (k < 1) { ctx.fillStyle = 'rgba(120,136,128,.55)'; ctx.fillRect(B.x + w - 2, y, 2, B.h / 3); ctx.fillStyle = '#e4ecd8'; ctx.fillRect(B.x + w, y + 3, 6, B.h / 3 - 6); }
     }
+    // bandeaux d'étage
+    ctx.fillStyle = 'rgba(255,255,255,.35)'; for (let j = 1; j < 3; j++) ctx.fillRect(B.x, B.y + j * (B.h / 3) - 1, B.w, 2);
+    ctx.fillStyle = 'rgba(0,0,0,.06)'; for (let j = 1; j < 3; j++) ctx.fillRect(B.x, B.y + j * (B.h / 3) + 1, B.w, 1.5);
     // salissures / fissures tant que la façade n'est pas isolée
     if (s1 < 1) {
-      ctx.globalAlpha = 0.5 * (1 - s1); ctx.strokeStyle = '#5d5248'; ctx.lineWidth = 1.4;
-      ctx.beginPath(); ctx.moveTo(B.x + 26, B.y + B.h); ctx.lineTo(B.x + 34, B.y + B.h - 22); ctx.lineTo(B.x + 30, B.y + B.h - 40); ctx.moveTo(B.x + 160, B.y + 30); ctx.lineTo(B.x + 168, B.y + 52); ctx.lineTo(B.x + 162, B.y + 70); ctx.stroke();
-      ctx.fillStyle = '#6f645a'; ctx.fillRect(B.x, B.y + B.h - 16, B.w, 16); ctx.globalAlpha = 1;
+      ctx.globalAlpha = 0.5 * (1 - s1); ctx.strokeStyle = '#5d5248'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(B.x + 26, base); ctx.lineTo(B.x + 34, base - 22); ctx.lineTo(B.x + 30, base - 40); ctx.moveTo(B.x + 160, B.y + 30); ctx.lineTo(B.x + 168, B.y + 52); ctx.lineTo(B.x + 162, B.y + 70); ctx.stroke();
+      const g = ctx.createLinearGradient(0, base - 22, 0, base); g.addColorStop(0, 'rgba(90,80,70,0)'); g.addColorStop(1, 'rgba(90,80,70,.9)');
+      ctx.fillStyle = g; ctx.fillRect(B.x, base - 22, B.w, 22); ctx.globalAlpha = 1;
     }
-    // toiture
-    ctx.fillStyle = mix(C.roofDirty, C.roofClean, s3);
-    ctx.beginPath(); ctx.moveTo(B.x - 10, B.y); ctx.lineTo(B.x + B.w / 2, B.y - 44); ctx.lineTo(B.x + B.w + 10, B.y); ctx.closePath(); ctx.fill();
-    // cheminée (fermée à l'étape « énergie »)
+    // occlusion ambiante au pied de la façade
+    const ao = ctx.createLinearGradient(0, base - 12, 0, base); ao.addColorStop(0, 'rgba(0,0,0,0)'); ao.addColorStop(1, 'rgba(0,0,0,.14)');
+    ctx.fillStyle = ao; ctx.fillRect(B.x, base - 12, B.w, 12);
+    // toiture : pan avant + pan latéral, rangs de tuiles, ombre de l'avant-toit
+    const roofC = mix(C.roofDirty, C.roofClean, s3), ridge = { x: B.x + B.w / 2, y: B.y - 44 };
+    ctx.fillStyle = mix([70, 64, 60], [58, 74, 68], s3); ctx.beginPath(); ctx.moveTo(ridge.x, ridge.y); ctx.lineTo(ridge.x + DEPTH.x, ridge.y + DEPTH.y); ctx.lineTo(R + 10 + DEPTH.x, B.y + DEPTH.y); ctx.lineTo(R + 10, B.y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = roofC; ctx.beginPath(); ctx.moveTo(B.x - 10, B.y); ctx.lineTo(ridge.x, ridge.y); ctx.lineTo(R + 10, B.y); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.moveTo(B.x - 10, B.y); ctx.lineTo(ridge.x, ridge.y); ctx.lineTo(R + 10, B.y); ctx.closePath(); ctx.clip();
+    ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 0.8; ctx.beginPath(); for (let y = B.y - 4; y > ridge.y; y -= 5) { ctx.moveTo(B.x - 10, y); ctx.lineTo(R + 10, y); } ctx.stroke();
+    const rg = ctx.createLinearGradient(B.x, 0, R, 0); rg.addColorStop(0, 'rgba(0,0,0,.12)'); rg.addColorStop(1, 'rgba(255,255,255,.10)'); ctx.fillStyle = rg; ctx.fillRect(B.x - 10, ridge.y, B.w + 20, B.y - ridge.y);
+    ctx.restore();
+    const eave = ctx.createLinearGradient(0, B.y, 0, B.y + 9); eave.addColorStop(0, 'rgba(0,0,0,.22)'); eave.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = eave; ctx.fillRect(B.x, B.y, B.w, 9);
+    ctx.fillStyle = mix([96, 90, 84], [120, 128, 124], s3); ctx.fillRect(B.x - 11, B.y - 1, B.w + 22, 2.5); // gouttière
+    // cheminée (fermée à l'étape « énergie »), face éclairée + face à l'ombre
     ctx.fillStyle = mix([120, 104, 92], [150, 150, 146], s3); ctx.fillRect(B.x + 140, B.y - 46, 14, 26);
-    if (s3 > 0.4) { ctx.fillStyle = '#7d8a85'; ctx.fillRect(B.x + 137, B.y - 49, 20, 4); }
-    // panneaux solaires sur le pan gauche
+    ctx.fillStyle = mix([150, 132, 116], [176, 176, 172], s3); ctx.fillRect(B.x + 154, B.y - 46, 4, 24);
+    ctx.fillStyle = '#5d5550'; ctx.fillRect(B.x + 138, B.y - 49, 20, 3);
+    if (s3 > 0.4) { ctx.fillStyle = '#7d8a85'; ctx.fillRect(B.x + 137, B.y - 52, 22, 4); }
+    // panneaux solaires sur le pan gauche (cellules, cadre alu, reflet du ciel)
     for (let i = 0; i < 4; i++) {
       const k = ease(s3 * 5 - i); if (k <= 0) continue;
-      const u0 = 0.12 + i * 0.2, u1 = u0 + 0.17, lx = u => B.x - 6 + u * (B.w / 2 + 6), ly = u => B.y - 4 - u * 38;
-      ctx.globalAlpha = k; ctx.fillStyle = '#284b63';
-      ctx.beginPath(); ctx.moveTo(lx(u0), ly(u0) - 2 + (1 - k) * -16); ctx.lineTo(lx(u1), ly(u1) - 2 + (1 - k) * -16); ctx.lineTo(lx(u1), ly(u1) + 8 + (1 - k) * -16); ctx.lineTo(lx(u0), ly(u0) + 8 + (1 - k) * -16); ctx.closePath(); ctx.fill();
-      const shine = (t * 0.5 + i * 0.25) % 1; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(lx(u0 + (u1 - u0) * shine), ly(u0 + (u1 - u0) * shine) - 1); ctx.lineTo(lx(u0 + (u1 - u0) * shine), ly(u0 + (u1 - u0) * shine) + 7); ctx.stroke();
+      const u0 = 0.12 + i * 0.2, u1 = u0 + 0.17, lx = u => B.x - 6 + u * (B.w / 2 + 6), ly = u => B.y - 4 - u * 38, off = (1 - k) * -16;
+      ctx.globalAlpha = k;
+      const g = ctx.createLinearGradient(lx(u0), ly(u1), lx(u1), ly(u0) + 8); g.addColorStop(0, '#1c3a52'); g.addColorStop(0.6, '#2d5878'); g.addColorStop(1, '#6f9bbb');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(lx(u0), ly(u0) - 2 + off); ctx.lineTo(lx(u1), ly(u1) - 2 + off); ctx.lineTo(lx(u1), ly(u1) + 8 + off); ctx.lineTo(lx(u0), ly(u0) + 8 + off); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#c9d3d8'; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.strokeStyle = 'rgba(200,220,235,.35)'; ctx.lineWidth = 0.5; ctx.beginPath(); const um = (u0 + u1) / 2; ctx.moveTo(lx(um), ly(um) - 2 + off); ctx.lineTo(lx(um), ly(um) + 8 + off); ctx.stroke();
+      const shine = (t * 0.35 + i * 0.25) % 1; ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(lx(u0 + (u1 - u0) * shine), ly(u0 + (u1 - u0) * shine) - 1 + off); ctx.lineTo(lx(u0 + (u1 - u0) * shine), ly(u0 + (u1 - u0) * shine) + 7 + off); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    // toiture végétalisée (pan droit)
+    // toiture végétalisée (pan droit) : substrat + sedums en touffes
     if (s4 > 0) {
-      ctx.globalAlpha = ease(s4 * 1.5); ctx.fillStyle = C.leaf;
-      ctx.beginPath(); ctx.moveTo(B.x + B.w / 2 + 4, B.y - 40); ctx.lineTo(B.x + B.w + 6, B.y - 2); ctx.lineTo(B.x + B.w - 4, B.y - 2); ctx.lineTo(B.x + B.w / 2 + 4, B.y - 32); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = C.green2; for (let i = 0; i < 5; i++) { const u = (i + 0.5) / 5, px = B.x + B.w / 2 + 6 + u * (B.w / 2), py = B.y - 40 + u * 38; ctx.fillRect(px - 1, py - 6, 2, 6); ctx.fillRect(px - 3, py - 4, 2, 3); ctx.fillRect(px + 1, py - 4, 2, 3); }
+      ctx.globalAlpha = ease(s4 * 1.5);
+      const g = ctx.createLinearGradient(0, B.y - 40, 0, B.y); g.addColorStop(0, '#6fb27a'); g.addColorStop(1, '#4e9460');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(ridge.x + 4, B.y - 40); ctx.lineTo(R + 6, B.y - 2); ctx.lineTo(R - 4, B.y - 2); ctx.lineTo(ridge.x + 4, B.y - 32); ctx.closePath(); ctx.fill();
+      for (let i = 0; i < 9; i++) { const u = (i + 0.5) / 9, px = ridge.x + 6 + u * (B.w / 2), py = B.y - 40 + u * 38; ctx.fillStyle = i % 2 ? '#8cc98f' : '#3f8f5a'; ctx.beginPath(); ctx.arc(px, py - 3, 2.6, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = 1;
     }
-    // menuiseries remplacées une à une
+    // fenêtres : tableau en retrait, appui, vitrage qui reflète le ciel ; remplacées une à une
     WINDOWS.forEach((w, i) => {
       const k = clamp(s2 * 12 - i);
-      ctx.fillStyle = mix(C.winDirty, C.winClean, k); ctx.fillRect(w.x, w.y, 22, 24);
-      ctx.fillStyle = mix([70, 64, 58], [255, 255, 255], k); ctx.fillRect(w.x + 10, w.y, 2, 24); ctx.fillRect(w.x, w.y + 11, 22, 2);
+      ctx.fillStyle = 'rgba(40,36,32,.35)'; ctx.fillRect(w.x - 1, w.y - 1, 24, 26);
+      const g = ctx.createLinearGradient(0, w.y, 0, w.y + 24);
+      g.addColorStop(0, mix([110, 116, 118], [196, 224, 238], k)); g.addColorStop(1, mix(C.winDirty, [118, 168, 196], k));
+      ctx.fillStyle = g; ctx.fillRect(w.x + 1, w.y + 1, 20, 22);
+      ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(w.x + 1, w.y + 1, 20, 2); ctx.fillRect(w.x + 1, w.y + 1, 2, 22);
+      ctx.fillStyle = mix([70, 64, 58], [250, 250, 248], k); ctx.fillRect(w.x + 10, w.y + 1, 2, 22); ctx.fillRect(w.x + 1, w.y + 11, 20, 2);
+      ctx.strokeStyle = mix([70, 64, 58], [250, 250, 248], k); ctx.lineWidth = 1.2; ctx.strokeRect(w.x + 1, w.y + 1, 20, 22);
+      if (k > 0.5) { ctx.strokeStyle = `rgba(255,255,255,${0.35 * k})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(w.x + 3, w.y + 9); ctx.lineTo(w.x + 8, w.y + 3); ctx.moveTo(w.x + 13, w.y + 20); ctx.lineTo(w.x + 19, w.y + 14); ctx.stroke(); }
+      ctx.fillStyle = mix([150, 140, 126], [236, 232, 222], ins); ctx.fillRect(w.x - 3, w.y + 24, 28, 3); // appui
+      ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(w.x - 2, w.y + 27, 26, 2);
       if (k > 0 && k < 1 && !w.flashed) { w.flashed = true; burst(w.x + 11, w.y + 12, '#ffffff'); }
       if (k === 0) w.flashed = false;
     });
-    // porte
-    ctx.fillStyle = mix([96, 72, 54], [6, 64, 43], s2); ctx.fillRect(B.x + B.w / 2 - 12, B.y + B.h - 34, 24, 34);
+    // porte : encadrement, panneau, poignée
+    const dx = B.x + B.w / 2 - 12;
+    ctx.fillStyle = 'rgba(40,36,32,.35)'; ctx.fillRect(dx - 2, base - 36, 28, 36);
+    const dg = ctx.createLinearGradient(dx, 0, dx + 24, 0); dg.addColorStop(0, mix([86, 64, 48], [6, 64, 43], s2)); dg.addColorStop(1, mix([108, 82, 62], [22, 96, 66], s2));
+    ctx.fillStyle = dg; ctx.fillRect(dx, base - 34, 24, 34);
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(dx + 4, base - 30, 16, 12);
+    ctx.fillStyle = '#d8c9a0'; ctx.fillRect(dx + 18, base - 18, 3, 2);
     // diagnostic : fuites de chaleur (caméra thermique) qui disparaissent avec l'isolation
     const heat = (0.35 + 0.65 * ease(s0 * 2)) * (1 - ease(s1 * 1.3));
     if (heat > 0.02) {
@@ -167,25 +253,38 @@
       spots.forEach(([x, y], i) => {
         const pulse = 0.75 + 0.25 * Math.sin(t * 3 + i * 1.7), rad = 26 * pulse;
         const g = ctx.createRadialGradient(x, y, 2, x, y, rad);
-        g.addColorStop(0, `rgba(232,72,48,${0.55 * heat})`); g.addColorStop(0.5, `rgba(250,160,60,${0.3 * heat})`); g.addColorStop(1, 'rgba(250,200,80,0)');
+        g.addColorStop(0, `rgba(232,72,48,${0.5 * heat})`); g.addColorStop(0.5, `rgba(250,160,60,${0.26 * heat})`); g.addColorStop(1, 'rgba(250,200,80,0)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.fill();
       });
     }
-    // échafaudage : monté au début de l'isolation, démonté pendant la végétalisation
+    // échafaudage : montants, lisses, diagonales, planchers bois, filet de protection
     const scaffold = Math.min(ease(s1 * 2.5), 1 - ease(s4 * 1.6));
     if (scaffold > 0.01) {
-      const top = B.y + B.h - (B.h + 6) * scaffold, x0 = B.x - 8, x1 = B.x + B.w + 8;
-      ctx.strokeStyle = '#c28a2c'; ctx.lineWidth = 2;
-      for (let x = x0; x <= x1; x += 49.5) { ctx.beginPath(); ctx.moveTo(x, GROUND); ctx.lineTo(x, top); ctx.stroke(); }
-      ctx.strokeStyle = '#8f6420'; ctx.lineWidth = 3;
-      for (let j = 0; j < 4; j++) { const y = B.y + B.h - j * (B.h / 3); if (y < top) break; ctx.beginPath(); ctx.moveTo(x0 - 3, y); ctx.lineTo(x1 + 3, y); ctx.stroke(); }
+      const top = B.y + B.h - (B.h + 6) * scaffold, x0 = B.x - 8, x1 = R + 8;
+      ctx.save(); ctx.beginPath(); ctx.rect(x0 - 6, top, x1 - x0 + 12, base - top + 1); ctx.clip();
+      ctx.fillStyle = 'rgba(40,120,80,.07)'; ctx.fillRect(x0, top, x1 - x0, base - top);
+      ctx.strokeStyle = '#8c9696'; ctx.lineWidth = 1.6;
+      for (let x = x0; x <= x1 + 0.5; x += 49.5) { ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x, top); ctx.stroke(); }
+      ctx.lineWidth = 0.9; ctx.beginPath();
+      for (let x = x0; x < x1 - 1; x += 49.5) for (let j = 0; j < 3; j++) { const y1 = base - j * (B.h / 3), y2 = y1 - B.h / 3; ctx.moveTo(x, y1); ctx.lineTo(x + 49.5, y2); }
+      ctx.stroke();
+      for (let j = 0; j < 4; j++) {
+        const y = base - j * (B.h / 3); if (y < top) break;
+        ctx.fillStyle = '#b07a3a'; ctx.fillRect(x0 - 3, y - 3, x1 - x0 + 6, 3); ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(x0 - 3, y, x1 - x0 + 6, 1);
+        ctx.strokeStyle = '#8c9696'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0 - 3, y - 12); ctx.lineTo(x1 + 3, y - 12); ctx.stroke(); // garde-corps
+      }
+      ctx.restore();
     }
-    // pompe à chaleur
+    // pompe à chaleur : caisson avec face latérale, grille, ventilateur
     const pac = ease(s3 * 2 - 0.6);
     if (pac > 0) {
-      const px = B.x + B.w + 6, py = GROUND - 26 * pac;
-      ctx.fillStyle = '#e7ecea'; rr(ctx, px, py, 34, 26 * pac, 3); ctx.fill(); ctx.strokeStyle = '#9aa8a3'; ctx.lineWidth = 1; rr(ctx, px, py, 34, 26 * pac, 3); ctx.stroke();
+      const px = R + 6, h = 26 * pac, py = base - h;
+      ctx.fillStyle = 'rgba(30,40,36,.16)'; ctx.beginPath(); ctx.ellipse(px + 12, base + 2, 22, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#cfd8d4'; ctx.beginPath(); ctx.moveTo(px + 34, py); ctx.lineTo(px + 40, py - 4); ctx.lineTo(px + 40, base - 4); ctx.lineTo(px + 34, base); ctx.closePath(); ctx.fill();
+      const pg = ctx.createLinearGradient(0, py, 0, base); pg.addColorStop(0, '#f4f7f6'); pg.addColorStop(1, '#dce3e0');
+      ctx.fillStyle = pg; rr(ctx, px, py, 34, h, 3); ctx.fill(); ctx.strokeStyle = '#9aa8a3'; ctx.lineWidth = 1; rr(ctx, px, py, 34, h, 3); ctx.stroke();
       if (pac > 0.9) {
+        ctx.strokeStyle = '#b5c0bc'; ctx.beginPath(); ctx.arc(px + 17, py + 13, 9.5, 0, Math.PI * 2); ctx.stroke();
         ctx.save(); ctx.translate(px + 17, py + 13); ctx.rotate(t * 9);
         ctx.fillStyle = '#7d8a85'; for (let i = 0; i < 3; i++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.ellipse(5, 0, 5, 2.2, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
@@ -289,16 +388,40 @@
     const walking = dist > 1.5;
     if (walking) { const k = Math.min(1, speed * dt / dist); p.x += dx * k; p.y += dy * k; p.dir = dx < 0 ? -1 : 1; }
     const x = p.x, y = p.y - 52, step = walking ? Math.sin(t * 12) * 4 : 0, work = walking ? 0 : Math.sin(t * 8);
-    ctx.save(); ctx.translate(x, y); ctx.scale(p.dir < 0 ? -1 : 1, 1);
-    ctx.lineCap = 'round'; ctx.strokeStyle = '#2b3a35'; ctx.lineWidth = 4.5;
-    ctx.beginPath(); ctx.moveTo(-3, 32); ctx.lineTo(-5 - step, 52); ctx.moveTo(3, 32); ctx.lineTo(5 + step, 52); ctx.stroke();
-    ctx.fillStyle = C.green2; rr(ctx, -10, 0, 20, 34, 7); ctx.fill();
-    ctx.fillStyle = '#f2c94c'; ctx.fillRect(-10, 14, 20, 3); // bande réfléchissante
-    ctx.fillStyle = '#f2c39b'; ctx.beginPath(); ctx.arc(0, -8, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#f2c94c'; ctx.beginPath(); ctx.arc(0, -11, 10, Math.PI, 0); ctx.fill(); ctx.fillRect(-12, -12, 24, 3); // casque
+    // V6.30 (réalisme) : ombre portée au sol, pantalon de travail, chaussures de sécurité, gilet haute
+    // visibilité à bandes, bras libre qui balance à la marche, léger rebond du pas.
+    ctx.save(); ctx.fillStyle = 'rgba(30,40,35,.22)'; ctx.beginPath(); ctx.ellipse(x + 3, p.y + 1, 13, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    const bob = walking ? Math.abs(Math.sin(t * 12)) * 1.2 : 0;
+    ctx.save(); ctx.translate(x, y - bob); ctx.scale(p.dir < 0 ? -1 : 1, 1);
+    ctx.lineCap = 'round';
+    // bras arrière (balancier)
+    const swing = walking ? -Math.sin(t * 12) * 0.5 : 0.15;
+    ctx.strokeStyle = '#155f3c'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-6, 7); ctx.lineTo(-6 + Math.sin(swing) * 13, 7 + Math.cos(swing) * 13); ctx.stroke();
+    // jambes : pantalon foncé, genoux légèrement fléchis, chaussures
+    [[-3, -step], [3, step]].forEach(([hx0, st]) => {
+      const kx = hx0 + st * 0.5, fx = hx0 + st;
+      ctx.strokeStyle = '#2f3d4a'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(hx0, 31); ctx.lineTo(kx + 0.8, 42); ctx.lineTo(fx, 50); ctx.stroke();
+      ctx.fillStyle = '#3a2b22'; rr(ctx, fx - 3, 49, 9, 4, 2); ctx.fill();
+    });
+    // torse : polo + gilet haute visibilité
+    const vest = ctx.createLinearGradient(-10, 0, 10, 0); vest.addColorStop(0, '#d9ec3c'); vest.addColorStop(1, '#b9cc22');
+    ctx.fillStyle = C.green2; rr(ctx, -9, 0, 18, 33, 6); ctx.fill();
+    ctx.fillStyle = vest; rr(ctx, -10, 2, 20, 26, 5); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillRect(-10, 13, 20, 2.2); ctx.fillRect(-10, 21, 20, 2.2);
+    ctx.fillStyle = C.green2; ctx.fillRect(-1, 2, 2, 26);
+    ctx.fillStyle = '#2f3d4a'; ctx.fillRect(-9, 28, 18, 5); // ceinture / bas
+    // tête : cou, visage ombré, oreille, casque avec visière
+    ctx.fillStyle = '#e3b08a'; ctx.fillRect(-2.5, -2, 5, 4);
+    const face = ctx.createRadialGradient(2, -10, 2, 0, -8, 9); face.addColorStop(0, '#f6cfaa'); face.addColorStop(1, '#dca57f');
+    ctx.fillStyle = face; ctx.beginPath(); ctx.arc(0, -8, 8.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2b3a35'; ctx.beginPath(); ctx.arc(4, -8, 1.1, 0, Math.PI * 2); ctx.fill();
+    const helm = ctx.createLinearGradient(0, -21, 0, -10); helm.addColorStop(0, '#ffe07a'); helm.addColorStop(1, '#e2b52f');
+    ctx.fillStyle = helm; ctx.beginPath(); ctx.arc(0, -11, 9.5, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = '#d4a628'; rr(ctx, -10, -12.5, 23, 3, 1.5); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, -11, 6.5, Math.PI * 1.15, Math.PI * 1.55); ctx.stroke();
     // bras + outil
     const ang = -0.5 + work * 0.35;
-    ctx.strokeStyle = C.green2; ctx.lineWidth = 4.5; ctx.beginPath(); ctx.moveTo(6, 8); ctx.lineTo(6 + Math.cos(ang) * 14, 8 + Math.sin(ang) * 14); ctx.stroke();
+    ctx.strokeStyle = C.green2; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(6, 8); ctx.lineTo(6 + Math.cos(ang) * 14, 8 + Math.sin(ang) * 14); ctx.stroke();
     const hx = 6 + Math.cos(ang) * 14, hy = 8 + Math.sin(ang) * 14;
     if (tg.tool === 'camera') { ctx.fillStyle = '#33403b'; rr(ctx, hx - 2, hy - 7, 12, 10, 2); ctx.fill(); ctx.fillStyle = '#ff8a50'; ctx.fillRect(hx + 1, hy - 5, 6, 5); }
     else if (tg.tool === 'wrench') { ctx.strokeStyle = '#7d8a85'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx + 10, hy - 6); ctx.stroke(); }
@@ -360,6 +483,7 @@
     const r = clamp(ui.shown), ctx = ui.ctx, t = ui.t, still = reduced();
     ctx.clearRect(0, 0, W, H);
     sky(ctx, r, still ? 0 : t);
+    backdrop(ctx, r);
     ground(ctx, r, t);
     tree(ctx, 470, ease(stageK(r, 4) * 1.3), t);
     tree(ctx, 612, ease(stageK(r, 4) * 1.3 - 0.25) * 0.85, t);
@@ -380,7 +504,7 @@
       const pull = ease(p.age / 2.4);
       p.x += ((INTAKE.x - p.x) * pull) * dt * 1.8 + 4 * dt;
       p.y += ((INTAKE.y - p.y) * pull) * dt * 1.8 - 14 * dt * (1 - pull) + Math.sin(t * 3 + p.sw) * 0.3;
-      cloud(ctx, p.x, p.y, p.s * (1 - pull * 0.55), C.co2, 0.7);
+      smoke(ctx, p.x, p.y, p.s * (1 - pull * 0.55), p.age, p.sw);
       if (p.age > 0.4 && p.age < 1.2) { ctx.fillStyle = '#5c6662'; ctx.font = '600 9px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('CO₂', p.x + 10 * p.s, p.y + 3); }
     });
     let sucking = false;

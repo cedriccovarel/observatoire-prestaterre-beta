@@ -1199,8 +1199,8 @@
   }
 
   function tableViewToggle(kind,view,modes=['list','bar']){
-    const labels={list:'Liste',bar:'Barres',histogram:'Histogramme',tiles:'Tuiles',map:'Carte',matrix:'Matrice'};
-    const icons={list:'☷',bar:'▥',histogram:'▤',tiles:'▦',map:'⌖',matrix:'▦'};
+    const labels={list:'Liste',bar:'Barres',histogram:'Histogramme',tiles:'Tuiles',map:'Carte',matrix:'Matrice',pie:'Camembert'};
+    const icons={list:'☷',bar:'▥',histogram:'▤',tiles:'▦',map:'⌖',matrix:'▦',pie:'<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 8V1.8A6.2 6.2 0 0 1 14.2 8Z" fill="currentColor"/></svg>'};
     return `<div class="obs-view-toggle obs-table-view-toggle" role="group" aria-label="Mode d’affichage">${modes.map(m=>`<button type="button" class="${view===m?'is-active':''}" data-table-view="${attr(kind)}" data-view="${attr(m)}" title="${attr(labels[m]||m)}">${icons[m]||'●'}</button>`).join('')}</div>`;
   }
   function tableBarRows(items,{name=x=>x.name,value=x=>x.value,secondary=x=>'',crossKey='',crossValue=x=>x.name,crossLabel=x=>x.name,total=0}={}){
@@ -1536,8 +1536,8 @@
       {label:'Logements',value:fmt(sum(ops,o=>o.dwellings)),note:'dans la population'}
     ])}
     <div class="obs-grid-2">
-      <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>MENTIONS</span><h2>Mentions et labels</h2></div><div class="obs-card-head-tools">${tableSearchHtml('mention',state.mentionSearch,'Rechercher une mention…')}${tableViewToggle('mention',state.mentionTableView,['list','bar','tiles'])}</div></div>${tagTable(mentionUniverse,'mention')}</article>
-      <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>PERFORMANCES</span><h2>Niveaux de performance</h2></div><div class="obs-card-head-tools">${tableSearchHtml('performance',state.performanceSearch,'Rechercher une performance…')}${tableViewToggle('performance',state.performanceTableView,['list','bar','tiles'])}</div></div>${tagTable(perfUniverse,'performance')}</article>
+      <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>MENTIONS</span><h2>Mentions et labels</h2></div><div class="obs-card-head-tools">${tableSearchHtml('mention',state.mentionSearch,'Rechercher une mention…')}${tableViewToggle('mention',state.mentionTableView,['list','bar','tiles','pie'])}</div></div>${tagTable(mentionUniverse,'mention')}</article>
+      <article class="obs-card"><div class="obs-card-head obs-card-head-search"><div><span>PERFORMANCES</span><h2>Niveaux de performance</h2></div><div class="obs-card-head-tools">${tableSearchHtml('performance',state.performanceSearch,'Rechercher une performance…')}${tableViewToggle('performance',state.performanceTableView,['list','bar','tiles','pie'])}</div></div>${tagTable(perfUniverse,'performance')}</article>
     </div>
     <article class="obs-card"><div class="obs-card-head"><div><span>CROISEMENT</span><h2>Mentions × performances</h2></div><div class="obs-card-head-tools"><small>Sélection personnalisable + matrice rapide</small>${tableViewToggle('performance-matrix',state.performanceMatrixView,['list','matrix'])}</div></div>${tagMatrix(ops,idx)}</article>`;
   }
@@ -1551,9 +1551,15 @@
       const total=items.reduce((ss,x)=>ss+(Number(x.value)||0),0)||1;
       return `${tableBarRows(model.items,{name:x=>x.name,value:x=>x.value,secondary:x=>`${fmt(x.dwellings)} lgts · ${fmt(x.buildings)} bât.`,crossKey:key,crossValue:x=>x.name,crossLabel:x=>`${kind==='mention'?'Mention':'Performance'} : ${x.name}`,total})}${paginationHtml(kind,model)}`;
     }
+    // V6.30 : camembert (10 premiers + « Autres ») ; une opération peut cumuler plusieurs mentions / performances.
+    if(view==='pie'){
+      const rank=new Map(items.map((x,i)=>[x.name,i]));
+      return `${pieDistribution(items,{key,labelPrefix:kind==='mention'?'Mention':'Performance',maxItems:10,colorFn:n=>rank.has(n)?tagPaletteColor(rank.get(n)):'#c9d3cf'})}<p class="obs-pie-note">Parts calculées sur les occurrences : une opération peut cumuler plusieurs ${kind==='mention'?'mentions ou labels':'niveaux de performance'}.</p>`;
+    }
     if(view==='tiles'){
+      // V6.30 : tuiles colorées, mêmes couleurs que le camembert (rang dans la liste complète).
       const max=Math.max(1,...model.items.map(x=>x.value)),total=items.reduce((ss,x)=>ss+(Number(x.value)||0),0)||1;
-      return `<div class="obs-table-tiles">${model.items.map(x=>`<button type="button" class="obs-table-tile ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)} style="--tile-weight:${Math.max(.12,x.value/max)}"><span>${escLines(x.name)}</span><strong>${fmt(x.value)}</strong><small>${fmt(pct(x.value,total),1)} % · ${fmt(x.dwellings)} lgts</small></button>`).join('')}</div>${paginationHtml(kind,model)}`;
+      return `<div class="obs-table-tiles is-colored">${model.items.map(x=>{const c=tagPaletteColor(items.indexOf(x));return `<button type="button" class="obs-table-tile ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)} style="--tile-weight:${Math.max(.12,x.value/max)};--tile-color:${c};--tile-tint:${hexToRgba(c,.10)};--tile-tint2:${hexToRgba(c,.22)}"><span>${escLines(x.name)}</span><strong>${fmt(x.value)}</strong><small>${fmt(pct(x.value,total),1)} % · ${fmt(x.dwellings)} lgts</small></button>`;}).join('')}</div>${paginationHtml(kind,model)}`;
     }
     return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Libellé</th><th>Opérations</th><th>Logements</th><th>Bâtiments</th><th>Part</th></tr></thead><tbody>${model.items.map(x=>`<tr class="obs-cross-row ${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${kind==='mention'?'Mention':'Performance'} : ${x.name}`)}><td><strong>${escLines(x.name)}</strong></td><td>${fmt(x.value)}</td><td>${fmt(x.dwellings)}</td><td>${fmt(x.buildings)}</td><td>${fmt(pct(x.value,ops.length),1)} %</td></tr>`).join('')}</tbody></table>${paginationHtml(kind,model)}</div>`;
   }
@@ -1631,6 +1637,10 @@
   }
   function vectorColorStyle(value){return `--vector-color:${vectorColor(value)}`;}
 
+  // Palette catégorielle (teintes bien distinctes, sobres) pour les mentions / labels et les performances.
+  const TAG_PALETTE=['#0b6b45','#3f7cac','#d49a2a','#8a5a9e','#c0624f','#2a9d8f','#7a8c3b','#b5577a','#5b6f7c','#e0b34a','#4f5d9e','#9c6b3f'];
+  function tagPaletteColor(i){return TAG_PALETTE[Math.max(0,i)%TAG_PALETTE.length];}
+  function hexToRgba(hex,a){const h=String(hex).replace('#','');const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
   function pieDistribution(items,{key='',labelPrefix='',maxItems=10,colorFn=null}={}){
     if(!items.length) return '<div class="obs-empty">Aucune donnée disponible pour cette sélection.</div>';
     const total=items.reduce((a,x)=>a+(Number(x.value)||0),0)||1;

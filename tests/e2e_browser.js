@@ -130,6 +130,16 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.evaluate(() => document.querySelector('[data-matrix-clear="performance"]').click()); await page.waitForTimeout(300);
       await page.click('#obsResetFilters'); await page.waitForTimeout(400);
       check(await page.inputValue('[data-matrix-search="performance"]') === '', 'Réinitialiser efface aussi les recherches');
+      // --- V6.30 : tuiles colorées et vue camembert (mentions, performances) ---
+      for (const kind of ['mention', 'performance']) {
+        await page.evaluate(k => document.querySelector(`[data-table-view="${k}"][data-view="tiles"]`).click(), kind); await page.waitForTimeout(300);
+        const tiles = await page.evaluate(k => { const b = document.querySelector(`[data-table-view="${k}"]`).closest('.obs-card'); const ts = [...b.querySelectorAll('.obs-table-tiles.is-colored .obs-table-tile')]; return { n: ts.length, colors: new Set(ts.map(t => t.style.getPropertyValue('--tile-color'))).size }; }, kind);
+        check(tiles.n > 0 && tiles.colors > Math.min(1, tiles.n - 1), `${kind} : tuiles colorées (${tiles.n} tuiles, ${tiles.colors} couleurs)`);
+        await page.evaluate(k => document.querySelector(`[data-table-view="${k}"][data-view="pie"]`).click(), kind); await page.waitForTimeout(300);
+        const pie = await page.evaluate(k => { const b = document.querySelector(`[data-table-view="${k}"]`).closest('.obs-card'); return { chart: !!b.querySelector('.obs-pie-chart'), legend: b.querySelectorAll('.obs-pie-legend > *').length, note: !!b.querySelector('.obs-pie-note') }; }, kind);
+        check(pie.chart && pie.legend > 0 && pie.note, `${kind} : vue camembert avec légende (${pie.legend} entrées)`);
+        await page.evaluate(k => document.querySelector(`[data-table-view="${k}"][data-view="list"]`).click(), kind); await page.waitForTimeout(200);
+      }
       // --- Filtres du haut de page : même défaut de défilement corrigé ---
       await page.evaluate(() => { const d = [...document.querySelectorAll('#obsFilters details')].find(x => x.querySelector('[data-global-filter-search="referential"]')); d.open = true; });
       await page.waitForTimeout(200);

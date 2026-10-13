@@ -1418,3 +1418,9 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-pres-item-list li{cursor:grab}
 .obs-pres-item-list li.is-drop-target{border-color:#16864f;background:#eef7f1;box-shadow:0 0 0 2px rgba(22,134,79,.2)}
 .obs-pres-stage-fit>.obs-pres-stage{transform-origin:0 0}
+/* V6.30 : tuiles colorées (Labels & performances), couleurs identiques au camembert */
+.obs-table-tiles.is-colored .obs-table-tile{background:linear-gradient(150deg,#fff 0%,var(--tile-tint,#f5faf7) 100%);border-color:var(--tile-tint2,#dce9e2);border-left:5px solid var(--tile-color,#16864f)}
+.obs-table-tiles.is-colored .obs-table-tile:before{background:var(--tile-tint2,rgba(22,134,79,.1));opacity:calc(.45 + var(--tile-weight,.2)*.55)}
+.obs-table-tiles.is-colored .obs-table-tile strong{color:var(--tile-color,#06402b)}
+.obs-table-tiles.is-colored .obs-table-tile:hover,.obs-table-tiles.is-colored .obs-table-tile.is-active{border-color:var(--tile-color,#78aa8f);box-shadow:0 8px 22px var(--tile-tint2,rgba(6,64,43,.08))}
+.obs-pie-note{margin:10px 0 0;font-size:11.5px;color:#61776c}

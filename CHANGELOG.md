@@ -1,5 +1,18 @@
 # Historique
 
+## V6.30
+
+- **Labels et performances** :
+  - En vue tuiles, les cartes « Mentions et labels » et « Niveaux de performance » sont colorées : chaque mention ou niveau a sa propre couleur (liseré, fond teinté, pastille).
+  - Nouvelle vue « Camembert » pour ces deux cartes, avec les mêmes couleurs que les tuiles. Les parts sont calculées sur les occurrences : une opération peut cumuler plusieurs mentions ou niveaux.
+- **Écran de chargement plus réaliste** :
+  - ciel en dégradé avec soleil voilé puis net, nuages volumineux, silhouette de ville en arrière-plan ;
+  - trottoir, ombres portées, herbe, arbres ombrés ;
+  - bâtiment en relief : mur latéral, joints de pierre, toiture en tuiles, gouttière, fenêtres avec reflets et appuis ;
+  - échafaudage avec planches et garde-corps, pompe à chaleur en volume ;
+  - fumée de CO₂ diffuse au lieu de nuages pleins ;
+  - technicien avec gilet haute visibilité, pantalon, chaussures de sécurité, bras qui balancent et ombre au sol.
+
 ## V6.29
 
 - **Obslide — cibles des exigences** : l’Observatoire transmet la cible (1 à 4) de chaque exigence, calculée avec ses propres règles (catalogue du référentiel, intitulé de référence « 1.2.3 … », numéro, thème) ; la slide Exigences d’Obslide l’utilise, d’où une répartition par cible identique à l’onglet Exigences. Pour un export RAPPORT importé à la main, Obslide lit aussi la cible dans une colonne « Cible » ou dans le premier chiffre de l’intitulé (« 1 - … », « 2. … ») ou de l’intitulé de référence (Obslide V29.9.4).
