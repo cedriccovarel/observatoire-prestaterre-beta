@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.27 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.28 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -232,6 +232,30 @@
     ctx.restore();
   }
 
+  // V6.28 : clôture de chantier (grillage translucide) et panneau « Rénovation en cours », posés avec
+  // l'échafaudage puis retirés pendant la végétalisation.
+  function fence(ctx, r) {
+    const show = Math.min(ease(stageK(r, 1) * 3), 1 - ease(stageK(r, 4) * 2));
+    if (show <= 0.01) return;
+    const x0 = B.x - 22, x1 = B.x + B.w + 6, h = 15, y = GROUND - h;
+    ctx.save(); ctx.globalAlpha = show;
+    ctx.fillStyle = 'rgba(214,226,220,.32)'; ctx.fillRect(x0, y, x1 - x0, h);
+    ctx.strokeStyle = 'rgba(96,112,106,.55)'; ctx.lineWidth = 0.6; ctx.beginPath();
+    for (let x = x0; x <= x1; x += 5) { ctx.moveTo(x, y); ctx.lineTo(x, GROUND); }
+    for (let yy = y; yy <= GROUND; yy += 5) { ctx.moveTo(x0, yy); ctx.lineTo(x1, yy); }
+    ctx.stroke();
+    ctx.fillStyle = '#7d8a85'; for (let x = x0; x <= x1; x += 40) ctx.fillRect(x - 1, y - 2, 2, h + 2);
+    ctx.fillStyle = '#e8eeeb'; for (let x = x0; x <= x1; x += 40) ctx.fillRect(x - 5, GROUND - 2, 10, 2);
+    // panneau de chantier
+    const px = B.x - 18, py = y - 25;
+    ctx.fillStyle = '#ffffff'; rr(ctx, px, py, 72, 21, 3); ctx.fill(); ctx.strokeStyle = C.green; ctx.lineWidth = 1.2; rr(ctx, px, py, 72, 21, 3); ctx.stroke();
+    ctx.fillStyle = '#f2c94c'; ctx.fillRect(px + 3, py + 3, 4, 15);
+    ctx.fillStyle = C.green; ctx.font = '800 6.4px Inter, system-ui, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText('RÉNOVATION', px + 11, py + 9); ctx.fillText('EN COURS', px + 11, py + 16.5);
+    ctx.fillStyle = '#7d8a85'; ctx.fillRect(px + 34, py + 21, 2, 4);
+    ctx.restore();
+  }
+
   // Technicien : se déplace vers le poste de travail de l'étape en cours.
   function techTarget(r) {
     const i = stageIndex(r);
@@ -325,6 +349,7 @@
     tree(ctx, 404, ease(stageK(r, 4) * 1.3 - 0.45) * 0.7, t);
     crane(ctx, r, still ? 0 : t);
     building(ctx, r, t);
+    fence(ctx, r);
     // émissions : moins nombreuses à mesure que le chantier avance
     ui.spawn += dt;
     if (!still && ui.spawn > 0.22 + r * 1.4 && ui.puffs.length < 12 && r < 0.97) {

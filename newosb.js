@@ -321,18 +321,23 @@
       crossFilters:state.crossFilters.map(f=>({key:f.key,value:f.value,label:f.label}))
     };
   }
-  // V6.27 : données remises à Obslide quand il s'ouvre depuis le bouton « Générateur de rapports » :
-  // opérations affichées (anonymisées si le mode est actif) et lignes RAPPORT de ces opérations.
+  // Données remises à Obslide quand il s'ouvre depuis le bouton « Générateur de rapports » : opérations
+  // affichées (filtres globaux) et lignes RAPPORT affichées par l'onglet Exigences (ses filtres), anonymisées si besoin.
   // Transmises de fenêtre à fenêtre, en mémoire, uniquement à la même origine (rien n'est stocké).
   const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année'];
   function generatorHandoffData(scope){
     const P=privacy(),anon=!!P?.enabled?.();
-    let operations=[];try{operations=JSON.parse(JSON.stringify(filteredOperations()));}catch{}
-    const rows=(window.NEWOSB_REQUIREMENTS?.exportRows?.(scope?.operationCodes||[])||[]).map(r=>{
+    // Lignes source (une par opération affichée, anonymisées si besoin) : Obslide les convertit avec son propre
+    // code, comme pour sa propre source, ce qui garantit des slides cohérentes.
+    const ops=filteredOperations();
+    const operationRows=ops.map(o=>o.raw||(Array.isArray(o.rawRows)?o.rawRows[0]:null)).filter(r=>r&&typeof r==='object').map(r=>({...r}));
+    const operationCodes=ops.map(o=>String(o.code||'')).filter(Boolean);
+    const visible=window.NEWOSB_REQUIREMENTS?.status?.().connected?window.NEWOSB_REQUIREMENTS.exportVisibleRows?.():null;
+    const rows=(visible?.rows||[]).map(r=>{
       const x=anon&&P.anonymizeRequirementRow?{...P.anonymizeRequirementRow(r),evaluationCode:P.evaluationCode?P.evaluationCode(r.evaluationCode):P.id(r.evaluationCode,'EVA')}:r;
       return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||''].map(v=>String(v??''));
     });
-    return {operations,requirements:rows.length?{headers:OBSLIDE_REQ_HEADERS,rows}:null,anonymized:anon,summary:scope?.summary||''};
+    return {operationRows,operationCodes,operationCount:ops.length,requirements:rows.length?{headers:OBSLIDE_REQ_HEADERS,rows,summary:visible.summary,evaluations:visible.evaluations}:null,anonymized:anon,summary:scope?.summary||''};
   }
   async function cloneAsPortableHtml(node){
     const clone=node.cloneNode(true);

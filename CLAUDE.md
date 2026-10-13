@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.28 | Clôture de chantier (grillage) et panneau « Rénovation en cours », posés avec l'échafaudage, retirés à la végétalisation. |
 | V6.27 | Grue de chantier : montée avec l'isolation, livre le matériau de l'étape (isolant, fenêtre, panneau solaire), démontée à la végétalisation ; feu clignotant. |
 
 ## Autres consignes du projet
@@ -30,4 +31,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - Respecter le mode anonymisé partout. Ne pas introduire Supabase. Ne pas inventer de règles normatives.
 - Les données client (exports RAPPORT, fichiers Excel transmis) ne sont jamais versionnées.
 - Le bouton « Générateur de rapports » ouvre Obslide (dépôt `cedriccovarel/obslide`) : Obslide demande à la fenêtre de
-  l'Observatoire (postMessage, même origine) les opérations filtrées et les lignes RAPPORT ; rien n'est stocké.
+  l'Observatoire (postMessage, même origine) les lignes source des opérations affichées (converties par Obslide) et
+  les lignes RAPPORT affichées par l'onglet Exigences (ses propres filtres) ; rien n'est stocké. Scénario e2e K
+  (`OBSLIDE_DIR=/chemin/obslide` pour tester avec le vrai Obslide).

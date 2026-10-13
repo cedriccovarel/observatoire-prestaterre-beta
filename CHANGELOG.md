@@ -1,5 +1,13 @@
 # Historique
 
+## V6.28
+
+- **Pont Observatoire → Obslide corrigé** :
+  - La slide Exigences reçoit exactement les lignes affichées par l’onglet Exigences de l’Observatoire (avec ses propres filtres) : mêmes dossiers analysés, mêmes exigences retenues. Auparavant, elle recevait les exigences des opérations filtrées par les filtres globaux, que l’onglet Exigences n’utilise pas, d’où des chiffres différents.
+  - Les autres slides reçoivent les lignes source des opérations affichées, converties par Obslide avec son propre code (comme avec sa propre source) : plus d’écart de format entre les deux applications.
+  - À la réception, les filtres propres aux slides gardés d’une session précédente d’Obslide sont remis à zéro (ils pouvaient masquer les opérations reçues). Chaque étape est isolée : un problème s’affiche au lieu de bloquer silencieusement toute la réception.
+- **Écran de chargement** : clôture de chantier et panneau « Rénovation en cours », posés avec l’échafaudage et retirés à la végétalisation.
+
 ## V6.27
 
 - **Obslide reçoit les données de l’Observatoire** : ouvert depuis « Générateur de rapports », Obslide demande à la fenêtre de l’Observatoire les opérations filtrées et les lignes RAPPORT de ces opérations. Plus d’import à faire pour les slides Exigences, ni de source à connecter dans Obslide. Échange de fenêtre à fenêtre, en mémoire, limité à la même origine (rien n’est enregistré) ; en mode anonymisé, les données transmises sont anonymisées. Obslide V29.9.2.

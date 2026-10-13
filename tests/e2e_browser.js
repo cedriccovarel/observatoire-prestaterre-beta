@@ -628,7 +628,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(await page.evaluate(() => document.querySelectorAll('.obs-map-dep').length === 7 && !document.querySelector('.obs-france-map.is-focused')), '« ← Retour France » revient à la carte entière');
       check(errors.length === 0, 'carte : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
-    console.log('\nK. Générateur de rapports : Obslide reçoit les données de l’Observatoire (V6.27)');
+    console.log('\nK. Générateur de rapports : Obslide reçoit les données de l’Observatoire (V6.28)');
     { // Comme en production, l'Observatoire et Obslide sont servis sur la même origine (cedriccovarel.github.io).
       const GH = 'https://cedriccovarel.github.io', OBS = GH + '/observatoire-prestaterre-beta';
       const OBSLIDE_DIR = process.env.OBSLIDE_DIR || '';
@@ -644,13 +644,18 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       await page.waitForFunction(() => window.NEWOSB_REQUIREMENTS?.status?.().connected, null, { timeout: 30000 }).catch(() => {});
       await page.evaluate(() => { const i = [...document.querySelectorAll('[data-global-filter-check="moa"]')].find(x => x.value === 'Promoteur A'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); });
       const shown = await page.textContent('#obsFilterCount');
+      // Filtre propre à l'onglet Exigences : la slide Exigences doit donner les mêmes chiffres que cet onglet.
+      await page.click('#obsNav [data-page="requirements"]'); await page.waitForTimeout(400);
+      await page.evaluate(() => { const i = document.querySelector('[data-req-filter-check="referential"][value="BEE Logement Neuf"]'); i.checked = true; i.dispatchEvent(new Event('change', { bubbles: true })); }); await page.waitForTimeout(300);
+      const reqKpi = await page.evaluate(() => ({ dossiers: document.querySelector('.req-kpis .obs-kpi strong')?.textContent?.replace(/\s/g, ''), occ: document.querySelectorAll('.req-kpis .obs-kpi strong')[1]?.textContent?.replace(/\s/g, '') }));
       const pp = context.waitForEvent('page', { timeout: 15000 }); await page.click('#obsGeneratorBtn'); const gen = await pp;
       gen.on('pageerror', e => errors.push('Obslide : ' + e.message));
       await gen.waitForURL(/\/obslide\//, { timeout: 15000 }).catch(() => {});
       if (!OBSLIDE_DIR) {
         const got = await gen.waitForFunction(() => window.__got, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
-        const codes = (got?.operations || []).map(o => o.code).sort().join(',');
-        check(got && String(got.operations.length) === shown && codes === 'OP-1,OP-2,OP-7' && got.requirements?.rows?.length > 0 && got.requirements.rows.every(r => ['OP-1', 'OP-2', 'OP-7'].includes(r[1])), `Obslide reçoit les opérations filtrées (${codes}) et leurs lignes RAPPORT (${got?.requirements?.rows?.length || 0}), sans import`);
+        const codes = (got?.operationCodes || []).slice().sort().join(',');
+        const evs = new Set((got?.requirements?.rows || []).map(r => r[0])).size;
+        check(got && String(got.operationRows.length) === shown && got.operationCount === got.operationRows.length && codes === 'OP-1,OP-2,OP-7' && String(evs) === reqKpi.dossiers && String(got.requirements.evaluations) === reqKpi.dossiers && got.requirements.rows.every(r => r[6] === 'BEE Logement Neuf') && /Référentiel : BEE Logement Neuf/.test(got.requirements.summary), `Obslide reçoit les opérations filtrées (${codes}) et les exigences affichées par l’onglet Exigences (${evs} dossiers, onglet : ${reqKpi.dossiers}), sans import`);
         const stored = await page.evaluate(() => Object.keys(localStorage).map(k => k + '=' + localStorage.getItem(k).length).join(' '));
         check(!/Les Jardins|EVA-OP/.test(await page.evaluate(() => JSON.stringify(localStorage))), `aucune donnée d’opération ni d’exigence écrite dans le stockage du navigateur (${stored.slice(0, 160)})`);
         await gen.close();
@@ -658,15 +663,17 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const pp2 = context.waitForEvent('page', { timeout: 15000 }); await page.click('#obsGeneratorBtn'); const gen2 = await pp2;
         const got2 = await gen2.waitForFunction(() => window.__got, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
         const txt = JSON.stringify(got2 || {});
-        check(got2 && got2.anonymized && got2.operations.length > 0 && !/Promoteur A|Les Jardins|EVA-OP-1/.test(txt) && got2.requirements.rows.every(r => got2.operations.some(o => o.code === r[1])), 'mode anonymisé : Obslide reçoit des données anonymisées, codes d’opération cohérents entre opérations et exigences');
+        check(got2 && got2.anonymized && got2.operationRows.length > 0 && !/Promoteur A|Les Jardins|EVA-OP-1/.test(txt) && got2.requirements.rows.every(r => /^OP-\d{6}$/.test(r[1])) && got2.operationCodes.some(c => got2.requirements.rows.some(r => r[1] === c)), 'mode anonymisé : Obslide reçoit des données anonymisées, codes d’opération cohérents entre opérations et exigences');
         await gen2.close();
       } else {
         await gen.waitForFunction(() => /Données de l’Observatoire/.test(document.getElementById('dataFeedback')?.textContent || ''), null, { timeout: 20000 }).catch(() => {});
         const fb = await gen.evaluate(() => document.getElementById('dataFeedback')?.textContent || '');
         check(/Données de l’Observatoire : 3 opérations · \d+ dossiers? d’exigences/.test(fb), 'Obslide réel : ' + fb);
+        const others = await gen.evaluate(async () => { const out = []; for (const t of [...document.querySelectorAll('.tab')]) { t.click(); await new Promise(r => setTimeout(r, 300)); const c = document.querySelector('.slide-filter-count strong')?.textContent; if (c) out.push(c); } return out; });
+        check(others.length >= 10 && others.every(c => c === shown), `Obslide réel : toutes les slides connectées ont les ${shown} opérations de l’Observatoire (${others.join(',')})`);
         await gen.selectOption('#addSlideSelect', 'requirements'); await gen.waitForTimeout(800);
-        const req = await gen.evaluate(() => ({ svg: document.querySelector('#slide svg, .slide svg, svg')?.textContent || '', body: document.body.innerText }));
-        check(/dossier/.test(req.svg) && !/Importe|importer l’export/i.test(req.svg), 'Obslide réel : la slide Exigences affiche les données de l’Observatoire sans import — ' + req.svg.slice(0, 120));
+        const req = await gen.evaluate(() => { const svg = document.querySelector('#slide svg, .slide svg, svg'); const txt = svg?.textContent || ''; const parts = [...(svg?.querySelectorAll('text') || [])].map(t => t.textContent.trim()); const after = label => (parts[parts.findIndex(p => p.toUpperCase() === label) + 1] || '').replace(/\s/g, ''); return { txt, dossiers: after('DOSSIERS ANALYSÉS'), occ: after('EXIGENCES RETENUES') }; });
+        check(req.dossiers === reqKpi.dossiers && req.occ === reqKpi.occ && !/Importe|importer l’export/i.test(req.txt), `Obslide réel : slide Exigences = onglet Exigences de l’Observatoire (dossiers ${req.dossiers} / ${reqKpi.dossiers}, exigences ${req.occ} / ${reqKpi.occ})`);
         await gen.screenshot({ path: path.join(process.env.SHOT_DIR || require('os').tmpdir(), 'obslide_handoff.png') }).catch(() => {});
       }
       check(errors.length === 0, 'remise des données à Obslide : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
