@@ -1,5 +1,5 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.17 (script OPERATIONS, version API 06.17)
+ * PRESTATERRE OBSERVATOIRE - V6.32 (script OPERATIONS, version API 06.32)
  *
  * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
  * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
@@ -12,6 +12,11 @@
  * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
  * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration
  * (genererCleAccesObservatoire() peut creer une cle aleatoire, lisible ensuite dans les proprietes).
+ *
+ * Changements V6.32 : export Google Slides entierement modifiable (mode importSlides). Le navigateur
+ *   produit un PPTX d'objets natifs (textes, formes, graphiques) ; le script le convertit en Google Slides
+ *   par l'API Google Drive. Apres mise a jour : redeployer, puis executer une fois testerGoogleSlides()
+ *   pour accepter l'autorisation Google Drive. Le mode createSlides (images) reste disponible.
  *
  * Changements V6.17 : les Exigences (onglet RAPPORT) sont servies par ce script avec la meme cle
  *   (modes reqmeta / reqchunk) : une seule URL et une seule cle pour charger l'Observatoire.
@@ -45,7 +50,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.22',
+  VERSION: '06.32',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -153,6 +158,13 @@ function newosbApiRequest_(params) {
   if (mode === 'createslides') {
     if (newosbAnonymizedOnly_()) throw new Error('Creation Google Slides desactivee sur un deploiement anonymise.');
     return newosbCreateGoogleSlides_(params.presentation || {});
+  }
+
+  // V6.32 : presentation modifiable — le navigateur produit un PPTX d'objets natifs (moteur Obslide),
+  // converti ici en Google Slides par l'API Google Drive, dans le Drive du compte qui execute le script.
+  if (mode === 'importslides') {
+    if (newosbAnonymizedOnly_()) throw new Error('Creation Google Slides desactivee sur un deploiement anonymise.');
+    return newosbImportPptxSlides_(params.presentation || {});
   }
 
   if (mode === 'meta') {
@@ -1231,6 +1243,50 @@ function newosbCreateGoogleSlides_(spec) {
 }
 
 
+// -----------------------------------------------------------------------------
+// NEWOSB V6.32 - Conversion d'un PPTX modifiable en Google Slides (API Drive)
+// -----------------------------------------------------------------------------
+const NEWOSB_PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+const NEWOSB_PPTX_MAX_BASE64 = 45 * 1024 * 1024;
+function newosbImportPptxSlides_(spec) {
+  const b64 = String(spec && spec.pptxBase64 || '').replace(/^data:[^,]*,/, '');
+  if (!b64) throw new Error('Presentation NEWOSB vide ou invalide.');
+  if (b64.length > NEWOSB_PPTX_MAX_BASE64) throw new Error('Presentation trop volumineuse pour Google Slides (reduire le nombre de slides).');
+  const bytes = Utilities.base64Decode(b64);
+  if (!bytes || bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4B) throw new Error('Fichier PPTX invalide.');
+  const title = String(spec.title || ('NEWOSB - ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone() || 'Europe/Paris', 'yyyy-MM-dd'))).slice(0, 200);
+  const boundary = 'newosb' + Utilities.getUuid().replace(/-/g, '');
+  const head = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify({ name: title, mimeType: 'application/vnd.google-apps.presentation' }) +
+    '\r\n--' + boundary + '\r\nContent-Type: ' + NEWOSB_PPTX_MIME + '\r\n\r\n';
+  const tail = '\r\n--' + boundary + '--\r\n';
+  const payload = [].concat(Utilities.newBlob(head).getBytes(), Array.prototype.slice.call(bytes), Utilities.newBlob(tail).getBytes());
+  const res = UrlFetchApp.fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
+    method: 'post',
+    contentType: 'multipart/related; boundary=' + boundary,
+    payload: payload,
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+  const code = res.getResponseCode();
+  let body = {};
+  try { body = JSON.parse(res.getContentText() || '{}'); } catch (e) { body = {}; }
+  if (code < 200 || code >= 300 || !body.id) {
+    const reason = body && body.error && body.error.message ? body.error.message : ('HTTP ' + code);
+    throw new Error('Conversion Google Slides impossible : ' + reason + '. Executer une fois testerGoogleSlides() dans l\'editeur Apps Script pour autoriser Google Drive.');
+  }
+  return {
+    ok: true,
+    service: 'NEWOSB GOOGLE SLIDES',
+    version: OBSERVATOIRE_CONFIG.VERSION,
+    format: 'pptx-editable-v1',
+    presentationId: body.id,
+    url: 'https://docs.google.com/presentation/d/' + body.id + '/edit',
+    title: title,
+    slides: Number(spec.slides) || 0
+  };
+}
+
 function newosbRenderSnapshotSlide_(slide, model) {
   newosbRect_(slide, 0, 0, 720, 405, '#FFFFFF');
   const blob = newosbDataUrlBlob_(model && model.imageData, 'newosb-slide.jpg');
@@ -1460,10 +1516,12 @@ function newosbRenderList_(slide, items, x, y, w, h, font) {
   const list=(items||[]).slice(0,22);if(!list.length)list.push('Aucun contenu exploitable.');const rh=Math.min(18,h/Math.max(1,list.length));list.forEach(function(item,i){newosbRect_(slide,x,y+i*rh+2,5,5,'#18845E',true);newosbText_(slide,String(item),x+12,y+i*rh,w-12,rh,{font:font,size:8,color:'#315D50'});});
 }
 
-/** A executer une fois apres deploiement pour autoriser SlidesApp. */
+/** A executer une fois apres deploiement pour autoriser SlidesApp et Google Drive (export modifiable V6.32). */
 function testerGoogleSlides() {
   const p = SlidesApp.create('NEWOSB - test autorisation Google Slides');
   Logger.log('Google Slides OK : ' + p.getUrl());
+  Logger.log('Google Drive OK : ' + DriveApp.getRootFolder().getName());
+  try { DriveApp.getFileById(p.getId()).setTrashed(true); } catch (e) {}
   return p.getUrl();
 }
 

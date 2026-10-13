@@ -39,7 +39,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       computeHmacSha256Signature: (v, k) => Array.from(crypto.createHmac('sha256', k).update(v).digest()).map(b => (b > 127 ? b - 256 : b)),
-      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: (bytes, type, name) => ({ bytes: bytes && bytes.length, type, name }),
+      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: (bytes, type, name) => ({ bytes: bytes && bytes.length, type, name, getBytes: () => Array.from(Buffer.from(bytes || '')) }),
       DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (a, v) => Array.from(crypto.createHash('sha256').update(String(v)).digest()).map(b => (b > 127 ? b - 256 : b))
     },
     Logger: { log: (...a) => { logs.push(a.join(' ')); } },
@@ -47,6 +47,11 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
     Session: { getScriptTimeZone: () => 'Europe/Paris' }
   };
   const logs = [];
+  // Doublure de l'API Google Drive (conversion PPTX → Google Slides, V6.32) : enregistre les envois.
+  const driveLog = { uploads: [] };
+  ctx.ScriptApp = { getOAuthToken: () => 'TOKEN-TEST' };
+  ctx.DriveApp = { getRootFolder: () => ({ getName: () => 'Mon Drive' }), getFileById: () => ({ setTrashed() {} }) };
+  ctx.UrlFetchApp = { fetch(url, opts) { const bytes = Buffer.from(opts.payload || []); driveLog.uploads.push({ url, opts, bytes }); const id = 'GSL' + driveLog.uploads.length; return { getResponseCode: () => 200, getContentText: () => JSON.stringify({ id, name: 'x' }) }; } };
   // Doublure minimale de SlidesApp : enregistre les images insérées (rendu fidèle des slides).
   const slidesLog = { presentations: [] };
   const mkSlide = () => ({ images: [], getPageElements: () => [], insertImage(blob) { this.images.push(blob); return {}; }, insertShape: () => ({ getFill: () => ({ setSolidFill() {} }), getBorder: () => ({ setTransparent() {} }) }), insertTextBox: () => ({ getText: () => ({ getTextStyle: () => ({ setFontSize() { return this; }, setBold() { return this; }, setForegroundColor() { return this; }, setFontFamily() { return this; } }), getParagraphStyle: () => ({ setParagraphAlignment() {} }) }), setContentAlignment() {} }) });
@@ -57,7 +62,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
   const names = ['doGet', 'newosbApiRequest_', 'newosbBridgeRequest', 'buildBridgeHtml_', 'newosbScrubMatrix_', 'newosbColumnRule_', 'newosbAllowedOrigins_', 'configurerSecuriteObservatoire', 'genererCleAccesObservatoire',
     'newosbExigencesBridgeRequest', 'newosbExigencesBridgeHtml_', 'configurerSecuriteExigences', 'genererCleAccesExigences', 'verifierPartageExigences'];
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8') + '\n;this.__exports={' + names.map(n => `${n}:typeof ${n}==='function'?${n}:undefined`).join(',') + '};', ctx);
-  return { ...ctx.__exports, props, logs, slidesLog, sheets };
+  return { ...ctx.__exports, props, logs, slidesLog, driveLog, sheets };
 }
 
 // Jeu de données de référence partagé par les tests.

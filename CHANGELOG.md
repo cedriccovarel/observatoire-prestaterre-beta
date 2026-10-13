@@ -1,5 +1,13 @@
 # Historique
 
+## V6.32
+
+- **Export Google Slides entièrement modifiable**, comme celui d’Obslide : chaque slide de l’onglet Présentation est convertie en objets natifs (zones de texte modifiables aux mêmes coupures de lignes, formes et dégradés, images d’origine, graphiques SVG vectoriels avec leurs textes) par le moteur d’export d’Obslide (`obslide-pptx.js`, copie de la V1.1.0). Le fichier est converti en présentation Google Slides par le script Apps Script OPERATIONS (API Google Drive) et s’ouvre dans la fenêtre Google, comme avant.
+  - **À faire une fois** : mettre à jour `Code_Operations.gs` (V6.32), redéployer, puis exécuter `testerGoogleSlides()` dans l’éditeur Apps Script pour accepter l’autorisation Google Drive.
+  - Tant que le script n’est pas à jour, ou si la conversion échoue, la présentation modifiable est téléchargée en PPTX : l’importer dans Google Drive puis l’ouvrir avec Google Slides.
+  - Toujours refusé sur un déploiement anonymisé et avec un lien de partage, comme l’ancien export.
+- **Écran de chargement** : les ombres des nuages glissent sur le sol et la façade, plus nettes à mesure que le ciel se dégage.
+
 ## V6.31
 
 - **Croisement Mentions × performances** : deux nouvelles vues à côté de la liste et de la matrice.

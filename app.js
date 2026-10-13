@@ -7476,10 +7476,11 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       if(!warm&&dataBridge.popupBlocked)throw new Error('La fenêtre Google Apps Script a été bloquée. Autorise les pop-ups pour ce site puis réessaie.');
       return {sourceUrl,warm};
     },
-    async createGoogleSlides(presentation,prepared){
+    // V6.32 : mode 'importSlides' = conversion d'un PPTX modifiable en Google Slides (mode historique : 'createSlides').
+    async createGoogleSlides(presentation,prepared,mode='createSlides'){
       const p=prepared||this.prepareGoogleSlides();
       if(p.warm)await p.warm;
-      return dataAppsScriptRequest(p.sourceUrl,{mode:'createSlides',presentation},180000);
+      return dataAppsScriptRequest(p.sourceUrl,{mode:mode==='importSlides'?'importSlides':'createSlides',presentation},300000);
     },
     showGoogleSlidesResult(url){return dataBridge?dataBridge.navigatePopup(url):false;},
     connectShare:dataConnectShare,

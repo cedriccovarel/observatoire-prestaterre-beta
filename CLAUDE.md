@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.32 | Ombres des nuages qui glissent sur le sol et la façade, plus nettes quand le soleil perce. |
 | V6.31 | Rendu tendant vers le photoréalisme : textures procédurales (enduit, pierre, trottoir, gazon), lumière chaude du soleil et rayons, vignettage, ombre adoucie, second plan de ville et brume d'horizon, reflets de nuages sur les vitrages. |
 | V6.30 | Rendu plus réaliste : ciel dégradé et soleil, silhouette de ville, bâtiment en relief (mur latéral, tuiles, reflets des fenêtres), ombres, fumée diffuse, technicien en gilet haute visibilité avec ombre et balancement des bras. |
 | V6.29 | Palette de matériaux au pied de la grue (isolant, fenêtres, panneaux solaires) qui se vide avec l'avancement de l'étape. |

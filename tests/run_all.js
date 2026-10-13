@@ -219,9 +219,21 @@ test('prolongation : nouvelle date contrôlée (1 h minimum, 366 jours maximum) 
   gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: a.share.id });
   assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareExtend', key: KEY, id: a.share.id, expiresAt: Date.now() + 30 * DAYMS }).ok, false);
 });
+test('Google Slides modifiable (V6.32) : le PPTX est converti par l’API Drive, avec la clé uniquement', () => {
+  const gs = opsGs();
+  const pptx = Buffer.concat([Buffer.from('PK\u0003\u0004'), Buffer.from('contenu-pptx-test')]).toString('base64');
+  const ok = gs.newosbBridgeRequest({ mode: 'importSlides', key: KEY, presentation: { title: 'Test', slides: 2, pptxBase64: pptx } });
+  assert.strictEqual(ok.ok, true); assert(/^https:\/\/docs\.google\.com\/presentation\/d\/GSL1\/edit$/.test(ok.url), ok.url);
+  const up = gs.driveLog.uploads[0]; assert(/upload\/drive\/v3\/files\?uploadType=multipart/.test(up.url)); assert.strictEqual(up.opts.headers.Authorization, 'Bearer TOKEN-TEST');
+  const body = up.bytes.toString('latin1'); assert(body.includes('"mimeType":"application/vnd.google-apps.presentation"')); assert(body.includes('presentationml.presentation')); assert(body.includes('PK\u0003\u0004contenu-pptx-test'));
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'importSlides', key: 'mauvaise-cle-0123456789', presentation: { pptxBase64: pptx } }).ok, false);
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'importSlides', key: KEY, presentation: { pptxBase64: Buffer.from('pas un pptx').toString('base64') } }).ok, false);
+  const anon = opsGs({ NEWOSB_ANONYMIZED_ONLY: '1' }); assert.strictEqual(anon.newosbBridgeRequest({ mode: 'importSlides', key: KEY, presentation: { pptxBase64: pptx } }).ok, false);
+  assert.strictEqual(gs.driveLog.uploads.length, 1); assert.strictEqual(anon.driveLog.uploads.length, 0);
+});
 test('un lien ne donne accès ni à l’administration, ni à Google Slides, ni à la lecture complète', () => {
   const gs = opsGs(); const { token } = mkShare(gs);
-  for (const mode of ['shareCreate', 'shareList', 'shareRevoke', 'createSlides', 'data', '']) { const r = gs.newosbBridgeRequest({ mode, share: token, codes: ['OP-2'], tabs: ['overview'] }); assert.strictEqual(r.ok, false, mode); assert(!r.rows && !r.token && !r.shares, mode); }
+  for (const mode of ['shareCreate', 'shareList', 'shareRevoke', 'createSlides', 'importSlides', 'data', '']) { const r = gs.newosbBridgeRequest({ mode, share: token, codes: ['OP-2'], tabs: ['overview'] }); assert.strictEqual(r.ok, false, mode); assert(!r.rows && !r.token && !r.shares, mode); }
   const both = shareReq(gs, token, { mode: 'meta', key: KEY }); assert.strictEqual(both.ok, false); assert(!both.headers);
   const { c } = shareRows(gs, token); assert.strictEqual(c.rows.length, 2);
 });

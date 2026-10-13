@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.31 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.32 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -495,6 +495,19 @@
   // « soft-light »), rayons très discrets quand le ciel est dégagé, vignettage léger comme une optique.
   function lighting(ctx, r, t) {
     const k = ease(r);
+    // V6.32 : ombres des nuages qui glissent sur le sol et la façade, au rythme des nuages du ciel ;
+    // plus nettes quand le soleil perce (fixes si les animations sont réduites).
+    const cs = 0.07 + 0.17 * k;
+    for (let i = 0; i < 4; i++) {
+      const cx = ((i * 190 + t * (5 + i * 2)) % (W + 160)) - 80 + 22 - 70, w = 70 + (i % 2) * 26;
+      [[GROUND + 30, 0.9], [B.y + B.h * 0.55, 0.6]].forEach(([cy, a], j) => {
+        if (j === 1 && (cx + w < B.x || cx - w > B.x + B.w)) return;
+        const g = ctx.createRadialGradient(cx, cy, 4, cx, cy, w);
+        g.addColorStop(0, `rgba(20,34,40,${cs * a})`); g.addColorStop(1, 'rgba(20,34,40,0)');
+        ctx.save(); ctx.translate(cx, cy); ctx.scale(1, j ? 0.9 : 0.32); ctx.translate(-cx, -cy);
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, w, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+      });
+    }
     ctx.save();
     try { ctx.globalCompositeOperation = 'soft-light'; } catch {}
     const warm = ctx.createRadialGradient(SUN.x, SUN.y, 10, SUN.x, SUN.y, 520);

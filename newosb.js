@@ -736,16 +736,32 @@
     const currentId=state.presentationActiveId,ids=state.presentationSlides.map(s=>s.id);let i=0;
     const next=()=>{if(i>=ids.length){state.presentationActiveId=currentId;savePresentationState();renderPage();return;}state.presentationActiveId=ids[i];savePresentationState();renderPage();requestAnimationFrame(()=>requestAnimationFrame(async()=>{await exportPresentationSlide(ids[i],format);i+=1;setTimeout(next,350);}));};next();
   }
-  async function googleSlideSnapshot(model){
-    const wrap=document.createElement('div');wrap.className='obs-google-slide-snapshot';wrap.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:-99999;';wrap.innerHTML=presentationSlideMarkup(model);document.body.appendChild(wrap);
-    const node=wrap.querySelector('#obsPresentationStage');
-    try{fitPresentationItems(wrap);await Promise.all([...node.querySelectorAll('img')].map(img=>img.complete?Promise.resolve():new Promise(r=>{img.onload=r;img.onerror=r;})));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return (await canvasFromNode(node,1280,720,1600,900)).toDataURL('image/jpeg',0.92);}finally{wrap.remove();}
+  // V6.32 : export Google Slides entièrement modifiable, avec le moteur d'export d'Obslide (obslide-pptx.js).
+  // Chaque slide est mise en page à sa taille réelle (1280×720) puis convertie en objets PowerPoint natifs à
+  // partir des positions mesurées par le navigateur : zones de texte modifiables (mêmes coupures de lignes),
+  // formes et dégradés natifs, images d'origine, graphiques SVG vectoriels avec leurs textes modifiables.
+  // Le fichier est ensuite converti en présentation Google Slides par le script Apps Script OPERATIONS.
+  async function buildEditablePptx(onProgress){
+    const engine=window.ObslidePptx;
+    if(!engine)throw new Error('Module d’export modifiable absent (obslide-pptx.js). Recharge la page.');
+    const title=`Observatoire Prestaterre – ${new Date().toLocaleDateString('fr-FR')}`;
+    const pptx=engine.createPresentation({title,subject:'Export Observatoire Prestaterre modifiable (Google Slides / PowerPoint)'});
+    for(let i=0;i<state.presentationSlides.length;i++){
+      const model=state.presentationSlides[i];
+      const wrap=document.createElement('div');wrap.className='obs-google-slide-snapshot';wrap.style.cssText='position:fixed;left:-20000px;top:0;width:1280px;height:720px;overflow:hidden;background:#fff;z-index:-99999;';wrap.innerHTML=presentationSlideMarkup(model);document.body.appendChild(wrap);
+      try{
+        const node=wrap.querySelector('#obsPresentationStage');
+        node.removeAttribute('id'); // l'aperçu à l'écran garde seul cet identifiant
+        node.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
+        fitPresentationItems(wrap);
+        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        await engine.addSlideFromElement(pptx,node,{ignoreSelector:'.obs-pres-item-grip'});
+      }finally{wrap.remove();}
+      onProgress?.(i+1,state.presentationSlides.length);
+    }
+    return {title,blob:await engine.finalize(pptx)};
   }
-  async function buildGoogleSlidesPayload(){
-    const slides=[];
-    for(let i=0;i<state.presentationSlides.length;i++){const model=state.presentationSlides[i];slides.push({type:'snapshot',title:model.title||'',slideNumber:i+1,imageData:await googleSlideSnapshot(model)});}
-    return {title:`Observatoire Prestaterre – ${new Date().toLocaleDateString('fr-FR')}`,createdAt:new Date().toISOString(),renderMode:'snapshot-v1',slides};
-  }
+  function presentationFileName(ext){return `Observatoire_Prestaterre_modifiable_${new Date().toISOString().slice(0,10)}.${ext}`;}
 
   async function exportPresentationGoogleSlides(){
     if(!state.presentationSlides.length)return;
@@ -754,17 +770,27 @@
     // après la préparation des images (asynchrone) et le navigateur la bloquait comme pop-up.
     let prepared=null;
     try{prepared=engine.prepareGoogleSlides?.();}catch(err){alert('Google Slides impossible : '+(err?.message||err));return;}
-    const button=pageEl.querySelector('[data-pres-google-slides]');if(button){button.disabled=true;button.textContent='Google Slides… en cours';}
+    const setLabel=t=>{const b=pageEl.querySelector('[data-pres-google-slides]');if(b){b.disabled=true;b.textContent=t;}};
+    setLabel('Google Slides… préparation');
+    let built=null;
     try{
-      const payload=await buildGoogleSlidesPayload();
-      const result=await engine.createGoogleSlides(payload,prepared);
-      if(!result?.ok||!result.url)throw new Error(result?.error||'Création Google Slides impossible.');
+      built=await buildEditablePptx((done,total)=>setLabel(`Google Slides… ${done}/${total}`));
+      setLabel('Google Slides… envoi');
+      const pptxBase64=(await dataUrlFromBlob(built.blob)).replace(/^data:[^,]*,/,'');
+      const result=await engine.createGoogleSlides({title:built.title,createdAt:new Date().toISOString(),format:'pptx-editable-v1',slides:state.presentationSlides.length,pptxBase64},prepared,'importSlides');
+      if(!result?.ok||!result.url){
+        // Script Apps Script antérieur à la V6.32 (pas de conversion PPTX) : le fichier modifiable est téléchargé.
+        if(result?.ok&&!result.url){engine.cancelGoogleSlides?.();downloadBlob(built.blob,presentationFileName('pptx'));alert('Le script Apps Script OPERATIONS n’est pas encore à jour (V6.32) : la présentation modifiable a été téléchargée en PPTX.\n\nPour l’ouvrir dans Google Slides : Google Drive → Nouveau → Importer le fichier, puis « Ouvrir avec Google Slides ». Une fois le script redéployé, le bouton créera directement la présentation.');return;}
+        throw new Error(result?.error||'Création Google Slides impossible.');
+      }
       const shown=engine.showGoogleSlidesResult?.(result.url);
       if(!shown){const w=window.open(result.url,'_blank','noopener');if(!w)prompt('Présentation créée. Copie ce lien pour l’ouvrir :',result.url);}
-      const toast=document.getElementById('toast');if(toast){toast.textContent='Présentation Google Slides créée.';toast.classList.add('is-visible');setTimeout(()=>toast.classList.remove('is-visible'),2600);}
+      const toast=document.getElementById('toast');if(toast){toast.textContent='Présentation Google Slides créée : textes, formes et graphiques modifiables.';toast.classList.add('is-visible');setTimeout(()=>toast.classList.remove('is-visible'),3200);}
     }catch(err){
       engine.cancelGoogleSlides?.();
-      console.error(err);alert('Google Slides impossible : '+(err?.message||err));
+      console.error(err);
+      if(built?.blob){downloadBlob(built.blob,presentationFileName('pptx'));alert('Google Slides impossible : '+(err?.message||err)+'\n\nLa présentation modifiable a été téléchargée en PPTX : importe-la dans Google Drive puis ouvre-la avec Google Slides.');}
+      else alert('Google Slides impossible : '+(err?.message||err));
     }finally{const b=pageEl.querySelector('[data-pres-google-slides]');if(b){b.disabled=false;b.textContent='Google Slides ↗';}}
   }
   function pptxFontName(cssFont){return String(cssFont||'Arial').split(',')[0].replace(/["']/g,'').trim()||'Arial';}

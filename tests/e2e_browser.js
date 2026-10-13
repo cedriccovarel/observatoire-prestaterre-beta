@@ -390,8 +390,14 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(!!popup, 'Google Slides : la fenêtre Google s’ouvre pendant le clic (non bloquée)');
       await page.waitForFunction(() => !document.querySelector('[data-pres-google-slides]')?.disabled, null, { timeout: 60000 }).catch(() => {});
       await page.waitForTimeout(500);
-      const pres = gs.slidesLog.presentations;
-      check(pres.length === 1 && pres[0].slides.length === 3 && pres[0].slides.every(sl => sl.images.length === 1 && sl.images[0].type === 'image/jpeg' && sl.images[0].bytes > 5000), `Google Slides : présentation créée avec ${pres[0]?.slides.length || 0} slides rendues en image`);
+      // V6.32 : la présentation part en PPTX d'objets natifs (moteur Obslide), converti en Google Slides par l'API Drive.
+      const up = gs.driveLog.uploads[0], raw = up ? up.bytes : Buffer.alloc(0), pk = raw.indexOf(Buffer.from('PK\u0003\u0004'));
+      let gz = null; try { gz = await JSZip.loadAsync(raw.slice(pk, raw.lastIndexOf(Buffer.from('\r\n--')))); } catch {}
+      if (gz && process.env.SHOT_DIR) fs.writeFileSync(path.join(process.env.SHOT_DIR, 'google_slides_editable.pptx'), raw.slice(pk, raw.lastIndexOf(Buffer.from('\r\n--'))));
+      const gSlides = gz ? Object.keys(gz.files).filter(f => /^ppt\/slides\/slide\d+\.xml$/.test(f)) : [];
+      const gXml = gz ? (await Promise.all(gSlides.map(f => gz.file(f).async('string')))).join('') : '';
+      const nText = (gXml.match(/<a:t>[^<]+<\/a:t>/g) || []).length, nShapes = (gXml.match(/<p:sp>/g) || []).length;
+      check(gs.driveLog.uploads.length === 1 && /mimeType":"application\/vnd\.google-apps\.presentation/.test(raw.toString('latin1')) && gSlides.length === 3 && nText > 30 && nShapes > 30 && gs.slidesLog.presentations.length === 0, `Google Slides : PPTX modifiable converti par Google Drive (${gSlides.length} slides, ${nText} textes, ${nShapes} formes natives)`);
       if (popup) await popup.waitForURL(/docs\.google\.com/, { timeout: 10000 }).catch(() => {});
       check(popup && /docs\.google\.com\/presentation/.test(popup.url()), 'Google Slides : la présentation s’ouvre dans la fenêtre du pont (' + (popup && popup.url()) + ')');
       // Générateur de rapports : ouvre la dernière version d'Obslide ; repli sur generator.html si elle ne répond pas.
