@@ -1,5 +1,16 @@
 # Historique
 
+## V6.35
+
+**Partager : archivage des liens et journal d’archives**
+- Dans « Liens existants », chaque lien a un bouton **Archiver** : il quitte le tableau de bord et passe dans le **Journal d’archives** (encart repliable sous le tableau), où les liens sont regroupés par mois et année d’archivage, du plus récent au plus ancien.
+- Le journal affiche les mêmes informations que le tableau de bord : nom, résumé du périmètre, onglets, opérations, dates de création et d’expiration, statut, ouvertures, personnes identifiées, filtres autorisés, ainsi que la date d’archivage. **Restaurer** remet un lien dans le tableau de bord.
+- Archiver ne coupe pas l’accès : un lien encore actif continue de fonctionner jusqu’à son expiration (une confirmation le rappelle). Pour couper l’accès, révoquer le lien, y compris depuis le journal.
+- Script OPERATIONS 06.35 : mode `shareArchive` et colonne « Archive le (ms) » ajoutée à `OBSERVATOIRE_PARTAGES` (les liens existants restent valables). **À faire** : recopier `Code_Operations.gs` dans Apps Script et publier une nouvelle version du déploiement.
+
+**Écran de chargement**
+- En fin de chantier, le technicien plante un panneau **Prestaterre Certification** à côté du bâtiment rénové.
+
 ## V6.34.1
 
 - Correctif : l’en-tête de `Code_Operations.gs` indiquait encore V6.32 alors que le code était déjà en 06.34 (constante `VERSION`). Aucun changement de fonctionnement : si la V6.34 du script est déjà déployée, rien à refaire.

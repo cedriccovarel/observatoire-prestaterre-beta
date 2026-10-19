@@ -1,5 +1,9 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.34 (script OPERATIONS, version API 06.34)
+ * PRESTATERRE OBSERVATOIRE - V6.35 (script OPERATIONS, version API 06.35)
+ *
+ * Changements V6.35 : archivage des liens de partage (mode sharearchive, colonne « Archive le (ms) »
+ *   ajoutee a OBSERVATOIRE_PARTAGES). Archiver ne change pas l'acces : un lien actif archive fonctionne
+ *   toujours tant qu'il n'est pas revoque ou expire.
  *
  * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
  * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
@@ -55,7 +59,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.34',
+  VERSION: '06.35',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -156,7 +160,7 @@ function newosbApiRequest_(params) {
     return newosbRapportRequest_(params, mode, { anonymized: newosbAnonymizedOnly_() });
   }
 
-  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend' || mode === 'visitorrevoke' || mode === 'visitorextend') {
+  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend' || mode === 'sharearchive' || mode === 'visitorrevoke' || mode === 'visitorextend') {
     return newosbShareAdmin_(mode, params);
   }
 
@@ -690,7 +694,8 @@ const NEWOSB_SHARE_CONFIG = {
   REQ_PRIVATE_KEYS: ['moa', 'moaGroup'],
   FAILURE_LIMIT: 60,
   // V6.22 : colonnes ajoutees apres les codes (les liens deja crees restent lisibles).
-  EXTRA_HEADERS: ['Filtres autorises'],
+  // V6.35 : date d'archivage (le lien disparait du tableau de bord et passe dans le journal d'archives).
+  EXTRA_HEADERS: ['Filtres autorises', 'Archive le (ms)'],
   GLOBAL_FILTER_KEYS: ['year', 'createdYear', 'referential', 'programType', 'moaGroup', 'status', 'moa', 'region', 'department', 'profile', 'socialZone'],
   // V6.22 : destinataires identifies (nom, prenom, societe), revocables et prolongeables un par un.
   VISITOR_SHEET: 'OBSERVATOIRE_PARTAGES_VISITEURS',
@@ -769,7 +774,8 @@ function newosbShareRecords_(sheet) {
       accessCount: Number(r[12]) || 0,
       landing: String(r[13] || ''),
       reqFilters: newosbShareParseReqFilters_(r[14]),
-      allowedFilters: newosbShareCleanAllowed_(newosbShareParseReqFilters_(r[NEWOSB_SHARE_EXTRA_COL_]))
+      allowedFilters: newosbShareCleanAllowed_(newosbShareParseReqFilters_(r[NEWOSB_SHARE_EXTRA_COL_])),
+      archivedAt: Number(r[NEWOSB_SHARE_EXTRA_COL_ + 1]) || 0
     };
   }).filter(function(rec) { return rec.id && rec.hash; });
 }
@@ -794,7 +800,7 @@ function newosbSharePublic_(rec, now) {
     id: rec.id, label: rec.label, createdAt: rec.createdAt, expiresAt: rec.expiresAt, revokedAt: rec.revokedAt,
     status: newosbShareStatus_(rec, now), tabs: rec.tabs, anonymized: rec.anonymized || newosbAnonymizedOnly_(),
     summary: rec.summary, operationCount: rec.operationCount, lastAccessAt: rec.lastAccessAt, accessCount: rec.accessCount, landing: rec.landing,
-    allowedFilters: rec.allowedFilters || { global: [], req: [] }
+    allowedFilters: rec.allowedFilters || { global: [], req: [] }, archivedAt: rec.archivedAt || 0
   };
 }
 
@@ -849,7 +855,7 @@ function newosbShareAdmin_(mode, params) {
     const label = newosbShareText_(params.label, 120) || 'Observatoire partage';
     const summary = newosbShareText_(params.summary, 2000);
     const allowedFilters = newosbShareCleanAllowed_(params.allowedFilters, tabs);
-    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices).concat(['~' + JSON.stringify(allowedFilters)]);
+    const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices).concat(['~' + JSON.stringify(allowedFilters), '']);
     const lock = newosbShareLock_();
     try {
       const sheet = newosbShareSheet_(true);
@@ -878,6 +884,21 @@ function newosbShareAdmin_(mode, params) {
         rec.expiresAt = newosbShareExpiry_(params.expiresAt, now);
         sheet.getRange(rec.row, 5).setNumberFormat('@').setValue(String(rec.expiresAt));
       }
+      return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: newosbSharePublic_(rec, now) };
+    } finally { if (lock) lock.releaseLock(); }
+  }
+  if (mode === 'sharearchive') {
+    // archived=false : remet le lien dans le tableau de bord.
+    const id = String(params.id || '');
+    const lock = newosbShareLock_();
+    try {
+      const sheet = newosbShareSheet_(false);
+      const rec = newosbShareRecords_(sheet).filter(function(r) { return r.id === id; })[0];
+      if (!rec) throw new Error('Lien de partage introuvable.');
+      const cols = newosbShareColumns_();
+      sheet.getRange(1, 1, 1, cols.length).setNumberFormat('@').setValues([cols]);
+      rec.archivedAt = params.archived === false ? 0 : (rec.archivedAt || now);
+      sheet.getRange(rec.row, NEWOSB_SHARE_EXTRA_COL_ + 2).setNumberFormat('@').setValue(rec.archivedAt ? String(rec.archivedAt) : '');
       return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: newosbSharePublic_(rec, now) };
     } finally { if (lock) lock.releaseLock(); }
   }

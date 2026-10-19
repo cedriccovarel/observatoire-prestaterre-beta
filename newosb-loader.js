@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.34.1 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.35 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -612,7 +612,25 @@
     if (i === 1) { const row = Math.min(2, Math.floor(stageK(r, 1) * 3)); return { x: B.x + 30 + stageK(r, 1) * 3 % 1 * (B.w - 60), y: B.y + B.h - row * (B.h / 3), tool: 'trowel' }; }
     if (i === 2) { const w = WINDOWS[Math.min(11, Math.floor(stageK(r, 2) * 12))]; return { x: w.x + 11, y: B.y + B.h - w.j * (B.h / 3), tool: 'trowel' }; }
     if (i === 3) return { x: B.x + B.w + 52, y: GROUND, tool: 'wrench' };
+    if (stageK(r, 4) > SIGN.from) return { x: SIGN.x - 38, y: GROUND, tool: 'trowel' };
     return { x: 262, y: GROUND, tool: 'can' };
+  }
+
+  // V6.35 : en fin de chantier, le technicien plante un panneau Prestaterre Certification.
+  const SIGN = { x: 368, from: 0.62, to: 0.9 };
+  const logo = typeof Image === 'function' ? new Image() : null; if (logo) logo.src = 'assets/prestaterre_logo_green.png';
+  function sign(ctx, r) {
+    const k = ease((stageK(r, 4) - SIGN.from) / (SIGN.to - SIGN.from)); if (k <= 0) return;
+    const x = SIGN.x, base = GROUND + 6, rise = 18 * (1 - k), pw = 50, ph = 42, top = base - 62 + rise;
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, base); ctx.clip(); // le poteau sort du sol
+    ctx.fillStyle = 'rgba(30,40,36,.18)'; ctx.beginPath(); ctx.ellipse(x - 6, base - 1, 22 * k, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#7a5a3c'; ctx.fillRect(x - 2, top + ph - 2, 4, 64);
+    ctx.fillStyle = 'rgba(30,40,36,.18)'; rr(ctx, x - pw / 2 + 2, top + 2, pw, ph, 4); ctx.fill();
+    ctx.fillStyle = '#ffffff'; rr(ctx, x - pw / 2, top, pw, ph, 4); ctx.fill();
+    ctx.strokeStyle = C.green; ctx.lineWidth = 1.6; rr(ctx, x - pw / 2, top, pw, ph, 4); ctx.stroke();
+    if (logo?.complete && logo.naturalWidth) { const lw = 38, lh = lw * logo.naturalHeight / logo.naturalWidth; ctx.drawImage(logo, x - lw / 2, top + (ph - lh) / 2, lw, lh); }
+    ctx.restore();
+    ctx.fillStyle = '#7a5d40'; ctx.beginPath(); ctx.ellipse(x, base, 7 * k, 2, 0, 0, Math.PI * 2); ctx.fill(); // terre retournée
   }
   function technician(ctx, r, t, dt) {
     const tg = techTarget(r), p = ui.tech;
@@ -764,6 +782,7 @@
     fence(ctx, r);
     cones(ctx, r);
     flowers(ctx, r, t, still);
+    sign(ctx, r);
     updateTruck(r, dt, still);
     truck(ctx, r, t, dt, still);
     dust(ctx, dt);

@@ -233,7 +233,7 @@
   // ---------------------------------------------------------------------------
   // Mode administrateur : fenêtre « Partager »
   // ---------------------------------------------------------------------------
-  const admin = { modal: null, prepared: null, shares: [], lastLink: '', busy: false, error: '', listError: '', listLoading: false, openVisitors: new Set(), allowOpen: false };
+  const admin = { modal: null, prepared: null, shares: [], lastLink: '', busy: false, error: '', listError: '', listLoading: false, openVisitors: new Set(), allowOpen: false, archiveOpen: false };
 
   function engine() { return window.NEWOSB_ENGINE; }
   function app() { return window.NEWOSB_APP; }
@@ -268,7 +268,7 @@
     document.body.appendChild(m);
     m.addEventListener('click', onModalClick);
     m.addEventListener('change', onModalChange);
-    m.addEventListener('toggle', e => { const d = e.target; if (d?.matches?.('[data-share-allowed]')) { admin.allowOpen = d.open; return; } if (!d?.matches?.('[data-share-people]')) return; if (d.open) admin.openVisitors.add(d.dataset.sharePeople); else admin.openVisitors.delete(d.dataset.sharePeople); }, true);
+    m.addEventListener('toggle', e => { const d = e.target; if (d?.matches?.('[data-share-allowed]')) { admin.allowOpen = d.open; return; } if (d?.matches?.('[data-share-archive]')) { admin.archiveOpen = d.open; return; } if (!d?.matches?.('[data-share-people]')) return; if (d.open) admin.openVisitors.add(d.dataset.sharePeople); else admin.openVisitors.delete(d.dataset.sharePeople); }, true);
     admin.modal = m;
     return m;
   }
@@ -319,17 +319,32 @@
     return `<table class="obs-share-table obs-share-visitors"><thead><tr><th>Nom Prénom</th><th>Société</th><th>Enregistré le</th><th>Dernier accès</th><th>Ouvertures</th><th>Accès jusqu’au</th><th>Statut</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
+  const TABLE_HEAD = '<thead><tr><th>Lien</th><th>Onglets</th><th>Opérations</th><th>Créé le</th><th>Expire le</th><th>Statut</th><th>Ouvertures</th><th></th></tr></thead>';
+
   function listHtml() {
     if (admin.listLoading) return '<p class="obs-share-muted" role="status">Chargement des liens existants…</p>';
     if (admin.listError) return `<p class="data-feedback is-error">${esc(admin.listError)}</p>`;
-    if (!admin.shares.length) return '<p class="obs-share-muted">Aucun lien créé pour l’instant.</p>';
-    const rows = admin.shares.map(s => {
-      const tabs = (s.tabs || []).map(t => PAGE_LABELS[t] || t).join(', ');
-      const copy = isValidToken(s.token) ? `<button type="button" class="btn btn-secondary btn-small" data-share-copy-id="${esc(s.id)}">Copier le lien</button>` : '<button type="button" class="btn btn-secondary btn-small" disabled title="Lien créé avant la V6.34 : il n’a pas été conservé et ne peut pas être recopié.">Copier le lien</button>';
-      const actions = s.status === 'revoked' ? '' : `${copy}<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`;
-      return `<tr class="is-${esc(s.status)}"><td><b>${esc(s.label)}</b><small>${esc(s.summary || '')}</small></td><td title="${esc(tabs)}">${esc(plural((s.tabs || []).length, 'onglet', 'onglets'))}${s.anonymized ? '<small>anonymisé</small>' : ''}</td><td>${esc((s.operationCount || 0).toLocaleString('fr-FR'))}</td><td>${esc(fmtShort(s.createdAt))}</td><td>${esc(fmtDate(s.expiresAt))}</td><td><span class="obs-share-status is-${esc(s.status)}">${esc(statusLabel(s))}</span></td><td>${esc(String(s.accessCount || 0))}${s.lastAccessAt ? `<small>dernier : ${esc(fmtShort(s.lastAccessAt))}</small>` : ''}</td><td class="obs-share-actions">${actions}</td></tr><tr class="obs-share-people-row"><td colspan="8"><details data-share-people="${esc(s.id)}"${admin.openVisitors.has(s.id) ? ' open' : ''}><summary>${esc(plural((s.visitors || []).length, 'personne', 'personnes'))}${(s.visitors || []).length ? ` · ${esc(plural((s.visitors || []).filter(v => v.status === 'active').length, 'accès actif', 'accès actifs'))}` : ''}${allowedSummary(s)}</summary>${visitorsHtml(s)}</details></td></tr>`;
-    }).join('');
-    return `<div class="obs-share-table-wrap"><table class="obs-share-table"><thead><tr><th>Lien</th><th>Onglets</th><th>Opérations</th><th>Créé le</th><th>Expire le</th><th>Statut</th><th>Ouvertures</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    const live = admin.shares.filter(s => !s.archivedAt);
+    const list = live.length ? `<div class="obs-share-table-wrap"><table class="obs-share-table">${TABLE_HEAD}<tbody>${live.map(s => shareRowHtml(s, false)).join('')}</tbody></table></div>` : `<p class="obs-share-muted">${admin.shares.length ? 'Tous les liens sont archivés.' : 'Aucun lien créé pour l’instant.'}</p>`;
+    return list + archiveHtml();
+  }
+
+  // V6.35 : journal des liens archivés, regroupés par mois d'archivage (le plus récent d'abord).
+  function archiveHtml() {
+    const archived = admin.shares.filter(s => s.archivedAt).sort((a, b) => b.archivedAt - a.archivedAt);
+    if (!archived.length) return '';
+    const groups = new Map();
+    archived.forEach(s => { const d = new Date(s.archivedAt), k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; if (!groups.has(k)) groups.set(k, { label: d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }), list: [] }); groups.get(k).list.push(s); });
+    const body = [...groups.values()].map(g => `<h4 class="obs-share-archive-month">${esc(g.label.charAt(0).toUpperCase() + g.label.slice(1))} <small>${esc(plural(g.list.length, 'lien', 'liens'))}</small></h4><div class="obs-share-table-wrap"><table class="obs-share-table">${TABLE_HEAD}<tbody>${g.list.map(s => shareRowHtml(s, true)).join('')}</tbody></table></div>`).join('');
+    return `<details class="obs-share-archive" data-share-archive${admin.archiveOpen ? ' open' : ''}><summary>Journal d’archives <small>${esc(plural(archived.length, 'lien archivé', 'liens archivés'))}</small></summary><p class="obs-share-muted">Archiver retire un lien du tableau de bord sans couper l’accès : un lien encore actif fonctionne jusqu’à son expiration ou sa révocation.</p>${body}</details>`;
+  }
+
+  function shareRowHtml(s, archived) {
+    const tabs = (s.tabs || []).map(t => PAGE_LABELS[t] || t).join(', ');
+    const copy = isValidToken(s.token) ? `<button type="button" class="btn btn-secondary btn-small" data-share-copy-id="${esc(s.id)}">Copier le lien</button>` : '<button type="button" class="btn btn-secondary btn-small" disabled title="Lien créé avant la V6.34 : il n’a pas été conservé et ne peut pas être recopié.">Copier le lien</button>';
+    const archiveBtn = archived ? `<button type="button" class="btn btn-secondary btn-small" data-share-unarchive="${esc(s.id)}">Restaurer</button>` : `<button type="button" class="btn btn-secondary btn-small" data-share-archive-id="${esc(s.id)}">Archiver</button>`;
+    const actions = (s.status === 'revoked' ? '' : `${copy}<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`) + archiveBtn;
+    return `<tr class="is-${esc(s.status)}"><td><b>${esc(s.label)}</b>${archived ? `<small>archivé le ${esc(fmtShort(s.archivedAt))}</small>` : ''}<small>${esc(s.summary || '')}</small></td><td title="${esc(tabs)}">${esc(plural((s.tabs || []).length, 'onglet', 'onglets'))}${s.anonymized ? '<small>anonymisé</small>' : ''}</td><td>${esc((s.operationCount || 0).toLocaleString('fr-FR'))}</td><td>${esc(fmtShort(s.createdAt))}</td><td>${esc(fmtDate(s.expiresAt))}</td><td><span class="obs-share-status is-${esc(s.status)}">${esc(statusLabel(s))}</span></td><td>${esc(String(s.accessCount || 0))}${s.lastAccessAt ? `<small>dernier : ${esc(fmtShort(s.lastAccessAt))}</small>` : ''}</td><td class="obs-share-actions">${actions}</td></tr><tr class="obs-share-people-row"><td colspan="8"><details data-share-people="${esc(s.id)}"${admin.openVisitors.has(s.id) ? ' open' : ''}><summary>${esc(plural((s.visitors || []).length, 'personne', 'personnes'))}${(s.visitors || []).length ? ` · ${esc(plural((s.visitors || []).filter(v => v.status === 'active').length, 'accès actif', 'accès actifs'))}` : ''}${allowedSummary(s)}</summary>${visitorsHtml(s)}</details></td></tr>`;
   }
 
   function render(keepForm) {
@@ -427,6 +442,14 @@ ${listHtml()}
     render(true);
   }
 
+  async function archive(id, archived) {
+    const s = admin.shares.find(x => x.id === id);
+    if (archived && s?.status === 'active' && !window.confirm(`Archiver le lien « ${s.label} » ? Il quitte le tableau de bord mais reste actif jusqu’au ${fmtDate(s.expiresAt)} (révoquez-le pour couper l’accès).`)) return;
+    try { const res = await call({ mode: 'shareArchive', id, archived }); admin.shares = admin.shares.map(x => x.id === id ? keepVisitors(res.share, x) : x); admin.error = ''; }
+    catch (err) { admin.error = String(err?.message || err); }
+    render(true);
+  }
+
   async function extend(id, days) {
     try { const res = await call({ mode: 'shareExtend', id, expiresAt: Date.now() + Number(days) * DAY }); admin.shares = admin.shares.map(x => x.id === id ? keepVisitors(res.share, x) : x); admin.error = ''; }
     catch (err) { admin.error = String(err?.message || err); }
@@ -468,6 +491,8 @@ ${listHtml()}
     if (cp) { const s = admin.shares.find(x => x.id === cp.dataset.shareCopyId); if (s && isValidToken(s.token) && admin.prepared) copyLink(buildLink(location.origin + location.pathname, s.token, admin.prepared.sourceUrl), cp); return; }
     // Chaque action réseau est déclenchée par un clic : la fenêtre Google peut être (ré)ouverte.
     if (e.target.closest('[data-share-create]')) { if (prepare()) create(); else render(true); return; }
+    const ar = e.target.closest('[data-share-archive-id]'); if (ar) { if (prepare()) archive(ar.dataset.shareArchiveId, true); else render(true); return; }
+    const ua = e.target.closest('[data-share-unarchive]'); if (ua) { if (prepare()) archive(ua.dataset.shareUnarchive, false); else render(true); return; }
     const rv = e.target.closest('[data-share-revoke]'); if (rv) { if (prepare()) revoke(rv.dataset.shareRevoke); else render(true); return; }
     const vr = e.target.closest('[data-visitor-revoke]'); if (vr) { if (prepare()) visitorRevoke(vr.dataset.visitorShare, vr.dataset.visitorRevoke); else render(true); return; }
     const vx = e.target.closest('[data-visitor-extend]'); if (vx) { const sel = admin.modal.querySelector(`[data-visitor-extend-sel="${CSS.escape(vx.dataset.visitorExtend)}"]`); if (prepare()) visitorExtend(vx.dataset.visitorShare, vx.dataset.visitorExtend, sel?.value || '30'); else render(true); return; }

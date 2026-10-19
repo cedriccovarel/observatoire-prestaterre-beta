@@ -220,6 +220,16 @@ test('prolongation : nouvelle date contrôlée (1 h minimum, 366 jours maximum) 
   gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: a.share.id });
   assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareExtend', key: KEY, id: a.share.id, expiresAt: Date.now() + 30 * DAYMS }).ok, false);
 });
+test('liens de partage : archivage (V6.35) sans changer l’accès, puis restauration', () => {
+  const gs = opsGs(); const a = mkShare(gs);
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareArchive', id: a.share.id }).ok, false, 'clé obligatoire');
+  const r = gs.newosbBridgeRequest({ mode: 'shareArchive', key: KEY, id: a.share.id }); assert.strictEqual(r.ok, true, r.error); assert(r.share.archivedAt > 0);
+  const listed = gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares.find(s => s.id === a.share.id); assert(listed.archivedAt > 0); assert.strictEqual(listed.status, 'active');
+  assert.strictEqual(shareReq(gs, a.token, { mode: 'ping' }).ok, true, 'archiver ne révoque pas');
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareArchive', key: KEY, id: a.share.id, archived: false }).share.archivedAt, 0);
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares.find(s => s.id === a.share.id).archivedAt, 0);
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareArchive', key: KEY, id: 'inconnu' }).ok, false);
+});
 test('Google Slides modifiable (V6.32) : le PPTX est converti par l’API Drive, avec la clé uniquement', () => {
   const gs = opsGs();
   const pptx = Buffer.concat([Buffer.from('PK\u0003\u0004'), Buffer.from('contenu-pptx-test')]).toString('base64');
