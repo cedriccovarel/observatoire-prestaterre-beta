@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.34 | Massif fleuri au pied de la façade : les tiges poussent puis fleurissent pendant la végétalisation (couleurs variées, léger balancement, immobile si mouvements réduits). |
 | V6.33 | Camion de livraison (arrive, bras de grue auxiliaire qui dépose le matériau de l'étape sur la palette, repart ; roues, chauffeur, feux stop, poussière) ; palette livrée et en volume ; grue en relief avec lest et moufle ; cônes de chantier. |
 | V6.32 | Ombres des nuages qui glissent sur le sol et la façade, plus nettes quand le soleil perce. |
 | V6.31 | Rendu tendant vers le photoréalisme : textures procédurales (enduit, pierre, trottoir, gazon), lumière chaude du soleil et rayons, vignettage, ombre adoucie, second plan de ville et brume d'horizon, reflets de nuages sur les vitrages. |

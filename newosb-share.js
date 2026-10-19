@@ -325,7 +325,8 @@
     if (!admin.shares.length) return '<p class="obs-share-muted">Aucun lien créé pour l’instant.</p>';
     const rows = admin.shares.map(s => {
       const tabs = (s.tabs || []).map(t => PAGE_LABELS[t] || t).join(', ');
-      const actions = s.status === 'revoked' ? '' : `<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`;
+      const copy = isValidToken(s.token) ? `<button type="button" class="btn btn-secondary btn-small" data-share-copy-id="${esc(s.id)}">Copier le lien</button>` : '<button type="button" class="btn btn-secondary btn-small" disabled title="Lien créé avant la V6.34 : il n’a pas été conservé et ne peut pas être recopié.">Copier le lien</button>';
+      const actions = s.status === 'revoked' ? '' : `${copy}<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`;
       return `<tr class="is-${esc(s.status)}"><td><b>${esc(s.label)}</b><small>${esc(s.summary || '')}</small></td><td title="${esc(tabs)}">${esc(plural((s.tabs || []).length, 'onglet', 'onglets'))}${s.anonymized ? '<small>anonymisé</small>' : ''}</td><td>${esc((s.operationCount || 0).toLocaleString('fr-FR'))}</td><td>${esc(fmtShort(s.createdAt))}</td><td>${esc(fmtDate(s.expiresAt))}</td><td><span class="obs-share-status is-${esc(s.status)}">${esc(statusLabel(s))}</span></td><td>${esc(String(s.accessCount || 0))}${s.lastAccessAt ? `<small>dernier : ${esc(fmtShort(s.lastAccessAt))}</small>` : ''}</td><td class="obs-share-actions">${actions}</td></tr><tr class="obs-share-people-row"><td colspan="8"><details data-share-people="${esc(s.id)}"${admin.openVisitors.has(s.id) ? ' open' : ''}><summary>${esc(plural((s.visitors || []).length, 'personne', 'personnes'))}${(s.visitors || []).length ? ` · ${esc(plural((s.visitors || []).filter(v => v.status === 'active').length, 'accès actif', 'accès actifs'))}` : ''}${allowedSummary(s)}</summary>${visitorsHtml(s)}</details></td></tr>`;
     }).join('');
     return `<div class="obs-share-table-wrap"><table class="obs-share-table"><thead><tr><th>Lien</th><th>Onglets</th><th>Opérations</th><th>Créé le</th><th>Expire le</th><th>Statut</th><th>Ouvertures</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -347,7 +348,7 @@
     const landingOptions = (defaultTabs.length ? defaultTabs : ['overview']).map(t => `<option value="${t}"${(previous?.landing || currentPage) === t ? ' selected' : ''}>${esc(PAGE_LABELS[t] || t)}</option>`).join('');
     const count = resolved.codes.length;
     const warn = resolved.missing ? `<p class="obs-share-warn">${esc(plural(resolved.missing, 'opération sans code interne n’est pas incluse', 'opérations sans code interne ne sont pas incluses'))} (le lien s’appuie sur le code interne).</p>` : '';
-    const linkBox = admin.lastLink ? `<div class="obs-share-result" role="status"><b>Lien créé.</b> Copiez-le maintenant : il n’est affiché qu’une fois (seule son empreinte est conservée). Toute personne qui possède ce lien peut consulter ce périmètre jusqu’à la date d’expiration, après avoir indiqué son nom, son prénom et sa société (visibles ci-dessous, dans « Liens existants »).<div class="obs-share-link-row"><input type="text" readonly value="${esc(admin.lastLink)}" data-share-link aria-label="Lien de partage"><button type="button" class="btn btn-primary" data-share-copy="1">Copier le lien</button><a class="btn btn-secondary" href="${esc(admin.lastLink)}" target="_blank" rel="noopener noreferrer">Ouvrir</a></div></div>` : '';
+    const linkBox = admin.lastLink ? `<div class="obs-share-result" role="status"><b>Lien créé.</b> Il reste disponible dans « Liens existants » (bouton « Copier le lien ») tant qu’il n’est pas révoqué. Toute personne qui possède ce lien peut consulter ce périmètre jusqu’à la date d’expiration, après avoir indiqué son nom, son prénom et sa société (visibles ci-dessous, dans « Liens existants »).<div class="obs-share-link-row"><input type="text" readonly value="${esc(admin.lastLink)}" data-share-link aria-label="Lien de partage"><button type="button" class="btn btn-primary" data-share-copy="1">Copier le lien</button><a class="btn btn-secondary" href="${esc(admin.lastLink)}" target="_blank" rel="noopener noreferrer">Ouvrir</a></div></div>` : '';
     body.innerHTML = `${admin.error ? `<p class="data-feedback is-error">${esc(admin.error)}</p>` : ''}
 <div class="obs-share-grid" data-share-form>
   <div class="data-source-card">
@@ -453,14 +454,18 @@ ${listHtml()}
     render(true);
   }
 
+  function copyLink(link, button) {
+    const done = () => { button.textContent = 'Copié ✓'; };
+    // Repli si le presse-papiers est refusé : le lien est proposé dans une boîte à copier.
+    const fallback = () => { window.prompt('Copiez le lien de partage :', link); };
+    try { navigator.clipboard.writeText(link).then(done, fallback); } catch { fallback(); }
+  }
+
   function onModalClick(e) {
     if (e.target.closest('[data-share-close]')) { close(); return; }
-    if (e.target.closest('[data-share-copy]')) {
-      const input = admin.modal.querySelector('[data-share-link]');
-      const done = () => { const b = admin.modal.querySelector('[data-share-copy]'); if (b) b.textContent = 'Copié ✓'; };
-      try { navigator.clipboard.writeText(input.value).then(done, () => { input.select(); document.execCommand('copy'); done(); }); } catch { input.select(); try { document.execCommand('copy'); done(); } catch {} }
-      return;
-    }
+    if (e.target.closest('[data-share-copy]')) { copyLink(admin.modal.querySelector('[data-share-link]').value, e.target.closest('[data-share-copy]')); return; }
+    const cp = e.target.closest('[data-share-copy-id]');
+    if (cp) { const s = admin.shares.find(x => x.id === cp.dataset.shareCopyId); if (s && isValidToken(s.token) && admin.prepared) copyLink(buildLink(location.origin + location.pathname, s.token, admin.prepared.sourceUrl), cp); return; }
     // Chaque action réseau est déclenchée par un clic : la fenêtre Google peut être (ré)ouverte.
     if (e.target.closest('[data-share-create]')) { if (prepare()) create(); else render(true); return; }
     const rv = e.target.closest('[data-share-revoke]'); if (rv) { if (prepare()) revoke(rv.dataset.shareRevoke); else render(true); return; }

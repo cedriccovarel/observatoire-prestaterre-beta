@@ -50,7 +50,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.32',
+  VERSION: '06.34',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -667,8 +667,10 @@ function handleCommunesProxy_(params) {
 // (liste des codes internes calculee par l'Observatoire au moment de la creation).
 // Le controle est fait ici, cote serveur, a chaque requete : jeton connu, non revoque, non expire.
 // Seules les lignes du perimetre sont lues et transmises ; un lien « anonymise » recoit des
-// donnees pseudonymisees par le serveur. Le jeton n'est jamais stocke : seule son empreinte
-// SHA-256 est conservee dans l'onglet masque OBSERVATOIRE_PARTAGES.
+// donnees pseudonymisees par le serveur. Le jeton n'est jamais stocke dans le classeur : seule son
+// empreinte SHA-256 est conservee dans l'onglet masque OBSERVATOIRE_PARTAGES. Depuis V6.34, le jeton est
+// aussi garde dans les proprietes du script (lisibles par les seuls editeurs du script) pour que
+// l'administrateur puisse recopier le lien ; il est efface a la revocation.
 const NEWOSB_SHARE_CONFIG = {
   SHEET: 'OBSERVATOIRE_PARTAGES',
   HEADERS: ['Identifiant', 'Empreinte du jeton', 'Nom', 'Cree le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Onglets', 'Anonymise', 'Colonne code', 'Perimetre', 'Operations', 'Dernier acces (ms)', "Nombre d'acces", "Page d'ouverture", 'Filtres exigences'],
@@ -688,8 +690,13 @@ const NEWOSB_SHARE_CONFIG = {
   // V6.22 : destinataires identifies (nom, prenom, societe), revocables et prolongeables un par un.
   VISITOR_SHEET: 'OBSERVATOIRE_PARTAGES_VISITEURS',
   VISITOR_HEADERS: ['Identifiant', 'Empreinte du jeton', 'Lien', 'Nom', 'Prenom', 'Societe', 'Enregistre le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Dernier acces (ms)', "Nombre d'acces"],
-  MAX_VISITORS: 500
+  MAX_VISITORS: 500,
+  TOKEN_PROPERTY_PREFIX: 'NEWOSB_SHARE_TOKEN_'
 };
+
+function newosbShareStoredToken_(id) {
+  try { return String(PropertiesService.getScriptProperties().getProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + id) || ''); } catch (e) { return ''; }
+}
 
 function newosbShareColumns_() {
   const out = NEWOSB_SHARE_CONFIG.HEADERS.slice();
@@ -806,6 +813,8 @@ function newosbShareAdmin_(mode, params) {
     const visitors = newosbVisitorRecords_(newosbVisitorSheet_(false));
     return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, now: now, anonymizedOnly: newosbAnonymizedOnly_(), shares: newosbShareRecords_(newosbShareSheet_(false)).map(function(r) {
       const pub = newosbSharePublic_(r, now);
+      // Lien recopiable par l'administrateur (cle deja verifiee) ; liens crees avant V6.34 : non recuperables.
+      if (!r.revokedAt) { const t = newosbShareStoredToken_(r.id); if (t) pub.token = t; }
       pub.visitors = visitors.filter(function(v) { return v.shareId === r.id; }).map(function(v) { return newosbVisitorPublic_(v, r, now); }).reverse();
       return pub;
     }).reverse() };
@@ -844,8 +853,8 @@ function newosbShareAdmin_(mode, params) {
       const target = sheet.getLastRow() + 1;
       sheet.getRange(target, 1, 1, row.length).setNumberFormat('@').setValues([row]);
     } finally { if (lock) lock.releaseLock(); }
+    try { PropertiesService.getScriptProperties().setProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + id, token); } catch (e) {}
     const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing, reqFilters: reqFilters, allowedFilters: allowedFilters };
-    // Le jeton n'est renvoye qu'une fois, a la creation ; seule son empreinte est conservee.
     return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: newosbSharePublic_(rec, now) };
   }
   if (mode === 'sharerevoke' || mode === 'shareextend') {
@@ -855,7 +864,10 @@ function newosbShareAdmin_(mode, params) {
       const sheet = newosbShareSheet_(false);
       const rec = newosbShareRecords_(sheet).filter(function(r) { return r.id === id; })[0];
       if (!rec) throw new Error('Lien de partage introuvable.');
-      if (mode === 'sharerevoke') { if (!rec.revokedAt) { rec.revokedAt = now; sheet.getRange(rec.row, 6).setNumberFormat('@').setValue(String(now)); } }
+      if (mode === 'sharerevoke') {
+        if (!rec.revokedAt) { rec.revokedAt = now; sheet.getRange(rec.row, 6).setNumberFormat('@').setValue(String(now)); }
+        try { PropertiesService.getScriptProperties().deleteProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + rec.id); } catch (e) {}
+      }
       else {
         if (rec.revokedAt) throw new Error('Un lien revoque ne peut pas etre prolonge : cree un nouveau lien.');
         rec.expiresAt = newosbShareExpiry_(params.expiresAt, now);

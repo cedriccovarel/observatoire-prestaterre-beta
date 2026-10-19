@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.33 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.34 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -578,6 +578,22 @@
     ctx.restore();
   }
 
+  // V6.34 : massif fleuri au pied de la façade, qui pousse puis fleurit pendant la végétalisation.
+  function flowers(ctx, r, t, still) {
+    const k = stageK(r, 4); if (k <= 0.05) return;
+    const colors = ['#f2c94c', '#e8798f', '#ffffff', '#b98be0', '#f29a4c'];
+    for (let i = 0; i < 18; i++) {
+      const x = B.x - 8 + i * 11.4 + (i % 3) * 1.5, grow = ease((k - 0.05 - (i % 6) * 0.06) * 2.2); if (grow <= 0) continue;
+      const h = (8 + (i % 4) * 2.5) * grow, sway = still ? 0 : Math.sin(t * 1.8 + i * 1.7) * 1.2 * grow, base = GROUND + 12, tx = x + sway, ty = base - h;
+      ctx.strokeStyle = '#3f8f5a'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, base); ctx.quadraticCurveTo(x + sway * 0.3, base - h * 0.5, tx, ty); ctx.stroke();
+      ctx.fillStyle = C.leaf; ctx.beginPath(); ctx.ellipse(x + 2.2, base - h * 0.4, 2.4, 1, -0.5, 0, Math.PI * 2); ctx.fill();
+      const bloom = ease((grow - 0.6) * 2.5); if (bloom <= 0) continue;
+      const pr = 2.4 * bloom; ctx.fillStyle = colors[i % colors.length];
+      for (let a = 0; a < 5; a++) { const ang = a * 1.2566 + i; ctx.beginPath(); ctx.arc(tx + Math.cos(ang) * pr, ty + Math.sin(ang) * pr, pr * 0.75, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#c98a1c'; ctx.beginPath(); ctx.arc(tx, ty, pr * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   // Technicien : se déplace vers le poste de travail de l'étape en cours.
   function techTarget(r) {
     const i = stageIndex(r);
@@ -736,6 +752,7 @@
     building(ctx, r, t);
     fence(ctx, r);
     cones(ctx, r);
+    flowers(ctx, r, t, still);
     updateTruck(r, dt, still);
     truck(ctx, r, t, dt, still);
     dust(ctx, dt);

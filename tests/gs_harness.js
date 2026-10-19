@@ -32,7 +32,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
   const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet([])), getSpreadsheetTimeZone: () => 'Europe/Paris' };
   const ctx = {
     console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error,
-    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },
     SpreadsheetApp: { openById: () => ss, getActiveSpreadsheet: () => ss },
     ContentService: { MimeType: { JSON: 'json', JAVASCRIPT: 'js' }, createTextOutput: t => ({ text: t, setMimeType(m) { this.mime = m; return this; } }) },
     HtmlService: { XFrameOptionsMode: { ALLOWALL: 'ALLOWALL' }, createHtmlOutput: h => ({ html: h, setTitle() { return this; }, setXFrameOptionsMode() { return this; } }) },

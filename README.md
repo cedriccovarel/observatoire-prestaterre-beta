@@ -1,4 +1,4 @@
-# Observatoire Prestaterre — V6.33
+# Observatoire Prestaterre — V6.34
 
 Observatoire du bâtiment durable de Prestaterre Certification : site statique (GitHub Pages, sans build), alimenté par une Google Sheet OPERATIONS via Google Apps Script, avec générateur de slides intégré.
 

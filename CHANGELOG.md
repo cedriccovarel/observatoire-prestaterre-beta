@@ -1,5 +1,16 @@
 # Historique
 
+## V6.34
+
+**Partager : « Copier le lien » sur les liens existants**
+- Dans « Liens existants », chaque lien actif a un bouton **Copier le lien** à côté de « Prolonger » et « Révoquer » : le lien n’a plus besoin d’être copié au moment de sa création.
+- Script OPERATIONS 06.34 : le jeton de chaque nouveau lien est conservé dans les propriétés du script (lisibles par les seuls éditeurs du script, jamais dans le classeur, où seule l’empreinte reste) et renvoyé uniquement à l’administrateur connecté avec la clé. Il est effacé à la révocation.
+- Limite : les liens créés avant la V6.34 n’ont pas été conservés ; leur bouton est grisé. Pour en obtenir un recopiable, créer un nouveau lien.
+- **À faire** : recopier `Code_Operations.gs` dans le projet Apps Script et redéployer (nouvelle version).
+
+**Écran de chargement**
+- Massif fleuri au pied de la façade : les tiges poussent puis fleurissent pendant la végétalisation.
+
 ## V6.33
 
 - **Écran de chargement, grande passe de réalisme** :

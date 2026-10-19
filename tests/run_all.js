@@ -194,7 +194,7 @@ test('lecture par le lien : uniquement les lignes du périmètre, sans clé', ()
   const { m, c } = shareRows(gs, token); assert.strictEqual(m.totalRows, 2); assert.deepStrictEqual(m.headers.slice(0, 3), HEADERS.slice(0, 3));
   const codes = c.rows.map(r => r[HEADERS.indexOf(CODE_H)]).sort(); assert.strictEqual(JSON.stringify(codes), '["OP-1","OP-3"]'); assert.strictEqual(c.done, true);
   assert.strictEqual(c.rows[0][HEADERS.indexOf(MOA_H)], 'Promoteur A');
-  const list = gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }); assert.strictEqual(list.shares[0].accessCount, 1); assert(list.shares[0].lastAccessAt > 0); assert(!JSON.stringify(list).includes(token));
+  const list = gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }); assert.strictEqual(list.shares[0].accessCount, 1); assert(list.shares[0].lastAccessAt > 0); assert.strictEqual(list.shares[0].token, token, 'lien recopiable par l\'administrateur');
 });
 test('lien anonymisé : pseudonymisation par le serveur, montants et codes postaux retirés', () => {
   const gs = opsGs(); const { token } = mkShare(gs, { anonymized: true }); const { c } = shareRows(gs, token);
@@ -206,6 +206,7 @@ test('expiration, révocation et jeton inconnu : refus explicite, aucune donnée
   const sh = gs.sheets.OBSERVATOIRE_PARTAGES; sh.data[1][4] = String(Date.now() - 1000);
   const exp = shareReq(gs, a.token, { mode: 'meta' }); assert.strictEqual(exp.ok, false); assert.strictEqual(exp.authError, true); assert(/expir/.test(exp.error)); assert(!exp.headers && !exp.rows);
   assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: b.share.id }).share.status, 'revoked');
+  assert(!gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares.find(s => s.id === b.share.id).token, 'jeton efface a la revocation');
   const rev = shareReq(gs, b.token, { mode: 'chunk', offset: 0, limit: 10 }); assert.strictEqual(rev.ok, false); assert(/revoqu/.test(rev.error)); assert(!rev.rows);
   for (const t of ['A'.repeat(43), 'court', '<script>', b.token + 'x']) { const r = shareReq(gs, t, { mode: 'ping' }); assert.strictEqual(r.ok, false); assert.strictEqual(r.authError, true); }
 });
