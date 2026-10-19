@@ -1,5 +1,5 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.32 (script OPERATIONS, version API 06.32)
+ * PRESTATERRE OBSERVATOIRE - V6.34 (script OPERATIONS, version API 06.34)
  *
  * Securite V6.14 (proprietes du script : Parametres du projet > Proprietes du script) :
  * - NEWOSB_ALLOWED_ORIGINS : adresse(s) du site autorisees a dialoguer avec le pont,
@@ -12,6 +12,11 @@
  * - NEWOSB_PSEUDO_SECRET   : cree automatiquement ; sert aux pseudonymes du mode anonymise
  * Lancer une fois configurerSecuriteObservatoire() pour verifier la configuration
  * (genererCleAccesObservatoire() peut creer une cle aleatoire, lisible ensuite dans les proprietes).
+ *
+ * Changements V6.34 : « Copier le lien » sur les liens de partage existants. Le jeton de chaque nouveau
+ *   lien est garde dans les proprietes du script (NEWOSB_SHARE_TOKEN_<id>, jamais dans le classeur) et
+ *   renvoye au seul administrateur (cle verifiee) ; il est efface a la revocation. Liens anterieurs : non
+ *   recuperables.
  *
  * Changements V6.32 : export Google Slides entierement modifiable (mode importSlides). Le navigateur
  *   produit un PPTX d'objets natifs (textes, formes, graphiques) ; le script le convertit en Google Slides

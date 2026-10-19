@@ -1,5 +1,10 @@
 # Historique
 
+## V6.34.1
+
+- Correctif : l’en-tête de `Code_Operations.gs` indiquait encore V6.32 alors que le code était déjà en 06.34 (constante `VERSION`). Aucun changement de fonctionnement : si la V6.34 du script est déjà déployée, rien à refaire.
+- Écran de chargement : la pompe à chaleur est en marche (voyant vert, souffle d’air rejeté par le ventilateur).
+
 ## V6.34
 
 **Partager : « Copier le lien » sur les liens existants**

@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.34 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.34.1 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -350,6 +350,17 @@
         ctx.save(); ctx.translate(px + 17, py + 13); ctx.rotate(t * 9);
         ctx.fillStyle = '#7d8a85'; for (let i = 0; i < 3; i++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.ellipse(5, 0, 5, 2.2, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
+        // V6.34.1 : voyant de marche et souffle d'air rejeté par le ventilateur (immobile si mouvements réduits)
+        ctx.fillStyle = Math.sin(t * 3) > -0.6 ? '#3ccf6e' : '#1f7a40'; ctx.beginPath(); ctx.arc(px + 30, py + 4, 1.3, 0, Math.PI * 2); ctx.fill();
+        if (!reduced()) {
+          ctx.lineWidth = 1.2; ctx.lineCap = 'round';
+          for (let i = 0; i < 3; i++) {
+            const k = (t * 0.9 + i / 3) % 1, x = px + 36 + k * 30, y = py + 7 + i * 6, a = 0.4 * Math.sin(k * Math.PI);
+            ctx.strokeStyle = `rgba(160,200,220,${a})`; ctx.beginPath(); ctx.moveTo(x, y);
+            ctx.bezierCurveTo(x + 4, y - 2.5, x + 8, y + 2.5, x + 12, y); ctx.stroke();
+          }
+          ctx.lineCap = 'butt';
+        }
       }
     }
   }
