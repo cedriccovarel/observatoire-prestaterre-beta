@@ -375,7 +375,7 @@ test('listes à cocher : défilement et recherche conservés lors d’un nouveau
 section('8. Moteur des mentions (newosb-mentions.js + mentions_catalog.js)');
 const MEN = require(path.join(ROOT, 'newosb-mentions.js'));
 const CAT = require(path.join(ROOT, 'mentions_catalog.js'));
-const LN_CTX = 'BEE_LN@2026-05-04', LR_CTX = 'BEE_LR@2025-06-18';
+const LN_CTX = 'BEE_LN@2026-05-04', LR_CTX = 'BEE_LR@2026-05-04';
 const evalIn = (ctxKey, codes, values = {}) => MEN.analyseContext({ key: ctxKey, top: codes.map(code => ({ code })) }, CAT, values);
 const byId = (a, id) => a.results.find(r => r.id === id);
 test('paramètre centralisé : bouquet = 20 exigences', () => { assert.strictEqual(MEN.BOUQUET_SIZE, 20); assert(!/\b20\b/.test(read('requirements.js').replace(/20\d\d/g, '').match(/buildBouquets\([^)]*\)/)[0])); });
@@ -383,10 +383,10 @@ test('identifiants : espaces, casse, invisibles normalisés ; zéros significati
   assert.strictEqual(MEN.normalizeId(' op-012​ '), 'OP-012'); assert.strictEqual(MEN.normalizeId('OP 012'), 'OP 012'); assert.strictEqual(MEN.normalizeId('OP–012'), 'OP-012');
   assert.notStrictEqual(MEN.normalizeId('OP-012'), MEN.normalizeId('OP-12')); assert.notStrictEqual(MEN.normalizeId('00123'), MEN.normalizeId('123')); assert.notStrictEqual(MEN.normalizeId('OP-0120'), MEN.normalizeId('OP-012'));
 });
-test('référentiels : 4 familles distinctes, autres non reconnus', () => {
-  assert.strictEqual(MEN.referentialFamily('BEE Logement Neuf'), 'BEE_LN'); assert.strictEqual(MEN.referentialFamily('BEE Logement Rénovation'), 'BEE_LR'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Neuf'), 'BEE_TN'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Exploitation'), 'BEE_TE'); assert.strictEqual(MEN.referentialFamily('NF Habitat'), '');
+test('référentiels : 5 familles distinctes, autres non reconnus', () => {
+  assert.strictEqual(MEN.referentialFamily('BEE Logement Neuf'), 'BEE_LN'); assert.strictEqual(MEN.referentialFamily('BEE Logement Rénovation'), 'BEE_LR'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Neuf'), 'BEE_TN'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Exploitation'), 'BEE_TE'); assert.strictEqual(MEN.referentialFamily('BEE Tertiaire Rénovation'), 'BEE_TR'); assert.strictEqual(MEN.referentialFamily('NF Habitat'), '');
 });
-test('famille seule (décision du 06/10/2026) : toutes versions Neuf → règles LN 2026, Rénovation → règles LR 2025 ; jamais mélangées', () => {
+test('famille seule (décision du 06/10/2026) : toutes versions Neuf → règles LN 2026, Rénovation → règles LR 2026 ; jamais mélangées', () => {
   for (const v of ['04/05/2026', '01/02/2023', 'V5', '']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Neuf', referentialVersion: v }, CAT).key, LN_CTX, v);
   for (const v of ['18/06/2025', '04/05/2026', '2019']) assert.strictEqual(MEN.rowContext({ referential: 'BEE Logement Rénovation', referentialVersion: v }, CAT).key, LR_CTX, v);
 });
@@ -437,9 +437,15 @@ test('non applicable établi : exclu ; condition inconnue : jamais « non applic
 });
 test('condition inconnue ne changeant pas le résultat : calcul fiable (même résultat pour toutes les valeurs)', () => { const r = byId(evalIn(LN_CTX, ['3.2.3']), 'BEE_LN_2026_BONUS_CONSTRUCTIBILITE'); assert.strictEqual(r.status, 'ok'); assert.strictEqual(r.pct, 100); });
 test('ambiguïté du référentiel affectant le dénominateur : provisoire, exclue du classement', () => { const a = evalIn(LN_CTX, ['3.1.1'], { 'ln2026.regime': 'RT2012' }); assert.strictEqual(byId(a, 'BEE_LN_2026_BPE').status, 'provisional'); assert(!a.ranked.some(r => r.id === 'BEE_LN_2026_BPE')); });
-test('correspondance « à vérifier » (niveau supérieur présumé) : pas de coche verte, résultat provisoire', () => { const r = byId(evalIn(LR_CTX, ['3.1.11']), 'BEE_LR_2025_ECONOMIE_CIRCULAIRE'); const u = r.units.find(x => x.code === '3.1.10'); assert.strictEqual(u.state, 'unresolved'); assert.strictEqual(r.status, 'provisional'); });
-test('règle sans critère défini (BPE LR 2025) : « Non calculable », jamais 0 %', () => { const r = byId(evalIn(LR_CTX, ['3.1.2']), 'BEE_LR_2025_BPE'); assert.strictEqual(r.status, 'not_computable'); assert.strictEqual(r.pct, null); assert(r.reason); });
-test('Tertiaire (référentiel non fourni) : aucune mention calculée, « règles non disponibles »', () => { const ctx = MEN.rowContext({ referential: 'BEE Tertiaire Neuf', referentialVersion: '2024' }, CAT); const a = evalIn(ctx.key, ['1.2.1']); assert.strictEqual(a.results.length, 0); assert.strictEqual(a.source.status, 'source_missing'); });
+test('correspondance « à vérifier » (niveau supérieur présumé) : pas de coche verte, résultat provisoire', () => { const r = byId(evalIn(LR_CTX, ['3.1.11']), 'BEE_LR_2026_ECONOMIE_CIRCULAIRE'); const u = r.units.find(x => x.code === '3.1.10'); assert.strictEqual(u.state, 'unresolved'); assert.strictEqual(r.status, 'provisional'); });
+test('règle sans critère défini (BPE LR 2026) : « Non calculable », jamais 0 %', () => { const r = byId(evalIn(LR_CTX, ['3.1.2']), 'BEE_LR_2026_BPE'); assert.strictEqual(r.status, 'not_computable'); assert.strictEqual(r.pct, null); assert(r.reason); });
+test('Tertiaire (V6.38, référentiels 2026) : Neuf, Rénovation et Exploitation reconnus et calculés', () => {
+  const key = r => MEN.rowContext({ referential: r, referentialVersion: '2024' }, CAT).key;
+  assert.strictEqual(key('BEE Tertiaire Neuf'), 'BEE_TN@2026-05-04'); assert.strictEqual(key('BEE Tertiaire Rénovation'), 'BEE_TR@2026-05-04'); assert.strictEqual(key('BEE Tertiaire Exploitation'), 'BEE_TE@2026-03-05');
+  const tn = evalIn('BEE_TN@2026-05-04', ['1.1.1', '1.1.6', '1.1.7', '2.3.1', '3.3.1', '3.5.3', '4.1.2', '4.4.1']); assert.strictEqual(tn.source.status, 'available'); assert.strictEqual(tn.results.length, 16);
+  const te = byId(evalIn('BEE_TE@2026-03-05', ['1.7', '6.2']), 'BEE_TE_2026_LABEL_BBCA_EXPLOITATION'); assert.strictEqual(te.status, 'ok'); assert.strictEqual(te.covered, te.required);
+  const eng = byId(evalIn('BEE_TE@2026-03-05', ['1.7', '6.2']), 'BEE_TE_2026_ENGAGEMENT_BBCA_EXPLOITATION'); assert(eng.covered < eng.required, 'Engagement : 6.4 à 6.6 seulement');
+});
 test('ancien code absent du référentiel de la famille : écarté au diagnostic, jamais rapproché par similitude', () => { const b = MEN.buildBouquets([mkRow('A', '4.B.2', ['BEE Logement Neuf', '01/02/2018'])], CAT); assert.strictEqual(b.contexts[0].items.length, 0); assert.strictEqual(b.contexts[0].unresolved.length, 1); });
 test('classement : couverture décroissante (avant arrondi), puis unités requises, puis nom', () => {
   const fake = [{ id: 'b', name: 'B', status: 'ok', pct: 66.7, required: 3 }, { id: 'a', name: 'A', status: 'ok', pct: 66.66, required: 9 }, { id: 'c', name: 'C', status: 'ok', pct: 50, required: 2 }, { id: 'd', name: 'D', status: 'ok', pct: 50, required: 2 }, { id: 'p', name: 'P', status: 'provisional', pct: 99, required: 1 }];
@@ -533,9 +539,9 @@ atest('encart : multicoche MOA (OU) et croisement avec Référentiel (ET) ; reca
   const m = reqModule(R1); await m.connect();
   m.check('moa', 'Promoteur B'); let s = m.api._compatSnapshot(); assert.strictEqual(s.contexts.find(c => c.key === 'BEE_LN@2026-05-04').operations, 2);
   m.check('moa', 'Promoteur A'); s = m.api._compatSnapshot(); assert.strictEqual(s.contexts.find(c => c.key === 'BEE_LN@2026-05-04').operations, 5, 'OU entre MOA');
-  m.check('referential', 'BEE Logement Rénovation'); s = m.api._compatSnapshot(); assert.strictEqual(JSON.stringify(s.contexts.map(c => c.key)), JSON.stringify(['BEE_LR@2025-06-18']), 'ET entre familles');
+  m.check('referential', 'BEE Logement Rénovation'); s = m.api._compatSnapshot(); assert.strictEqual(JSON.stringify(s.contexts.map(c => c.key)), JSON.stringify(['BEE_LR@2026-05-04']), 'ET entre familles');
   m.check('moa', 'Promoteur A', false); m.check('moa', 'Promoteur B', false); m.check('referential', 'BEE Logement Rénovation', false);
-  m.check('moa', 'Bailleur <b>C</b>'); s = m.api._compatSnapshot(); assert.strictEqual(JSON.stringify(s.contexts.map(c => [c.key, c.operations])), JSON.stringify([['BEE_LR@2025-06-18', 1]]));
+  m.check('moa', 'Bailleur <b>C</b>'); s = m.api._compatSnapshot(); assert.strictEqual(JSON.stringify(s.contexts.map(c => [c.key, c.operations])), JSON.stringify([['BEE_LR@2026-05-04', 1]]));
 });
 atest('encart : focus local sur une exigence ou recherche sans effet sur le bouquet', async () => {
   const m = reqModule(R1); await m.connect(); const s = JSON.stringify(m.api._compatSnapshot().contexts);
@@ -557,13 +563,13 @@ atest('encart : 3e carte manuelle conservée lors d’un recalcul, sans toucher 
 });
 atest('encart : mention d’un autre périmètre → incompatibilité affichée et proposition de changer de périmètre', async () => {
   const m = reqModule(R1); await m.connect();
-  m.api.handleChange({ target: m.el({ 'data-req-compat-mention': '' }, { value: 'BEE_LR_2025_BEE_PLUS' }) });
-  const html = m.api.render(); assert(html.includes('Contexte différent')); assert(html.includes('data-req-compat-context-go="BEE_LR@2025-06-18"'));
+  m.api.handleChange({ target: m.el({ 'data-req-compat-mention': '' }, { value: 'BEE_LR_2026_BEE_PLUS' }) });
+  const html = m.api.render(); assert(html.includes('Contexte différent')); assert(html.includes('data-req-compat-context-go="BEE_LR@2026-05-04"'));
 });
 atest('encart : menu = toutes les mentions, regroupées par référentiel et version (optgroup)', async () => {
   const m = reqModule(R1); await m.connect(); const html = m.api.render(); const menu = html.slice(html.indexOf('data-req-compat-mention'));
   const opts = (menu.slice(0, menu.indexOf('</select>')).match(/<option value="BEE_/g) || []).length; assert.strictEqual(opts, CAT.mentions.length);
-  assert(/<optgroup label="BEE Logement Neuf · 04\/05\/2026"/.test(html) && /<optgroup label="BEE Logement Rénovation · 18\/06\/2025"/.test(html));
+  assert(/<optgroup label="BEE Logement Neuf · 04\/05\/2026"/.test(html) && /<optgroup label="BEE Logement Rénovation · 04\/05\/2026"/.test(html));
 });
 atest('encart : moins de trois mentions calculables → résultats disponibles + état vide explicite ; légende et mention permanente', async () => {
   const m = reqModule(R1); await m.connect(); const html = m.api.render();

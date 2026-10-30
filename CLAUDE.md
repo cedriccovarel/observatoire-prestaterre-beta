@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.38 | Reflet de soleil qui balaie le panneau Prestaterre Certification une fois planté (absent si mouvements réduits). |
 | V6.37 | Ombre du papillon au sol, plus nette quand il descend vers les fleurs. |
 | V6.36 | Papillon qui butine le massif fleuri une fois les fleurs écloses (posé, ailes ouvertes, si mouvements réduits). |
 | V6.35 | En fin de végétalisation, le technicien plante un panneau Prestaterre Certification (logo `assets/prestaterre_logo_green.png`) ; le poteau sort du sol, terre retournée au pied. |

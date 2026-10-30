@@ -292,16 +292,569 @@
     ];
   }
 
+  const REQS_TN_2026 = [
+      {"code": "1.1.1", "title": "Analyse de site", "points": 20, "page": 73},
+      {"code": "1.1.2", "title": "Diagnostic Produits, Équipements, Matériaux et Déchets (PEMD)", "points": 20, "page": 73},
+      {"code": "1.1.3", "title": "Évaluation de l'énergie grise des matériaux", "points": 20, "page": 73},
+      {"code": "1.1.4", "title": "Simulation thermique dynamique", "points": 20, "page": 73},
+      {"code": "1.1.5", "title": "Potentiel d’éco-mobilité", "points": 5, "page": 73},
+      {"code": "1.1.6", "title": "Dispositions prises pour l’évolutivité du bâtiment", "points": 30, "page": 73},
+      {"code": "1.1.7", "title": "Analyse des risques climatiques sur le bâtiment", "points": 20, "page": 73},
+      {"code": "1.1.8", "title": "Étude en coût global", "points": 30, "page": 73},
+      {"code": "1.2.1", "title": "Désignation d’un référent environnemental", "points": 15, "page": 73},
+      {"code": "1.2.2", "title": "Cahier des charges environnemental", "points": 15, "page": 73},
+      {"code": "1.2.3", "title": "Suivi du volet environnemental du projet", "points": 15, "page": 73},
+      {"code": "2.1.1", "title": "Perméabilité de la parcelle", "points": 15, "page": 74},
+      {"code": "2.2.1", "title": "Calcul de l’albédo moyen de la parcelle en fin d’opération", "points": 10, "page": 74},
+      {"code": "2.2.2", "title": "Limitation des îlots de chaleur par la végétalisation du site", "points": 20, "page": 74},
+      {"code": "2.3.1", "title": "Charte Chantier à faibles nuisances", "points": 10, "page": 74},
+      {"code": "2.3.2", "title": "Mission de suivi Chantier à faibles nuisances", "points": 20, "page": 74},
+      {"code": "2.3.3", "title": "Bilan Chantier à faibles nuisances", "points": 15, "page": 74},
+      {"code": "2.4.1", "title": "Coefficient de Biotope par Surface", "points": 15, "page": 74},
+      {"code": "2.4.2", "title": "Mise en place d’habitats semi-naturels", "points": 20, "page": 74},
+      {"code": "2.4.3", "title": "Gestion durable de la végétalisation du site", "points": 20, "page": 74},
+      {"code": "3.1.1", "title": "Niveau RT 2012", "points": 0, "page": 75},
+      {"code": "3.1.2", "title": "Niveau RT 2012 -10%", "points": 10, "page": 75},
+      {"code": "3.1.3", "title": "Niveau RT 2012 -20%", "points": 20, "page": 75},
+      {"code": "3.1.4", "title": "Niveau Passif", "points": 30, "page": 75},
+      {"code": "3.1.5", "title": "Niveau Effinergie+", "points": 30, "page": 75},
+      {"code": "3.1.6", "title": "Niveau BEPOS Effinergie 2013", "points": 40, "page": 75},
+      {"code": "3.2.1", "title": "Niveau Énergie 1 - Carbone 1 (E1/C1)", "points": 25, "page": 75},
+      {"code": "3.2.2", "title": "Niveau Énergie 2 - Carbone 1 (E2/C1)", "points": 30, "page": 75},
+      {"code": "3.2.3", "title": "Niveau Énergie 3 - Carbone 1 (E3/C1)", "points": 45, "page": 75},
+      {"code": "3.2.4", "title": "Niveau Énergie 4 - Carbone 1 (E4/C1)", "points": 60, "page": 75},
+      {"code": "3.2.5", "title": "Niveau Énergie 1 - Carbone 2 (E1/C2)", "points": 45, "page": 75},
+      {"code": "3.2.6", "title": "Niveau Énergie 2 - Carbone 2 (E2/C2)", "points": 50, "page": 75},
+      {"code": "3.2.7", "title": "Niveau Énergie 3 - Carbone 2 (E3/C2)", "points": 60, "page": 75},
+      {"code": "3.2.8", "title": "Niveau Énergie 4 - Carbone 2 (E4/C2)", "points": 70, "page": 75},
+      {"code": "3.2.9", "title": "Niveau BBCA Standard RT 2012", "points": 25, "page": 75},
+      {"code": "3.2.10", "title": "Niveau BBCA Performance RT 2012", "points": 30, "page": 75},
+      {"code": "3.2.11", "title": "Niveau BBCA Excellence RT 2012", "points": 40, "page": 75},
+      {"code": "3.2.12", "title": "Niveau BBC Effinergie 2017", "points": 0, "page": 75},
+      {"code": "3.2.13", "title": "Niveau BEPOS Effinergie 2017", "points": 0, "page": 75},
+      {"code": "3.2.14", "title": "Niveau BEPOS+ Effinergie 2017", "points": 0, "page": 75},
+      {"code": "3.3.1", "title": "Niveau RE 2020", "points": 0, "page": 75},
+      {"code": "3.3.2", "title": "Niveau Cep RE 2020 -5%", "points": 15, "page": 75},
+      {"code": "3.3.3", "title": "Niveau Cep RE 2020 -10%", "points": 20, "page": 75},
+      {"code": "3.3.4", "title": "Niveau Cep RE 2020 -20%", "points": 25, "page": 75},
+      {"code": "3.3.5", "title": "Niveau Cep,nr RE 2020 -5%", "points": 10, "page": 75},
+      {"code": "3.3.6", "title": "Niveau Cep,nr RE 2020 -10%", "points": 15, "page": 75},
+      {"code": "3.3.7", "title": "Niveau Cep,nr RE 2020 -20%", "points": 20, "page": 75},
+      {"code": "3.3.8", "title": "Niveau Bbio RE 2020 -5%", "points": 10, "page": 75},
+      {"code": "3.3.9", "title": "Niveau Bbio RE 2020 -10%", "points": 15, "page": 75},
+      {"code": "3.3.10", "title": "Niveau Bbio RE 2020 -20%", "points": 20, "page": 75},
+      {"code": "3.3.11", "title": "Niveau IC Énergie 2025 réglementaire", "points": 0, "page": 75},
+      {"code": "3.3.12", "title": "Niveau IC Énergie 2025", "points": 30, "page": 75},
+      {"code": "3.3.13", "title": "Niveau IC Énergie 2028", "points": 40, "page": 75},
+      {"code": "3.3.14", "title": "Niveau IC Construction 2025 réglementaire", "points": 0, "page": 75},
+      {"code": "3.3.15", "title": "Niveau IC Construction 2025", "points": 30, "page": 75},
+      {"code": "3.3.16", "title": "Niveau IC Construction 2028", "points": 40, "page": 75},
+      {"code": "3.3.17", "title": "Niveau IC Construction 2031", "points": 60, "page": 75},
+      {"code": "3.3.18", "title": "Niveau BBCA Standard RE 2020", "points": 25, "page": 75},
+      {"code": "3.3.19", "title": "Niveau BBCA Performance RE 2020", "points": 30, "page": 75},
+      {"code": "3.3.20", "title": "Niveau BBCA Excellence RE 2020", "points": 40, "page": 75},
+      {"code": "3.3.21", "title": "Option Contribution Neutralité 1 étoile", "points": 15, "page": 75},
+      {"code": "3.3.22", "title": "Option Contribution Neutralité 2 étoiles", "points": 20, "page": 75},
+      {"code": "3.3.23", "title": "Option Contribution Neutralité 3 étoiles", "points": 25, "page": 75},
+      {"code": "3.3.24", "title": "Option Contribution Neutralité 4 étoiles", "points": 30, "page": 75},
+      {"code": "3.3.25", "title": "Niveau BEPOS Effinergie RE 2020", "points": 40, "page": 75},
+      {"code": "3.3.26", "title": "Niveau BEPOS+ Effinergie RE 2020", "points": 50, "page": 75},
+      {"code": "3.3.27", "title": "Performance renforcée", "points": 0, "page": 75},
+      {"code": "3.4.1", "title": "Utilisation des énergies renouvelables", "points": 30, "page": 75},
+      {"code": "3.4.2", "title": "Raccordement à un réseau de chaleur et/ou de froid", "points": 25, "page": 75},
+      {"code": "3.4.3", "title": "Chauffage basse consommation", "points": 20, "page": 75},
+      {"code": "3.5.1", "title": "Valorisation des déchets générés par le chantier", "points": 20, "page": 75},
+      {"code": "3.5.2", "title": "Valorisation des déchets de démolition", "points": 20, "page": 75},
+      {"code": "3.5.3", "title": "Valorisation des déchets - Taxinomie compatible", "points": 20, "page": 75},
+      {"code": "3.5.4", "title": "Gestion des terres excavées", "points": 20, "page": 75},
+      {"code": "3.6.1", "title": "Biosourcé 2013 - Niveau 1", "points": 20, "page": 75},
+      {"code": "3.6.2", "title": "Biosourcé 2013 - Niveau 2", "points": 25, "page": 75},
+      {"code": "3.6.3", "title": "Biosourcé 2013 - Niveau 3", "points": 30, "page": 75},
+      {"code": "3.6.4", "title": "Bâtiment biosourcé 1er niveau 2024", "points": 20, "page": 75},
+      {"code": "3.6.5", "title": "Bâtiment biosourcé 2ème niveau 2024", "points": 25, "page": 75},
+      {"code": "3.6.6", "title": "Bâtiment biosourcé 3ème niveau 2024", "points": 30, "page": 75},
+      {"code": "3.6.7", "title": "Qualité et performance des produits", "points": 20, "page": 75},
+      {"code": "3.6.8", "title": "Produits de construction issus de bois certifié français", "points": 30, "page": 75},
+      {"code": "3.6.9", "title": "Produits de construction issus d’une forêt gérée durablement", "points": 15, "page": 75},
+      {"code": "3.6.10", "title": "Impact environnemental et durabilité des produits bois et biosourcés", "points": 20, "page": 75},
+      {"code": "3.6.11", "title": "Calcul des émissions stockées générées", "points": 20, "page": 75},
+      {"code": "3.7.1", "title": "Commissionnement des installations techniques", "points": 20, "page": 75},
+      {"code": "4.1.1", "title": "Compteurs d’eau par bâtiment et par type d’usage", "points": 10, "page": 76},
+      {"code": "4.1.2", "title": "Qualité des équipements de robinetterie", "points": 5, "page": 76},
+      {"code": "4.2.1", "title": "Traitement collectif des déchets", "points": 20, "page": 76},
+      {"code": "4.3.1", "title": "Confort thermique - Ventilation douce", "points": 15, "page": 76},
+      {"code": "4.3.2", "title": "Confort thermique - Absence de flux d’air parasite", "points": 10, "page": 76},
+      {"code": "4.3.3", "title": "Confort thermique - Absence de zone froide dans le bâtiment", "points": 10, "page": 76},
+      {"code": "4.3.4", "title": "Confort thermique - Limitation des températures estivales", "points": 15, "page": 76},
+      {"code": "4.3.5", "title": "Confort visuel - Analyse Points forts / Points faibles", "points": 10, "page": 76},
+      {"code": "4.3.6", "title": "Confort visuel - Analyse Facteur de Lumière du Jour FLJ", "points": 15, "page": 76},
+      {"code": "4.3.7", "title": "Confort visuel - Surface vitrée", "points": 10, "page": 76},
+      {"code": "4.3.8", "title": "Confort visuel - Occultation partielle", "points": 10, "page": 76},
+      {"code": "4.3.9", "title": "Confort acoustique - Dimensionnement des réseaux", "points": 10, "page": 76},
+      {"code": "4.3.10", "title": "Confort acoustique - Bruits intérieurs", "points": 30, "page": 76},
+      {"code": "4.4.1", "title": "Qualité de l’air intérieur - Produits peu émissifs", "points": 20, "page": 76},
+      {"code": "4.4.2", "title": "Qualité de l’air intérieur - Produits peu émissifs certifiés", "points": 25, "page": 76},
+      {"code": "4.4.3", "title": "Qualité de l’air intérieur - Ventilation", "points": 15, "page": 76},
+      {"code": "4.4.4", "title": "Qualité de l’air intérieur - Suivi", "points": 30, "page": 76},
+      {"code": "4.4.5", "title": "Analyse du risque Radon", "points": 25, "page": 76},
+      {"code": "4.4.6", "title": "Positionnement des tableaux électriques", "points": 5, "page": 76},
+      {"code": "4.4.7", "title": "Installation de câbles ou fils blindés", "points": 10, "page": 76},
+      {"code": "4.5.1", "title": "Comptage énergétique", "points": 10, "page": 76},
+      {"code": "4.5.2", "title": "Suivi des consommations", "points": 15, "page": 76},
+      {"code": "4.5.3", "title": "Facilité de maintenance des installations", "points": 5, "page": 76},
+      {"code": "4.5.4", "title": "Systèmes d’éclairage équipés de LED", "points": 5, "page": 76},
+      {"code": "4.5.5", "title": "Pilotage des veilles", "points": 10, "page": 76},
+      {"code": "4.5.6", "title": "Détection de présence pour l’éclairage", "points": 5, "page": 76},
+      {"code": "4.5.7", "title": "Coupure générale de l’éclairage", "points": 10, "page": 76},
+      {"code": "4.6.1", "title": "Sensibilisation et information des occupants", "points": 20, "page": 76},
+      {"code": "4.7.1", "title": "Proximité des modes doux", "points": 10, "page": 76},
+      {"code": "4.7.2", "title": "Aménagement des cheminements piétons", "points": 5, "page": 76},
+      {"code": "4.7.3", "title": "Éclairage des cheminements extérieurs", "points": 10, "page": 76},
+      {"code": "4.7.4", "title": "Éclairement des parties communes", "points": 20, "page": 76},
+      {"code": "4.7.5", "title": "Incitation à la mobilité douce", "points": 10, "page": 76},
+      {"code": "4.7.6", "title": "Local à vélo sécurisé", "points": 15, "page": 76},
+      {"code": "4.7.7", "title": "Bornes pour vélos électriques", "points": 15, "page": 76},
+      {"code": "4.7.8", "title": "Bornes pour véhicules électriques", "points": 20, "page": 76}
+  ];
+  const REQS_TR_2026 = [
+      {"code": "1.1.1", "title": "Analyse de site", "points": 20, "page": 53},
+      {"code": "1.1.2", "title": "Diagnostic Produits, Équipements, Matériaux et Déchets (PEMD)", "points": 20, "page": 53},
+      {"code": "1.1.3", "title": "Évaluation de l'énergie grise des matériaux", "points": 20, "page": 53},
+      {"code": "1.1.4", "title": "Simulation thermique dynamique", "points": 20, "page": 53},
+      {"code": "1.1.5", "title": "Potentiel d’éco-mobilité", "points": 5, "page": 53},
+      {"code": "1.1.6", "title": "Acoustique extérieure avant travaux", "points": 10, "page": 53},
+      {"code": "1.1.7", "title": "Acoustique extérieure - Isolement de façade", "points": 10, "page": 53},
+      {"code": "1.1.8", "title": "Dispositions prises pour l’évolutivité du bâtiment", "points": 30, "page": 53},
+      {"code": "1.1.9", "title": "Analyse des risques climatiques sur le bâtiment", "points": 20, "page": 53},
+      {"code": "1.2.1", "title": "Désignation d’un référent environnemental", "points": 15, "page": 53},
+      {"code": "1.2.2", "title": "Cahier des charges environnemental", "points": 15, "page": 53},
+      {"code": "1.2.3", "title": "Suivi du volet environnemental du projet", "points": 15, "page": 53},
+      {"code": "2.1.1", "title": "Perméabilité de la parcelle", "points": 15, "page": 54},
+      {"code": "2.2.1", "title": "Calcul de l’albédo moyen de la parcelle en fin d’opération", "points": 10, "page": 54},
+      {"code": "2.2.2", "title": "Limitation des îlots de chaleur par la végétalisation du site", "points": 20, "page": 54},
+      {"code": "2.3.1", "title": "Charte Chantier à faibles nuisances", "points": 10, "page": 54},
+      {"code": "2.3.2", "title": "Mission de suivi Chantier à faibles nuisances", "points": 20, "page": 54},
+      {"code": "2.3.3", "title": "Bilan Chantier à faibles nuisances", "points": 15, "page": 54},
+      {"code": "2.4.1", "title": "Coefficient de Biotope par Surface", "points": 15, "page": 54},
+      {"code": "2.4.2", "title": "Mise en place d’habitats semi-naturels", "points": 20, "page": 54},
+      {"code": "2.4.3", "title": "Création et animation d'espaces partagés en faveur de la biodiversité", "points": 20, "page": 54},
+      {"code": "2.4.4", "title": "Gestion durable de la végétalisation du site", "points": 20, "page": 54},
+      {"code": "3.1.1", "title": "Isolation thermique minimale", "points": 10, "page": 55},
+      {"code": "3.1.2", "title": "Niveau BBC Effinergie Rénovation tertiaire", "points": 50, "page": 55},
+      {"code": "3.2.1", "title": "Niveau BBCA Standard", "points": 30, "page": 55},
+      {"code": "3.2.2", "title": "Niveau BBCA Performance", "points": 40, "page": 55},
+      {"code": "3.2.3", "title": "Niveau BBCA Excellence", "points": 50, "page": 55},
+      {"code": "3.3.1", "title": "Utilisation des énergies renouvelables", "points": 30, "page": 55},
+      {"code": "3.3.2", "title": "Raccordement à un réseau de chaleur et/ou de froid", "points": 25, "page": 55},
+      {"code": "3.3.3", "title": "Chauffage basse consommation", "points": 20, "page": 55},
+      {"code": "3.4.1", "title": "Valorisation des déchets générés par le chantier", "points": 20, "page": 55},
+      {"code": "3.4.2", "title": "Valorisation des déchets de démolition", "points": 20, "page": 55},
+      {"code": "3.4.3", "title": "Valorisation des déchets - Taxinomie compatible", "points": 20, "page": 55},
+      {"code": "3.4.4", "title": "Gestion des terres excavées", "points": 20, "page": 55},
+      {"code": "3.5.1", "title": "Utilisation d’isolant d’origine renouvelable", "points": 30, "page": 55},
+      {"code": "3.5.2", "title": "Utilisation de produits biosourcés", "points": 20, "page": 55},
+      {"code": "3.5.3", "title": "Qualité et performance des produits", "points": 20, "page": 55},
+      {"code": "3.6.1", "title": "Commissionnement des installations techniques", "points": 20, "page": 55},
+      {"code": "4.1.1", "title": "Compteurs d’eau par bâtiment et par type d’usage", "points": 10, "page": 56},
+      {"code": "4.1.2", "title": "Qualité des équipements de robinetterie", "points": 5, "page": 56},
+      {"code": "4.2.1", "title": "Traitement collectif des déchets", "points": 20, "page": 56},
+      {"code": "4.3.1", "title": "Confort thermique - Ventilation douce", "points": 15, "page": 56},
+      {"code": "4.3.2", "title": "Confort thermique - Absence de flux d’air parasite", "points": 15, "page": 56},
+      {"code": "4.3.3", "title": "Confort thermique - Absence de zone froide dans le bâtiment", "points": 10, "page": 56},
+      {"code": "4.3.4", "title": "Confort thermique - Limitation des températures estivales", "points": 20, "page": 56},
+      {"code": "4.3.5", "title": "Confort visuel - Analyse points forts / points faibles", "points": 10, "page": 56},
+      {"code": "4.3.6", "title": "Confort visuel - Analyse Facteur de Lumière du Jour FLJ", "points": 20, "page": 56},
+      {"code": "4.3.7", "title": "Confort visuel - Surface vitrée", "points": 20, "page": 56},
+      {"code": "4.3.8", "title": "Confort visuel - Occultation partielle", "points": 15, "page": 56},
+      {"code": "4.3.9", "title": "Confort acoustique - Dimensionnement des réseaux", "points": 10, "page": 56},
+      {"code": "4.3.10", "title": "Confort acoustique - Bruits intérieurs", "points": 30, "page": 56},
+      {"code": "4.4.1", "title": "Qualité de l’air intérieur - Produits peu émissifs", "points": 20, "page": 56},
+      {"code": "4.4.2", "title": "Qualité de l’air intérieur - Produits peu émissifs certifiés", "points": 25, "page": 56},
+      {"code": "4.4.3", "title": "Qualité de l’air intérieur - Ventilation", "points": 15, "page": 56},
+      {"code": "4.4.4", "title": "Qualité de l’air intérieur - Mesure", "points": 30, "page": 56},
+      {"code": "4.4.5", "title": "Exposition aux champs électriques - Positionnement des tableaux électriques", "points": 5, "page": 56},
+      {"code": "4.4.6", "title": "Exposition aux champs électriques - Installation de câbles ou fils blindés", "points": 10, "page": 56},
+      {"code": "4.5.1", "title": "Comptage énergétique", "points": 10, "page": 56},
+      {"code": "4.5.2", "title": "Suivi des consommations", "points": 15, "page": 56},
+      {"code": "4.5.3", "title": "Facilité de maintenance des installations", "points": 5, "page": 56},
+      {"code": "4.5.4", "title": "Systèmes d’éclairage équipés de LED", "points": 5, "page": 56},
+      {"code": "4.5.5", "title": "Pilotage des veilles", "points": 10, "page": 56},
+      {"code": "4.5.6", "title": "Détection de présence pour l’éclairage", "points": 5, "page": 56},
+      {"code": "4.5.7", "title": "Coupure générale de l’éclairage", "points": 10, "page": 56},
+      {"code": "4.6.1", "title": "Sensibilisation et information des occupants", "points": 20, "page": 56},
+      {"code": "4.7.1", "title": "Aménagement des cheminements piétons", "points": 5, "page": 56},
+      {"code": "4.7.2", "title": "Éclairage des cheminements extérieurs", "points": 10, "page": 56},
+      {"code": "4.7.3", "title": "Éclairement des parties communes", "points": 20, "page": 56},
+      {"code": "4.7.4", "title": "Incitation à la mobilité douce", "points": 10, "page": 56},
+      {"code": "4.7.5", "title": "Local à vélo sécurisé", "points": 15, "page": 56},
+      {"code": "4.7.6", "title": "Bornes pour vélos électriques", "points": 15, "page": 56},
+      {"code": "4.7.7", "title": "Bornes pour véhicules électriques", "points": 20, "page": 56}
+  ];
+  const REQS_LR_2026 = [
+      {"code": "1.1.1", "title": "Analyse de site", "points": 20, "page": 69},
+      {"code": "1.1.2", "title": "Diagnostic Produits, Équipements, Matériaux et Déchets (PEMD)", "points": 20, "page": 69},
+      {"code": "1.1.3", "title": "Évaluation de l'énergie grise des matériaux", "points": 20, "page": 69},
+      {"code": "1.1.4", "title": "Simulation thermique dynamique", "points": 20, "page": 69},
+      {"code": "1.1.5", "title": "Potentiel d’éco-mobilité", "points": 5, "page": 69},
+      {"code": "1.1.6", "title": "Acoustique extérieure avant travaux", "points": 10, "page": 69},
+      {"code": "1.1.7", "title": "Acoustique extérieure - Isolement de façade", "points": 10, "page": 69},
+      {"code": "1.1.8", "title": "Diagnostic ressources, réemploi et réutilisation", "points": 30, "page": 69},
+      {"code": "1.1.9", "title": "Dispositions prises pour l’évolutivité du bâtiment", "points": 30, "page": 69},
+      {"code": "1.1.10", "title": "Analyse des risques climatiques sur le bâtiment", "points": 20, "page": 69},
+      {"code": "1.2.1", "title": "Désignation d’un référent environnemental", "points": 15, "page": 69},
+      {"code": "1.2.2", "title": "Cahier des charges environnemental", "points": 15, "page": 69},
+      {"code": "1.2.3", "title": "Suivi du volet environnemental du projet", "points": 15, "page": 69},
+      {"code": "1.2.4", "title": "Désignation d'un référent Économie circulaire", "points": 15, "page": 69},
+      {"code": "1.2.5", "title": "Cahier des charges Économie circulaire", "points": 15, "page": 69},
+      {"code": "1.2.6", "title": "Suivi du volet Economie circulaire", "points": 15, "page": 69},
+      {"code": "2.1.1", "title": "Calcul de l’albédo moyen de la parcelle en fin d’opération", "points": 10, "page": 70},
+      {"code": "2.1.2", "title": "Limitation des îlots de chaleur par la végétalisation du site", "points": 20, "page": 70},
+      {"code": "2.2.1", "title": "Charte Chantier à faibles nuisances", "points": 30, "page": 70},
+      {"code": "2.2.2", "title": "Mission de suivi Chantier à faibles nuisances", "points": 20, "page": 70},
+      {"code": "2.2.3", "title": "Bilan Chantier à faibles nuisances", "points": 15, "page": 70},
+      {"code": "2.3.1", "title": "Coefficient de Biotope par Surface", "points": 15, "page": 70},
+      {"code": "2.3.2", "title": "Mise en place d’habitats semi-naturels", "points": 20, "page": 70},
+      {"code": "2.3.3", "title": "Création et animation d’espaces partagés en faveur de la biodiversité", "points": 20, "page": 70},
+      {"code": "2.3.4", "title": "Gestion durable de la végétalisation du site", "points": 20, "page": 70},
+      {"code": "3.1.1", "title": "Isolation thermique minimale", "points": 0, "page": 71},
+      {"code": "3.1.2", "title": "Niveau 150 - Niveau Haute Performance Énergétique HPE", "points": 10, "page": 71},
+      {"code": "3.1.3", "title": "Niveau 80 - Niveau Bâtiment Basse Consommation BBC", "points": 40, "page": 71},
+      {"code": "3.1.4", "title": "Niveau Passif", "points": 40, "page": 71},
+      {"code": "3.1.5", "title": "Gain 30%", "points": 10, "page": 71},
+      {"code": "3.1.6", "title": "Gain 35%", "points": 10, "page": 71},
+      {"code": "3.1.7", "title": "Gain 40%", "points": 15, "page": 71},
+      {"code": "3.1.8", "title": "Gain 50 %", "points": 20, "page": 71},
+      {"code": "3.1.9", "title": "Gain 60 %", "points": 25, "page": 71},
+      {"code": "3.1.10", "title": "Niveau BBC Effinergie Rénovation 2024 - Première étape", "points": 30, "page": 71},
+      {"code": "3.1.11", "title": "Niveau BBC Effinergie Rénovation 2024", "points": 50, "page": 71},
+      {"code": "3.2.1", "title": "Étiquette DPE Bâtiment Niveau C", "points": 15, "page": 71},
+      {"code": "3.2.2", "title": "Étiquette DPE Bâtiment Niveau B", "points": 20, "page": 71},
+      {"code": "3.2.3", "title": "Étiquette DPE Bâtiment Niveau A", "points": 30, "page": 71},
+      {"code": "3.2.4", "title": "Réduction des émissions de GES - Étiquette DPE GES niveau C", "points": 20, "page": 71},
+      {"code": "3.2.5", "title": "Réduction des émissions de GES - Étiquette DPE GES niveau B", "points": 30, "page": 71},
+      {"code": "3.2.6", "title": "Réduction des émissions de GES - Étiquette DPE GES niveau A", "points": 40, "page": 71},
+      {"code": "3.2.7", "title": "Niveau BBCA Standard", "points": 30, "page": 71},
+      {"code": "3.2.8", "title": "Niveau BBCA Performance", "points": 40, "page": 71},
+      {"code": "3.2.9", "title": "Niveau BBCA Excellence", "points": 50, "page": 71},
+      {"code": "3.3.1", "title": "Utilisation des énergies renouvelables", "points": 30, "page": 71},
+      {"code": "3.3.2", "title": "Raccordement à un réseau de chaleur et/ou de froid", "points": 25, "page": 71},
+      {"code": "3.3.3", "title": "Chauffage basse consommation", "points": 20, "page": 71},
+      {"code": "3.4.1", "title": "Valorisation des déchets générés par le chantier", "points": 20, "page": 71},
+      {"code": "3.4.2", "title": "Valorisation des déchets de démolition", "points": 20, "page": 71},
+      {"code": "3.4.3", "title": "Valorisation des déchets - Taxinomie compatible", "points": 20, "page": 71},
+      {"code": "3.4.4", "title": "Gestion des terres excavées", "points": 20, "page": 71},
+      {"code": "3.4.5", "title": "Réemploi et réutilisation des produits, équipements et matériaux (PEM) - Niveau 1", "points": 20, "page": 71},
+      {"code": "3.4.6", "title": "Réemploi et réutilisation des produits, équipements et matériaux (PEM) - Niveau 2", "points": 30, "page": 71},
+      {"code": "3.5.1", "title": "Utilisation de produits biosourcés", "points": 20, "page": 71},
+      {"code": "3.5.2", "title": "Qualité et performance des produits", "points": 20, "page": 71},
+      {"code": "3.5.3", "title": "Produits de construction issus de bois certifié français", "points": 30, "page": 71},
+      {"code": "3.5.4", "title": "Produits de construction issus de matériaux recyclés", "points": 15, "page": 71},
+      {"code": "3.6.1", "title": "Comptage d’énergie par usage dans le logement", "points": 20, "page": 71},
+      {"code": "3.6.2", "title": "Comptage d’énergie par usage dans le bâtiment", "points": 20, "page": 71},
+      {"code": "3.7.1", "title": "Commissionnement des installations techniques", "points": 20, "page": 71},
+      {"code": "4.1.1", "title": "Compteur général d’eau par bâtiment et par type d’usage", "points": 15, "page": 72},
+      {"code": "4.1.2", "title": "Équipements individuels économes en eau", "points": 5, "page": 72},
+      {"code": "4.1.3", "title": "Qualité des équipements de robinetterie", "points": 5, "page": 72},
+      {"code": "4.1.4", "title": "Récupération des eaux pluviales pour un usage extérieur", "points": 20, "page": 72},
+      {"code": "4.1.5", "title": "Récupération des eaux pluviales pour un usage intérieur", "points": 20, "page": 72},
+      {"code": "4.2.1", "title": "Traitement collectif des déchets ménagers", "points": 20, "page": 72},
+      {"code": "4.3.1", "title": "Confort thermique - Limitation des températures estivales", "points": 20, "page": 72},
+      {"code": "4.3.2", "title": "Confort visuel - Analyse Points forts / Points faibles", "points": 10, "page": 72},
+      {"code": "4.3.3", "title": "Confort visuel - Analyse Facteur de Lumière du Jour FLJ", "points": 15, "page": 72},
+      {"code": "4.3.4", "title": "Confort acoustique - Bruits et chocs entre logements - Acoustique renforcée niveau 55", "points": 30, "page": 72},
+      {"code": "4.3.5", "title": "Confort acoustique - Bruits et chocs entre logements et circulations - Acoustique renforcée niveau 55", "points": 20, "page": 72},
+      {"code": "4.3.6", "title": "Confort acoustique - Coefficient d'absorption dans les circulations communes Niveau 1", "points": 15, "page": 72},
+      {"code": "4.3.7", "title": "Confort acoustique - Coefficient d'absorption dans les circulations communes Niveau 2", "points": 20, "page": 72},
+      {"code": "4.3.8", "title": "Confort acoustique - Acoustique extérieure après travaux (mesures)", "points": 10, "page": 72},
+      {"code": "4.4.1", "title": "Qualité de l’air intérieur - Produits peu émissifs", "points": 20, "page": 72},
+      {"code": "4.4.2", "title": "Qualité de l’air intérieur - Produits peu émissifs certifiés", "points": 25, "page": 72},
+      {"code": "4.4.3", "title": "Qualité de l’air intérieur - Ventilation", "points": 15, "page": 72},
+      {"code": "4.4.4", "title": "Qualité de l’air intérieur - Mesure", "points": 20, "page": 72},
+      {"code": "4.4.5", "title": "Exposition aux champs électriques - Installation de câbles ou fils blindés", "points": 10, "page": 72},
+      {"code": "4.5.1", "title": "Gestion automatisée et communicante du logement", "points": 30, "page": 72},
+      {"code": "4.5.2", "title": "Pilotage des veilles", "points": 10, "page": 72},
+      {"code": "4.5.3", "title": "Coupure générale de l'éclairage", "points": 10, "page": 72},
+      {"code": "4.6.1", "title": "Sensibilisation et information des occupants", "points": 20, "page": 72},
+      {"code": "4.6.2", "title": "Accompagnement et suivi des occupants", "points": 25, "page": 72},
+      {"code": "4.6.3", "title": "Information des habitants sur les équipements existants pour le traitement des déchets", "points": 5, "page": 72},
+      {"code": "4.7.1", "title": "Mise en place d’espaces partagés", "points": 25, "page": 72},
+      {"code": "4.7.2", "title": "Mise à disposition de moyens de déplacement partagés", "points": 25, "page": 72},
+      {"code": "4.7.3", "title": "Incitation au réemploi, à la réparation et à la réutilisation", "points": 10, "page": 72},
+      {"code": "4.8.1", "title": "Aménagement des cheminements piétons", "points": 5, "page": 72},
+      {"code": "4.8.2", "title": "Éclairage des cheminements extérieurs", "points": 10, "page": 72},
+      {"code": "4.8.3", "title": "Éclairement des parties communes", "points": 20, "page": 72},
+      {"code": "4.8.4", "title": "Local à vélo sécurisé", "points": 15, "page": 72},
+      {"code": "4.8.5", "title": "Bornes pour vélos électriques", "points": 15, "page": 72},
+      {"code": "4.8.6", "title": "Bornes pour véhicules électriques", "points": 20, "page": 72},
+      {"code": "4.9.1", "title": "Gestion multidimensionnelle du projet", "points": 5, "page": 72},
+      {"code": "4.9.2", "title": "Aménagement du logement", "points": 20, "page": 72},
+      {"code": "4.9.3", "title": "Services aux occupants", "points": 20, "page": 72}
+  ];
+  const REQS_TE_2026 = [
+      {"code": "1.1", "title": "État réglementaire", "page": 12},
+      {"code": "1.2", "title": "Description de l’ouvrage", "page": 13},
+      {"code": "1.3", "title": "Installations de génie climatique", "page": 14},
+      {"code": "1.4", "title": "Compteurs", "page": 14},
+      {"code": "1.5", "title": "Fluides frigorigènes", "page": 14},
+      {"code": "1.6", "title": "Travaux", "page": 15},
+      {"code": "1.7", "title": "Pré-requis BBCA Exploitation", "page": 15},
+      {"code": "2.1", "title": "Référent Exploitation Maintenance", "page": 17},
+      {"code": "2.2", "title": "Programme d’exploitation maintenance", "page": 18},
+      {"code": "2.3", "title": "Suivi des performances", "page": 18},
+      {"code": "2.4", "title": "Documentation du système de management", "page": 18},
+      {"code": "2.5", "title": "Veille règlementaire", "page": 18},
+      {"code": "2.6", "title": "Programme de sensibilisation et information des occupants", "page": 19},
+      {"code": "2.7", "title": "Management des enquêtes d’usage", "page": 20},
+      {"code": "3.1", "title": "Gestion des eaux pluviales - Conformité réglementaire en vigueur", "page": 22},
+      {"code": "3.2", "title": "Perméabilité de la parcelle", "page": 22},
+      {"code": "3.3", "title": "Végétalisation du site", "page": 23},
+      {"code": "3.4", "title": "Biodiversité - Présence d’habitats semi-naturels", "page": 23},
+      {"code": "3.5", "title": "Biodiversité - Présence et animation d’espaces partagés en faveur de la biodiversité", "page": 24},
+      {"code": "3.6", "title": "Biodiversité - Gestion durable de la végétalisation du site", "page": 25},
+      {"code": "3.7", "title": "Biodiversité - Enquête d’usage", "page": 25},
+      {"code": "4.1", "title": "Charte Chantier à faibles nuisances", "page": 27},
+      {"code": "4.2", "title": "Mission de suivi Chantier à faibles nuisances", "page": 28},
+      {"code": "4.3", "title": "Bilan Chantier à faibles nuisances", "page": 28},
+      {"code": "4.4", "title": "Valorisation des déchets générés par le chantier", "page": 28},
+      {"code": "4.5", "title": "Diagnostic ressources, réemploi et réutilisation", "page": 29},
+      {"code": "5.1", "title": "Conformité au dispositif Éco-énergie Tertiaire", "page": 31},
+      {"code": "5.2", "title": "Conformité au dispositif Éco-énergie Tertiaire -10%", "page": 32},
+      {"code": "5.3", "title": "Conformité au dispositif Éco-énergie Tertiaire -20%", "page": 32},
+      {"code": "5.4", "title": "Conformité au dispositif Éco-énergie Tertiaire -40%", "page": 33},
+      {"code": "5.5", "title": "Conformité au dispositif Éco-énergie Tertiaire -60%", "page": 33},
+      {"code": "5.6", "title": "Niveau Passif Exploitation", "page": 34},
+      {"code": "5.7", "title": "Niveau Énergie Positive 5 usages", "page": 34},
+      {"code": "5.8", "title": "Niveau Énergie Positive Site", "page": 34},
+      {"code": "5.9", "title": "Utilisation des énergies renouvelables", "page": 34},
+      {"code": "6.1", "title": "BBCA Exploitation Standard", "page": 37},
+      {"code": "6.2", "title": "BBCA Exploitation Performance", "page": 37},
+      {"code": "6.3", "title": "BBCA Exploitation Excellence", "page": 38},
+      {"code": "6.4", "title": "Engagement BBCA Exploitation Standard", "page": 38},
+      {"code": "6.5", "title": "Engagement BBCA Exploitation Performance", "page": 38},
+      {"code": "6.6", "title": "Engagement BBCA Exploitation Excellence", "page": 39},
+      {"code": "6.7", "title": "Suivi des fluides frigorigènes", "page": 39},
+      {"code": "7.1", "title": "Compteurs d’eau par bâtiment et par type d’usage", "page": 41},
+      {"code": "7.2", "title": "Qualité des équipements de robinetterie", "page": 41},
+      {"code": "7.3", "title": "Détection des fuites", "page": 42},
+      {"code": "7.4", "title": "Récupération des eaux pluviales pour un usage extérieur", "page": 43},
+      {"code": "7.5", "title": "Récupération des eaux pluviales pour un usage intérieur", "page": 43},
+      {"code": "8.1", "title": "Maintenance préventive", "page": 45},
+      {"code": "8.2", "title": "Maintenance curative", "page": 46},
+      {"code": "8.3", "title": "GTC / GTB", "page": 46},
+      {"code": "8.4", "title": "Gestion de l’éclairage", "page": 47},
+      {"code": "8.5", "title": "Commissionnement des installations techniques", "page": 47},
+      {"code": "9.1", "title": "Confort d’été - Occultations", "page": 50},
+      {"code": "9.2", "title": "Confort d’été - Autres dispositifs", "page": 51},
+      {"code": "9.3", "title": "Confort thermique - Enquête d’usage", "page": 51},
+      {"code": "9.4", "title": "Confort visuel - Éclairage artificiel des parties communes", "page": 52},
+      {"code": "9.5", "title": "Confort visuel - Éclairage naturel", "page": 52},
+      {"code": "9.6", "title": "Confort visuel - Enquête d’usage", "page": 53},
+      {"code": "9.7", "title": "Confort acoustique - Bruits intérieurs", "page": 53},
+      {"code": "9.8", "title": "Confort acoustique - Enquête d’usage", "page": 54},
+      {"code": "10.1", "title": "Qualité de l’air intérieur - Mesures", "page": 56},
+      {"code": "10.2", "title": "Qualité de l’air intérieur - Analyse du risque radon", "page": 56},
+      {"code": "10.3", "title": "Qualité de l’air intérieur - Enquête d’usage", "page": 57},
+      {"code": "11.1", "title": "Déchets - Traitement collectif", "page": 59},
+      {"code": "11.2", "title": "Déchets - Enquête d’usage", "page": 60},
+      {"code": "11.3", "title": "Espaces partagés - Mise à disposition", "page": 60},
+      {"code": "11.4", "title": "Espaces partagés - Enquête d’usage", "page": 61},
+      {"code": "11.5", "title": "Déplacements - Mise à disposition de moyens partagés", "page": 61},
+      {"code": "11.6", "title": "Déplacements - Incitation au co-voiturage et à l’utilisation du vélo", "page": 61},
+      {"code": "11.7", "title": "Déplacements - Bornes pour véhicules électriques", "page": 62},
+      {"code": "11.8", "title": "Déplacements - Aménagements des cheminements piétons", "page": 62},
+      {"code": "11.9", "title": "Déplacements - Enquête d’usage", "page": 62}
+  ];
+
+  // ================================================================== V6.38 — référentiels 2026 complémentaires
+  // Sources : PDF transmis le 30/10/2026 (dossier « Référentiels et profils »). Exigences et marques lues dans les
+  // tableaux récapitulatifs « points par mention » (annexe 2 : X = obligatoire ou niveau minimal obligatoire,
+  // chiffre = critère de la mention, O = optionnelle, R = recommandée) et dans le texte des mentions.
+  // Un niveau supérieur non écrit reste en `inferredAlt` (jamais une coche verte).
+  const TN2026 = 'BEE_TN@2026-05-04', TR2026 = 'BEE_TR@2026-05-04', TE2026 = 'BEE_TE@2026-03-05', LR2026 = 'BEE_LR@2026-05-04';
+  const SRC_TN = { doc: 'REF AN 010-5 BEE Tertiaire Neuf', version: '04/05/2026' };
+  const SRC_TR = { doc: 'REF AN 010-7 BEE Tertiaire Rénovation', version: '04/05/2026' };
+  const SRC_TE = { doc: 'REF AN 010-10 BEE Tertiaire Exploitation', version: '05/03/2026' };
+  const SRC_LR2026 = { doc: 'REF AN 010-3 BEE Logement Rénovation', version: '04/05/2026' };
+  const pTN = (pages, extra = '') => ({ ...SRC_TN, pages: pages + extra });
+  const pTR = (pages, extra = '') => ({ ...SRC_TR, pages: pages + extra });
+  const pTE = (pages, extra = '') => ({ ...SRC_TE, pages: pages + extra });
+  const tnRegime = (value, text) => ({ field: 'tn2026.regime', in: [value], text });
+  const tnSwitch = (label, rt, re) => ({ type: 'switch', field: 'tn2026.regime', label, cases: { RT2012: rt, RE2020: re } });
+  const tnBase = { points: { required: true, text: 'Seuil de 100 points (p. 9, p. 71).' }, cumulation: { cumulable: true, text: 'Cumulable avec d’autres mentions (p. 71).' } };
+  const tnAlone = { points: { required: 'conditional', text: 'Dérogation au seuil de 100 points si la mention est retenue seule ; 100 points en cas de cumul (p. 9, p. 71).' }, cumulation: { cumulable: true, text: 'Cumulable avec d’autres mentions (p. 71).' } };
+  const trBase = { points: { required: true, text: 'Seuils de points : 100 en rénovation lourde, 60 en rénovation légère (p. 7, p. 51).' }, cumulation: { cumulable: true, text: 'Cumulable avec d’autres mentions (p. 51).' } };
+  const tn = (id, name, kind, def) => ({ id: `BEE_TN_2026_${id}`, context: TN2026, name, kind, ...common, ...tnBase, ...def });
+  const tr = (id, name, kind, def) => ({ id: `BEE_TR_2026_${id}`, context: TR2026, name, kind, ...common, ...trBase, ...def });
+  const effTN = ext('Règles techniques de l’association Effinergie (non fournies) : non évaluées ici.');
+  const annexTN = pTN('73-76', ' (annexe 2)');
+
+  function tnMentions() {
+    return [
+      tn('BPE', 'Bâtiment Performance Énergétique (BPE)', 'Prestaterre', {
+        sources: [pTN('9-10'), pTN('71'), annexTN],
+        applicability: [tnRegime('RT2012', 'RT 2012 uniquement (p. 10).')],
+        criteria: { type: 'all', items: [req('3.1.1', { label: '3.1.1 Niveau RT 2012 (minimum marqué X)', inferredAlt: ['3.1.2', '3.1.3', '3.1.4'] })] },
+        points: { required: false, text: 'Pas de seuil de 100 points (p. 9, p. 71).' },
+        cumulation: { cumulable: false, text: 'Mention autonome, non cumulable (p. 10, p. 71).' },
+        ambiguities: [{ id: 'TN-A', affectsScore: false, text: 'p. 10 renvoie aux « exigences éligibles » de l’annexe 2, qui ne marque que 3.1.1 (X) : les niveaux supérieurs ne sont pas écrits.' }]
+      }),
+      tn('BPEC', 'Bâtiment Performance Énergétique et Carbone (BPEC)', 'Prestaterre', {
+        sources: [pTN('9-10'), pTN('71'), annexTN],
+        applicability: [tnRegime('RE2020', 'RE 2020 uniquement (p. 10).')],
+        criteria: { type: 'all', items: [req('3.3.1', { label: '3.3.1 Niveau RE 2020 (minimum marqué X)' })] },
+        points: { required: false, text: 'Pas de seuil de 100 points (p. 9, p. 71).' },
+        cumulation: { cumulable: false, text: 'Mention autonome, non cumulable (p. 10, p. 71).' }
+      }),
+      ...['ATTENUATION', 'ADAPTATION'].map(obj => tn(`TAXINOMIE_${obj}`, `Taxinomie européenne — ${obj === 'ATTENUATION' ? 'Atténuation' : 'Adaptation'}`, 'Prestaterre', {
+        officialName: 'Taxinomie européenne',
+        sources: [pTN('10-11'), pTN('71'), annexTN],
+        criteria: { type: 'all', items: [
+          req('1.1.1'), req('1.1.6'), req('1.1.7'), req('2.3.1'),
+          tnSwitch('Voie énergétique (niveaux minimaux marqués X)',
+            obj === 'ATTENUATION' ? { type: 'all', label: 'RT 2012 : 3.1.2 et 3.2.1', items: [req('3.1.2'), req('3.2.1')] } : req('3.1.1'),
+            req('3.3.1')),
+          req('3.5.3'), req('4.1.2'), req('4.4.1')
+        ] },
+        prerequisites: [
+          ext('Choisir l’objectif Atténuation OU Adaptation et respecter l’ensemble des exigences associées (p. 10).'),
+          ext('Règlement délégué (UE) 2021/2139, appendice C, arrêté du 28/05/2009 (produits CMR) : règles externes non vérifiables ici.')
+        ]
+      })),
+      tn('HORIZON_ZERO_CARBONE', 'Horizon Zéro Carbone', 'Prestaterre', {
+        sources: [pTN('11-12'), pTN('71'), annexTN],
+        applicability: [tnRegime('RE2020', 'RE 2020 uniquement (p. 12).')],
+        criteria: { type: 'all', items: [
+          any('Un niveau BBCA RE 2020 : 3.3.18, 3.3.19 ou 3.3.20', ['3.3.18', '3.3.19', '3.3.20'], { ambiguity: 'TN-B' }),
+          { type: 'unknown', label: 'Niveaux IC « en fonction des niveaux désirés »', reason: 'p. 11 cite 3.3.11 à 3.3.17 sans règle de choix ; l’annexe marque X sur 3.3.15 (ambiguïté TN-B)' },
+          req('3.6.9'), req('3.6.10'), req('3.6.11')
+        ] },
+        optional: ['1.1.6', '1.1.7', '2.1.1', '2.2.2', '2.4.2', '2.4.3', '3.4.1', '3.4.2', '3.5.2', '3.5.3', '4.3.4', '4.3.10', '4.4.1', '4.6.1', '4.7.4', '4.7.5'],
+        prerequisites: [ext('Label d’État bas carbone « méthode bâtiment neuf biosourcé » : construction neuve de plus de 500 m² SDP en France incorporant des matériaux biosourcés (p. 11).')],
+        ambiguities: [{ id: 'TN-B', affectsScore: false, text: 'p. 11 numérote les seuils BBCA 3.3.16 à 3.3.18, le tableau de la cible 3 (p. 75) les numérote 3.3.18 à 3.3.20 (3.3.16 et 3.3.17 y sont IC Construction 2028 et 2031) : la numérotation du tableau est retenue.' }]
+      }),
+      tn('LABEL_BBCA', 'Label Bâtiment Bas Carbone (BBCA)', 'Partenaire', {
+        sources: [pTN('9'), pTN('12'), pTN('71'), annexTN],
+        ...tnAlone,
+        criteria: { type: 'all', items: [
+          tnSwitch('Niveau BBCA', any('RT 2012 : 3.2.9, 3.2.10 ou 3.2.11', ['3.2.9', '3.2.10', '3.2.11']), any('RE 2020 : 3.3.18, 3.3.19 ou 3.3.20', ['3.3.18', '3.3.19', '3.3.20'])),
+          tnSwitch('Exigence de la cible 3 associée (p. 9)', any('RT 2012 : 3.1.2, 3.1.3 ou 3.1.4', ['3.1.2', '3.1.3', '3.1.4']), any('RE 2020 : un code parmi 3.3.11 à 3.3.17', range('3.3', 11, 17)))
+        ] },
+        prerequisites: [ext('Référentiel technique BBCA (association BBCA) non fourni : sa validation ne se déduit pas des codes.')]
+      }),
+      tn('BBCA_CONTRIBUTION_NEUTRALITE', 'Label BBCA option Contribution Neutralité', 'Partenaire', {
+        sources: [pTN('12'), pTN('71'), annexTN],
+        ...tnAlone,
+        applicability: [tnRegime('RE2020', 'RE 2020 uniquement (p. 12).')],
+        criteria: { type: 'all', items: [
+          { type: 'mention', id: 'BEE_TN_2026_LABEL_BBCA' },
+          any('Un niveau de contribution : 3.3.21 à 3.3.24 (1 à 4 étoiles)', ['3.3.21', '3.3.22', '3.3.23', '3.3.24'])
+        ] },
+        dependencies: ['BEE_TN_2026_LABEL_BBCA'],
+        prerequisites: [ext('Label BBCA obligatoire, quel que soit le niveau (p. 12, p. 71).')]
+      }),
+      tn('BIOSOURCE_2024', 'Label Bâtiment Biosourcé 2024', 'Partenaire', {
+        sources: [pTN('9'), pTN('12-13'), pTN('71'), annexTN],
+        ...tnAlone,
+        applicability: [tnRegime('RE2020', 'RE 2020 uniquement (p. 13).')],
+        criteria: { type: 'all', items: [
+          any('Un niveau 2024 : 3.6.4, 3.6.5 ou 3.6.6', ['3.6.4', '3.6.5', '3.6.6']),
+          any('Une exigence parmi 3.1.1 à 3.1.4 et 3.3.1 à 3.3.17', [...range('3.1', 1, 4), ...range('3.3', 1, 17)], { ambiguity: 'TN-C' })
+        ] },
+        prerequisites: [ext('Arrêté du 02/07/2024 ; contrôles en conception et en exécution (p. 12-13).')],
+        ambiguities: [{ id: 'TN-C', affectsScore: false, text: 'p. 9 : « 3.3.1 à 3.3.17 » ; p. 12 : « 3.3.1 à 3.3.15 ». La liste la plus large est retenue ; 3.3.16 et 3.3.17 à confirmer.' }]
+      }),
+      tn('LABEL_E_C', 'Label Énergie positive et Réduction Carbone (E+C-)', 'Partenaire', {
+        sources: [pTN('9'), pTN('13'), pTN('71')],
+        ...tnAlone,
+        applicability: [tnRegime('RT2012', 'RT 2012 uniquement (p. 13).')],
+        criteria: { type: 'all', items: [any('Un des huit niveaux 3.2.1 à 3.2.8', range('3.2', 1, 8))] },
+        prerequisites: [ext('Référentiels externes « Énergie-Carbone » (niveaux et méthode) non fournis.')]
+      }),
+      tn('EFFINERGIE_PLUS', 'Label Effinergie+', 'Partenaire', {
+        sources: [pTN('13'), pTN('71'), annexTN],
+        applicability: [tnRegime('RT2012', 'RT 2012 uniquement (p. 13).')],
+        criteria: { type: 'all', items: ['3.1.5', '4.3.4', '4.3.5', '4.3.9', '4.4.1', '4.4.3', '4.6.1'].map(c => req(c)) },
+        recommended: ['1.1.3', '1.1.4', '1.1.5', '4.3.1', '4.3.2', '4.3.3', '4.3.10', '4.5.1', '4.5.2', '4.5.3', '4.7.6'],
+        prerequisites: [effTN]
+      }),
+      tn('BEPOS_EFFINERGIE_2013', 'Label BEPOS Effinergie 2013', 'Partenaire', {
+        sources: [pTN('13'), pTN('71'), annexTN],
+        applicability: [tnRegime('RT2012', 'RT 2012 uniquement (p. 13).')],
+        criteria: { type: 'all', items: ['1.1.3', '1.1.5', '3.1.6', '4.3.4', '4.3.5', '4.3.9', '4.4.1', '4.4.3', '4.6.1'].map(c => req(c)) },
+        recommended: ['1.1.4', '4.3.1', '4.3.2', '4.3.3', '4.3.10', '4.5.1', '4.5.2', '4.5.3', '4.7.6'],
+        prerequisites: [effTN]
+      }),
+      ...[['BBC_EFFINERGIE_2017', 'Label BBC Effinergie 2017', '3.2.12', '3.2.2', ['3.2.3', '3.2.4', '3.2.6', '3.2.7', '3.2.8']],
+          ['BEPOS_EFFINERGIE_2017', 'Label BEPOS Effinergie 2017', '3.2.13', '3.2.3', ['3.2.4', '3.2.7', '3.2.8']],
+          ['BEPOS_PLUS_EFFINERGIE_2017', 'Label BEPOS+ Effinergie 2017', '3.2.14', '3.2.4', ['3.2.8']]].map(([id, name, level, ec, higher]) => tn(id, name, 'Partenaire', {
+        sources: [pTN('14'), pTN('71'), annexTN],
+        applicability: [tnRegime('RT2012', 'RT 2012 uniquement (p. 14).')],
+        criteria: { type: 'all', items: [req('1.1.5'), req(level), req(ec, { label: `${ec} Niveau E+C- (minimum marqué X)`, inferredAlt: higher }), req('4.4.3'), req('4.6.1')] },
+        recommended: ['1.1.4', '4.3.1', '4.3.2', '4.3.3', '4.3.4', '4.3.5', '4.3.9', '4.3.10', '4.4.1', '4.5.1', '4.5.2', '4.5.3', '4.7.6'],
+        prerequisites: [effTN, ext(`${level} porte 0 point ; les points sont ceux du niveau E+C- retenu (p. 75).`)]
+      })),
+      ...[['BEPOS_EFFINERGIE_RE2020', 'Label BEPOS Effinergie RE 2020', '3.3.25'], ['BEPOS_PLUS_EFFINERGIE_RE2020', 'Label BEPOS+ Effinergie RE 2020', '3.3.26']].map(([id, name, level]) => tn(id, name, 'Partenaire', {
+        sources: [pTN('14'), pTN('71'), annexTN],
+        applicability: [tnRegime('RE2020', 'RE 2020, bâtiments de bureaux et d’enseignement primaire ou secondaire (p. 14).')],
+        criteria: { type: 'all', items: [req('1.1.5'), req('3.3.13'), req(level), req('3.7.1')] },
+        recommended: ['1.1.4', '4.3.1', '4.3.2', '4.3.3', '4.3.4', '4.3.5', '4.3.9', '4.3.10', '4.4.1', '4.5.1', '4.5.2', '4.5.3', '4.6.1', '4.7.6'],
+        prerequisites: [effTN]
+      }))
+    ];
+  }
+
+  function trMentions() {
+    const annexTR = pTR('53-56', ' (annexe 2)');
+    return [
+      tr('TAXINOMIE_ATTENUATION', 'Taxinomie européenne — Atténuation', 'Prestaterre', {
+        officialName: 'Taxinomie européenne',
+        sources: [pTR('8'), pTR('51'), annexTR],
+        criteria: { type: 'all', items: ['1.1.8', '1.1.9', '2.3.1', '3.1.2', '3.4.3', '4.1.2', '4.4.1'].map(c => req(c)) },
+        prerequisites: [ext('Choisir l’objectif Atténuation OU Adaptation (p. 8) ; règlement délégué (UE) 2021/2139 et arrêté du 28/05/2009 : règles externes non vérifiables ici.')]
+      }),
+      tr('TAXINOMIE_ADAPTATION', 'Taxinomie européenne — Adaptation', 'Prestaterre', {
+        officialName: 'Taxinomie européenne',
+        sources: [pTR('8'), pTR('51'), annexTR],
+        criteria: { type: 'all', items: ['1.1.8', '1.1.9', '2.3.1', '3.4.3', '4.1.2', '4.4.1'].map(c => req(c)) },
+        prerequisites: [ext('Choisir l’objectif Atténuation OU Adaptation (p. 8) ; règlement délégué (UE) 2021/2139 et arrêté du 28/05/2009 : règles externes non vérifiables ici.')]
+      }),
+      tr('LABEL_BBCA', 'Label Bâtiment Bas Carbone (BBCA)', 'Partenaire', {
+        sources: [pTR('7'), pTR('9'), pTR('51'), annexTR],
+        points: { required: 'conditional', text: 'Dérogation aux seuils de points si la mention est retenue seule ; seuils applicables en cas de cumul (p. 7, p. 51).' },
+        criteria: { type: 'all', items: [any('Un niveau BBCA : 3.2.1, 3.2.2 ou 3.2.3', ['3.2.1', '3.2.2', '3.2.3'])] },
+        prerequisites: [ext('Référentiel technique BBCA (association BBCA) non fourni.')]
+      }),
+      tr('BBC_RENO_TERTIAIRE', 'Label BBC Effinergie Rénovation tertiaire', 'Partenaire', {
+        sources: [pTR('9'), pTR('51'), annexTR],
+        criteria: { type: 'all', items: [req('1.1.5'), req('3.1.2')] },
+        recommended: ['1.1.3', '1.1.4', '4.3.1', '4.3.2', '4.3.3', '4.3.4', '4.3.5', '4.3.9', '4.3.10', '4.4.1', '4.5.1', '4.5.2', '4.5.3', '4.6.1'],
+        prerequisites: [ext('Arrêté du 3 octobre 2023 et règles techniques de l’association Effinergie (non fournies) : non évaluées ici (p. 9).')]
+      })
+    ];
+  }
+
+  function teMentions() {
+    const base = { ...common, points: { required: 'conditional', text: 'Hors système de notation BEE Tertiaire Exploitation : cumulable avec le label ou prise seule par dérogation (p. 9-10).' }, cumulation: { cumulable: true, text: 'Cumulable avec le label BEE Tertiaire Exploitation (p. 10).' } };
+    const te = (id, name, levels) => ({ id: `BEE_TE_2026_${id}`, context: TE2026, name, kind: 'Partenaire', ...base,
+      sources: [pTE('9-10'), pTE('15'), pTE('37-39'), pTE('65', ' (annexe 2)')],
+      criteria: { type: 'all', items: [req('1.7', { label: '1.7 Pré-requis BBCA Exploitation' }), any(`Un niveau : ${levels.join(', ')}`, levels, { ambiguity: 'TE-A' })] },
+      prerequisites: [ext('Bâtiments tertiaires de bureaux et immeubles hôteliers uniquement (p. 9) ; référentiel technique BBCA Exploitation (V 1.1) non fourni.')],
+      ambiguities: [{ id: 'TE-A', affectsScore: false, text: 'p. 65 : « l’une des exigences de 6.1 à 6.6 » pour l’une ou l’autre mention ; le partage 6.1-6.3 / 6.4-6.6 suit les intitulés des exigences.' }] });
+    return [te('LABEL_BBCA_EXPLOITATION', 'Label BBCA Exploitation', ['6.1', '6.2', '6.3']), te('ENGAGEMENT_BBCA_EXPLOITATION', 'Label Engagement BBCA Exploitation', ['6.4', '6.5', '6.6'])];
+  }
+
   const catalog = {
     schemaVersion: 1,
     generatedFor: 'Observatoire Prestaterre V6.14',
     // Règles appliquées par famille, toutes versions confondues (décision Prestaterre du 06/10/2026) :
     // les lignes RAPPORT sont comparées, par code d'exigence, au référentiel fourni pour leur famille.
-    familyRules: { BEE_LN: 'BEE_LN@2026-05-04', BEE_LR: 'BEE_LR@2025-06-18', BEE_TN: 'BEE_TN@?', BEE_TE: 'BEE_TE@?' },
+    // V6.38 : derniers référentiels fournis (30/10/2026) — Logement Rénovation 2026, Tertiaire Neuf, Rénovation et Exploitation.
+    familyRules: { BEE_LN: 'BEE_LN@2026-05-04', BEE_LR: LR2026, BEE_TN: TN2026, BEE_TR: TR2026, BEE_TE: TE2026 },
     families: {
       BEE_LN: 'BEE Logement Neuf',
       BEE_LR: 'BEE Logement Rénovation',
       BEE_TN: 'BEE Tertiaire Neuf',
+      BEE_TR: 'BEE Tertiaire Rénovation',
       BEE_TE: 'BEE Tertiaire Exploitation'
     },
     // Un « contexte normatif » = famille de référentiel + version datée. Les codes ne se comparent qu'à l'intérieur d'un contexte.
@@ -611,14 +1164,31 @@
         ]
       },
       {
-        context: 'BEE_TN@?', family: 'BEE_TN', version: '', versionLabel: 'version non communiquée', ref: '',
-        title: 'BEE Tertiaire Neuf', status: 'source_missing',
-        missing: 'Référentiel BEE Tertiaire Neuf non fourni (ni document ni version).'
+        context: TN2026, family: 'BEE_TN', version: '2026-05-04', versionLabel: '04/05/2026', ref: 'REF AN 010-5',
+        title: 'BEE Tertiaire Neuf', status: 'available', file: 'REF AN 010-5 BEE Tertiaire Neuf - Version du 4 mai 2026.pdf', pages: 78,
+        mentionPages: '9-14', annexPages: '71-76',
+        pointThresholds: { text: 'Au moins 100 points parmi l’ensemble des exigences, dont au moins une exigence de seuil thermique et une exigence d’indicateur carbone de la cible 3 (p. 9).', pages: '9' },
+        certificationPrerequisites: [{ text: 'RT 2012 : bâtiments neufs tertiaires (hors santé et industrie) ; RE 2020 : bureaux et enseignement primaire ou secondaire, en France métropolitaine (p. 8).', pages: '8' }],
+        contextFields: [{ id: 'tn2026.regime', label: 'Régime réglementaire', values: [['RT2012', 'RT 2012'], ['RE2020', 'RE 2020']] }],
+        requirements: REQS_TN_2026
       },
       {
-        context: 'BEE_TE@?', family: 'BEE_TE', version: '', versionLabel: 'version non communiquée', ref: '',
-        title: 'BEE Tertiaire Exploitation', status: 'source_missing',
-        missing: 'Référentiel BEE Tertiaire Exploitation non fourni (ni document ni version) : sa numérotation propre n’a pas pu être vérifiée.'
+        context: TR2026, family: 'BEE_TR', version: '2026-05-04', versionLabel: '04/05/2026', ref: 'REF AN 010-7',
+        title: 'BEE Tertiaire Rénovation', status: 'available', file: 'REF AN 010-7 BEE Tertiaire Rénovation - Version du 4 mai 2026.pdf', pages: 57,
+        mentionPages: '7-9', annexPages: '51-56',
+        pointThresholds: { text: 'Rénovation lourde (clos couvert + second œuvre) : 100 points ; rénovation légère (clos couvert) : 60 points (p. 7).', pages: '7' },
+        certificationPrerequisites: [{ text: 'L’exigence « Isolation thermique minimale » (3.1.1) doit être choisie a minima (p. 8).', pages: '8' }],
+        contextFields: [],
+        requirements: REQS_TR_2026
+      },
+      {
+        context: TE2026, family: 'BEE_TE', version: '2026-03-05', versionLabel: '05/03/2026', ref: 'REF AN 010-10',
+        title: 'BEE Tertiaire Exploitation', status: 'available', file: 'REF AN 010-10 - BEE Tertiaire Exploitation - Version du 05-03-2026.pdf', pages: 73,
+        mentionPages: '9-10', annexPages: '65-70',
+        pointThresholds: { text: 'Label à trois niveaux (Bronze, Argent, Or), Bronze minimum ; exigences obligatoires, optionnelles et bonus (p. 7-8, annexe 1 p. 64). Les points ne sont pas dans la table des exigences.', pages: '7-8' },
+        certificationPrerequisites: [{ text: 'Conformité au décret n° 2019-771 du 23 juillet 2019 (dispositif Éco-énergie tertiaire) (p. 7).', pages: '7' }],
+        contextFields: [],
+        requirements: REQS_TE_2026
       }
     ],
 
@@ -785,9 +1355,22 @@
       },
 
       // ------------------------------------------------------------------ BEE Logement Neuf 04/05/2026
-      ...lnMentions()
+      ...lnMentions(),
+      // ------------------------------------------------------------------ V6.38 : Tertiaire Neuf, Rénovation, Exploitation 2026
+      ...tnMentions(), ...trMentions(), ...teMentions()
     ]
   };
+
+  // V6.38 — BEE Logement Rénovation 04/05/2026 : mêmes mentions et mêmes marques que la version du 18/06/2025
+  // (texte p. 10-13 et tableaux p. 69-72 comparés le 30/10/2026). Seules la liste des exigences (3.3.3 « Chauffage basse
+  // consommation » ajoutée, intitulés acoustiques 4.3.4 / 4.3.5 précisés) et la source changent.
+  {
+    const src2025 = catalog.sources.find(x => x.context === LR2025);
+    // La version 2026 remplace celle de 2025 (une seule version par famille, comme dans familyRules).
+    catalog.sources = catalog.sources.map(x => x !== src2025 ? x : { ...src2025, context: LR2026, version: '2026-05-04', versionLabel: '04/05/2026', file: 'REF AN 010-3 BEE Logement Rénovation - Version du 04-05-2026.pdf', requirements: REQS_LR_2026 });
+    const to2026 = x => JSON.parse(JSON.stringify(x).split('BEE_LR_2025_').join('BEE_LR_2026_').split(LR2025).join(LR2026).split('"version":"18/06/2025"').join('"version":"04/05/2026"'));
+    catalog.mentions = catalog.mentions.map(x => x.context === LR2025 ? to2026(x) : x);
+  }
 
   root.NEWOSB_MENTION_CATALOG = catalog;
   if (typeof module !== 'undefined' && module.exports) module.exports = catalog;

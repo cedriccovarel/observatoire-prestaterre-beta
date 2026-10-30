@@ -1,5 +1,17 @@
 # Historique
 
+## V6.38
+
+**Compatibilité des exigences avec les mentions : référentiels 2026 complétés**
+- BEE Tertiaire Neuf (04/05/2026) : 16 mentions (BPE, BPEC, Taxinomie Atténuation / Adaptation, Horizon Zéro Carbone, BBCA, BBCA Contribution Neutralité, Biosourcé 2024, E+C-, Effinergie+, BEPOS 2013, BBC / BEPOS / BEPOS+ 2017, BEPOS / BEPOS+ RE 2020) et ses 122 exigences.
+- BEE Tertiaire Rénovation (04/05/2026), nouvelle famille : Taxinomie Atténuation / Adaptation, BBCA, BBC Effinergie Rénovation tertiaire ; 72 exigences.
+- BEE Tertiaire Exploitation (05/03/2026) : Label BBCA Exploitation et Engagement BBCA Exploitation (1.7 + un niveau 6.1-6.3 / 6.4-6.6) ; 72 exigences.
+- BEE Logement Rénovation passe à la version du 04/05/2026 : mentions et marques identiques à la version du 18/06/2025 (vérifié), exigence 3.3.3 « Chauffage basse consommation » ajoutée.
+- Règles lues dans le texte des mentions et les tableaux de l'annexe 2 ; un niveau supérieur non écrit n'est jamais compté, les écarts texte / tableau sont signalés comme ambiguïtés.
+
+**Écran de chargement**
+- Un reflet de soleil balaie le panneau Prestaterre Certification une fois planté.
+
 ## V6.37
 
 - Présentation : marge du haut réduite à 1 cm (au lieu de 2 cm).

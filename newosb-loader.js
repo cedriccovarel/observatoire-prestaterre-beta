@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.37 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.38 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -641,6 +641,8 @@
     ctx.fillStyle = '#ffffff'; rr(ctx, x - pw / 2, top, pw, ph, 4); ctx.fill();
     ctx.strokeStyle = C.green; ctx.lineWidth = 1.6; rr(ctx, x - pw / 2, top, pw, ph, 4); ctx.stroke();
     if (logo?.complete && logo.naturalWidth) { const lw = 38, lh = lw * logo.naturalHeight / logo.naturalWidth; ctx.drawImage(logo, x - lw / 2, top + (ph - lh) / 2, lw, lh); }
+    // V6.38 : une fois planté, un reflet de soleil balaie le panneau toutes les quatre secondes (absent si mouvements réduits).
+    if (k > 0.97 && !reduced()) { const ph4 = (ui.t % 4) / 1.2; if (ph4 < 1) { ctx.save(); rr(ctx, x - pw / 2, top, pw, ph, 4); ctx.clip(); const gx = x - pw / 2 - 14 + ph4 * (pw + 28), g = ctx.createLinearGradient(-10, 0, 10, 0); g.addColorStop(0, 'rgba(255,214,102,0)'); g.addColorStop(0.5, 'rgba(255,214,102,.55)'); g.addColorStop(1, 'rgba(255,214,102,0)'); ctx.fillStyle = g; ctx.translate(gx, top + ph / 2); ctx.rotate(0.35); ctx.fillRect(-10, -ph, 20, ph * 2); ctx.restore(); } }
     ctx.restore();
     ctx.fillStyle = '#7a5d40'; ctx.beginPath(); ctx.ellipse(x, base, 7 * k, 2, 0, 0, Math.PI * 2); ctx.fill(); // terre retournée
   }

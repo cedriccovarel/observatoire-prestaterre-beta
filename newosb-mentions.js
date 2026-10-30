@@ -41,6 +41,7 @@
     if (/tertiaire|bureau/.test(n)) {
       if (/exploitation/.test(n)) return 'BEE_TE';
       if (/neuf/.test(n)) return 'BEE_TN';
+      if (/renovation|\breno\b/.test(n)) return 'BEE_TR';   // V6.38
       return '';
     }
     if (/renovation|\breno\b/.test(n)) return 'BEE_LR';
