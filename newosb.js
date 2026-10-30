@@ -324,7 +324,7 @@
   // Données remises à Obslide quand il s'ouvre depuis le bouton « Générateur de rapports » : opérations
   // affichées (filtres globaux) et lignes RAPPORT affichées par l'onglet Exigences (ses filtres), anonymisées si besoin.
   // Transmises de fenêtre à fenêtre, en mémoire, uniquement à la même origine (rien n'est stocké).
-  const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année','Cible'];
+  const OBSLIDE_REQ_HEADERS=['Évaluation: Code interne','Évaluation: Opération: Code interne','Exigence associée: Nom',"Code d'exigence",'Exigence validée','Évaluation: Statut','Évaluation: Opération: Référentiel: Nom du référentiel','Évaluation: Opération: Version du référentiel applicable: Version',"Évaluation: Opération: Maître d'ouvrage: Nom de la société",'Évaluation: Opération: Mentions','Évaluation: Opération: Région','Évaluation: Opération: Année','Cible','Évaluation: Opération: Profil spécifique'];
   function generatorHandoffData(scope){
     const P=privacy(),anon=!!P?.enabled?.();
     // Lignes source (une par opération affichée, anonymisées si besoin) : Obslide les convertit avec son propre
@@ -335,7 +335,7 @@
     const visible=window.NEWOSB_REQUIREMENTS?.status?.().connected?window.NEWOSB_REQUIREMENTS.exportVisibleRows?.():null;
     const rows=(visible?.rows||[]).map(r=>{
       const x=anon&&P.anonymizeRequirementRow?{...P.anonymizeRequirementRow(r),evaluationCode:P.evaluationCode?P.evaluationCode(r.evaluationCode):P.id(r.evaluationCode,'EVA')}:r;
-      return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||'',x.target||''].map(v=>String(v??''));
+      return [x.evaluationCode,x.operationCode,x.requirement||x.requirementLabel,x.requirementCode,x.requirementValidated,x.status,x.referential,x.referentialVersion,x.moa,x.mentions,x.region,x.operationYear||'',x.target||'',anon?'':x.profile||''].map(v=>String(v??''));   // profil (nom de client) non transmis en mode anonymisé
     });
     return {operationRows,operationCodes,operationCount:ops.length,requirements:rows.length?{headers:OBSLIDE_REQ_HEADERS,rows,summary:visible.summary,evaluations:visible.evaluations}:null,anonymized:anon,summary:scope?.summary||''};
   }
@@ -568,23 +568,22 @@
     const slideIndex=Math.max(1,state.presentationSlides.findIndex(s=>s.id===slide.id)+1);
     if(slide.type==='cover'){
       return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-cover" style="--pres-title-size:${Number(slide.titleSize)||64}px;--pres-subtitle-size:${Number(slide.subtitleSize)||28}px;--pres-date-size:${Number(slide.dateSize)||26}px;font-family:${attr(slide.fontFamily||fontChoices()[0])}">
-        <img class="obs-pres-cover-bg" src="assets/cover_template_base.png" alt="Fond de couverture Prestaterre">
-        <img class="obs-pres-cover-logo" src="assets/prestaterre_logo_black.png" alt="Prestaterre Certifications">
+        <img class="obs-pres-cover-bg" src="assets/cover_banner.png" alt="Bandeau Prestaterre Certifications">
         <div class="obs-pres-cover-copy">
           <h2 contenteditable="true" spellcheck="false" data-pres-editable="title" data-pres-id="${attr(slide.id)}">${esc(slide.title||'Observatoire du bâtiment durable')}</h2>
           <p contenteditable="true" spellcheck="false" data-pres-editable="subtitle" data-pres-id="${attr(slide.id)}">${esc(slide.subtitle||'')}</p>
+          <div class="obs-pres-cover-date" contenteditable="true" spellcheck="false" data-pres-editable="dateText" data-pres-id="${attr(slide.id)}">${esc(slide.dateText||'')}</div>
         </div>
-        <div class="obs-pres-cover-date" contenteditable="true" spellcheck="false" data-pres-editable="dateText" data-pres-id="${attr(slide.id)}">${esc(slide.dateText||'')}</div>
-        <div class="obs-pres-cover-footer" contenteditable="true" spellcheck="false" data-pres-editable="footerText" data-pres-id="${attr(slide.id)}">${esc(slide.footerText||'Prestaterre Certifications')}</div>
-        <div class="obs-pres-cover-conf" contenteditable="true" spellcheck="false" data-pres-editable="confidentialText" data-pres-id="${attr(slide.id)}">${esc(slide.confidentialText||'CONFIDENTIEL')}</div><div class="obs-pres-cover-page">1</div>
       </article>`;
     }
     return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-standard" style="--pres-title-size:${Number(slide.titleSize)||50}px;--pres-legend-size:${Number(slide.legendSize)||20}px;--pres-footer-size:${Number(slide.footerSize)||16}px;font-family:${attr(slide.fontFamily||fontChoices()[0])}">
+      <div class="obs-pres-safe">
       <div class="obs-pres-osb-brand"><img src="assets/prestaterre_logo_green.png" alt="Prestaterre"></div>
       <div class="obs-pres-confidential" contenteditable="true" spellcheck="false" data-pres-editable="confidentialText" data-pres-id="${attr(slide.id)}">${esc(slide.confidentialText||'CONFIDENTIEL')}</div>
       <div class="obs-pres-top"><div class="obs-pres-title-line"></div><div class="obs-pres-title-block"><div class="obs-pres-kicker" contenteditable="true" spellcheck="false" data-pres-editable="kicker" data-pres-id="${attr(slide.id)}">${esc(slide.kicker||'OBSERVATOIRE DU BÂTIMENT DURABLE')}</div><h2 contenteditable="true" spellcheck="false" data-pres-editable="title" data-pres-id="${attr(slide.id)}">${esc(slide.title||'Titre de slide')}</h2><p contenteditable="true" spellcheck="false" data-pres-editable="legend" data-pres-id="${attr(slide.id)}">${esc(slide.legend||'')}</p></div></div>
       <div class="obs-pres-figure-wrap ${slideCaptures(slide).length>1?'is-multi':''}">${presentationItemsMarkup(slide)}</div>
       <div class="obs-pres-bottom"><div class="obs-pres-scope" contenteditable="true" spellcheck="false" data-pres-editable="scope" data-pres-id="${attr(slide.id)}">${esc(slide.scope||'')}</div><div class="obs-pres-notes" contenteditable="true" spellcheck="false" data-pres-editable="notes" data-pres-id="${attr(slide.id)}">${esc(slide.notes||'')}</div><div class="obs-pres-page-number">${slideIndex}</div></div>
+      </div>
     </article>`;
   }
   function presentationEditor(slide){
@@ -594,8 +593,6 @@
         <label>Titre<input type="text" data-pres-field="title" data-pres-id="${attr(slide.id)}" value="${attr(slide.title||'')}"></label>
         <label>Sous-titre<textarea data-pres-field="subtitle" data-pres-id="${attr(slide.id)}">${esc(slide.subtitle||'')}</textarea></label>
         <label>Date / période<input type="text" data-pres-field="dateText" data-pres-id="${attr(slide.id)}" value="${attr(slide.dateText||'')}"></label>
-        <label>Texte bas de page<input type="text" data-pres-field="footerText" data-pres-id="${attr(slide.id)}" value="${attr(slide.footerText||'')}"></label>
-        <label>Mention confidentialité<input type="text" data-pres-field="confidentialText" data-pres-id="${attr(slide.id)}" value="${attr(slide.confidentialText||'')}"></label>
         <label>Police<select data-pres-field="fontFamily" data-pres-id="${attr(slide.id)}">${fontChoices().map(f=>`<option value="${attr(f)}" ${slide.fontFamily===f?'selected':''}>${esc(f.split(',')[0])}</option>`).join('')}</select></label>
         <label>Taille titre <input type="range" min="40" max="92" step="1" data-pres-field="titleSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.titleSize||64)}"><span>${fmt(slide.titleSize||64)} px</span></label>
         <label>Taille sous-titre <input type="range" min="18" max="44" step="1" data-pres-field="subtitleSize" data-pres-id="${attr(slide.id)}" value="${attr(slide.subtitleSize||28)}"><span>${fmt(slide.subtitleSize||28)} px</span></label>

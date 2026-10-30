@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.35 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.36 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -603,6 +603,15 @@
       for (let a = 0; a < 5; a++) { const ang = a * 1.2566 + i; ctx.beginPath(); ctx.arc(tx + Math.cos(ang) * pr, ty + Math.sin(ang) * pr, pr * 0.75, 0, Math.PI * 2); ctx.fill(); }
       ctx.fillStyle = '#c98a1c'; ctx.beginPath(); ctx.arc(tx, ty, pr * 0.55, 0, Math.PI * 2); ctx.fill();
     }
+    // V6.36 : un papillon butine le massif une fois les fleurs écloses (posé, ailes ouvertes, si mouvements réduits).
+    const open = ease((k - 0.75) * 4); if (open <= 0) return;
+    const px = still ? B.x + 80 : B.x + 95 + Math.sin(t * 0.7) * 85, py = (still ? GROUND - 4 : GROUND - 14 + Math.sin(t * 1.9) * 6 - Math.abs(Math.sin(t * 0.7)) * 8);
+    const flap = still ? 1 : 0.35 + 0.65 * Math.abs(Math.sin(t * 14)), dir = still || Math.cos(t * 0.7) >= 0 ? 1 : -1;
+    ctx.save(); ctx.globalAlpha = open; ctx.translate(px, py); ctx.scale(dir, 1);
+    ctx.fillStyle = '#f29a4c'; [[-1, -1], [1, -1]].forEach(([sx]) => { ctx.beginPath(); ctx.ellipse(sx * 2.6 * flap, -1.6, 2.8 * flap, 2.2, sx * 0.5, 0, Math.PI * 2); ctx.fill(); });
+    ctx.fillStyle = '#f2c94c'; [[-1], [1]].forEach(([sx]) => { ctx.beginPath(); ctx.ellipse(sx * 1.9 * flap, 1.4, 1.9 * flap, 1.5, -sx * 0.4, 0, Math.PI * 2); ctx.fill(); });
+    ctx.fillStyle = '#3b2a1f'; ctx.fillRect(-0.5, -3, 1, 6);
+    ctx.restore();
   }
 
   // Technicien : se déplace vers le poste de travail de l'étape en cours.

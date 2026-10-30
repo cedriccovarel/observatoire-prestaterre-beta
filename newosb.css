@@ -455,6 +455,8 @@ body.auth-granted .app-shell{height:100vh!important;min-height:0!important;overf
 .obs-pres-help{margin:-4px 0 14px;padding:11px 14px;border:1px solid #cfe0d8;border-radius:12px;background:#f4f9f6;color:#35584b;font-size:11px;line-height:1.45}
 .obs-pres-stage{border-radius:8px}
 .obs-pres-stage-standard{padding:0;gap:0;background:#fff}
+/* V6.36 : marge de 2 cm en haut des slides (hors couverture) pour l'export Google Slides (720 px = 19,05 cm). */
+.obs-pres-safe{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:50% 0;transform:translateY(75.6px) scale(.895)}
 .obs-pres-osb-brand{position:absolute;top:14px;left:44px;width:112px;z-index:4}
 .obs-pres-osb-brand img{display:block;width:100%;height:auto}
 .obs-pres-confidential{position:absolute;right:44px;top:15px;z-index:4;border-radius:999px;background:#06402B;color:#fff;padding:8px 14px;font-size:10px;font-weight:900;letter-spacing:.16em;line-height:1;text-transform:uppercase;outline:none}
@@ -472,16 +474,11 @@ body.auth-granted .app-shell{height:100vh!important;min-height:0!important;overf
 .obs-pres-stage-standard [contenteditable]:focus{background:#f2f8f4;box-shadow:0 0 0 2px rgba(6,64,43,.10)}
 
 .obs-pres-stage-cover{padding:0;gap:0;background:#fff;position:relative}
-.obs-pres-stage-cover:after{content:'';position:absolute;right:0;top:0;bottom:0;width:40px;background:#168456;z-index:1}
-.obs-pres-cover-bg{position:absolute;left:0;right:40px;top:0;width:calc(100% - 40px);height:300px;object-fit:cover;object-position:top;z-index:0}
-.obs-pres-cover-logo{position:absolute;left:44px;bottom:42px;width:128px;height:auto;z-index:3}
-.obs-pres-cover-copy{position:absolute;left:72px;right:330px;top:345px;z-index:3}
-.obs-pres-cover-copy h2{margin:0;font-size:var(--pres-title-size,64px);line-height:1.02;color:#06402B;font-weight:900;letter-spacing:-.025em}
-.obs-pres-cover-copy p{margin:14px 0 0;font-size:var(--pres-subtitle-size,28px);line-height:1.2;color:#375E51;font-weight:600}
-.obs-pres-cover-date{position:absolute;right:92px;top:435px;width:310px;text-align:right;font-size:var(--pres-date-size,26px);font-weight:900;color:#111;z-index:3}
-.obs-pres-cover-footer{position:absolute;left:44px;bottom:22px;font-size:12px;color:#333;z-index:3;margin-left:150px}
-.obs-pres-cover-conf{position:absolute;right:96px;bottom:22px;z-index:4;background:#fff;padding:3px 6px;color:#a00000;font-size:15px;font-weight:700;letter-spacing:.02em}
-.obs-pres-cover-page{position:absolute;right:58px;bottom:23px;z-index:4;font-size:10px;color:#888}
+.obs-pres-cover-bg{position:absolute;left:0;top:0;width:100%;height:296px;object-fit:cover;z-index:0}
+.obs-pres-cover-copy{position:absolute;left:72px;right:200px;top:340px;z-index:3}
+.obs-pres-cover-copy h2{margin:0;font-size:var(--pres-title-size,64px);line-height:1.1;color:#06402B;font-weight:900;letter-spacing:-.025em}
+.obs-pres-cover-copy p{margin:14px 0 0;font-size:var(--pres-subtitle-size,28px);line-height:1.25;color:#375E51;font-weight:600}
+.obs-pres-cover-date{margin-top:28px;font-size:var(--pres-date-size,26px);line-height:1.2;font-weight:900;color:#111}
 .obs-pres-stage-cover [contenteditable]{outline:none;border-radius:7px}
 .obs-pres-stage-cover [contenteditable]:focus{background:rgba(244,249,246,.92);box-shadow:0 0 0 2px rgba(6,64,43,.12)}
 .obs-pres-ppt-body .obs-card{box-shadow:none!important;border:0!important;margin:0!important;min-height:0!important}

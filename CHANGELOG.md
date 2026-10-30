@@ -1,5 +1,15 @@
 # Historique
 
+## V6.36
+
+**Présentation : mise en page pour Google Slides**
+- Slides (hors couverture) : marge de 2 cm en haut ; le contenu est réduit d'un bloc et reste modifiable à l'export.
+- Couverture : nouveau bandeau Prestaterre Certifications, date sous le titre, plus de logo ni de « Confidentiel » en bas de page, plus de barre verte (les champs « Texte bas de page » et « Mention confidentialité » de la couverture disparaissent).
+- Générateur de rapports : le profil spécifique des dossiers est transmis à Obslide (sauf en mode anonymisé) pour les pastilles « obligatoire pour ce profil ».
+
+**Écran de chargement**
+- Un papillon butine le massif fleuri une fois les fleurs écloses (posé si mouvements réduits).
+
 ## V6.35
 
 **Partager : archivage des liens et journal d’archives**
