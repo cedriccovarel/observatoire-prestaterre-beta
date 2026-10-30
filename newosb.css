@@ -455,8 +455,8 @@ body.auth-granted .app-shell{height:100vh!important;min-height:0!important;overf
 .obs-pres-help{margin:-4px 0 14px;padding:11px 14px;border:1px solid #cfe0d8;border-radius:12px;background:#f4f9f6;color:#35584b;font-size:11px;line-height:1.45}
 .obs-pres-stage{border-radius:8px}
 .obs-pres-stage-standard{padding:0;gap:0;background:#fff}
-/* V6.36 : marge de 2 cm en haut des slides (hors couverture) pour l'export Google Slides (720 px = 19,05 cm). */
-.obs-pres-safe{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:50% 0;transform:translateY(75.6px) scale(.895)}
+/* V6.37 : marge de 1 cm en haut des slides (hors couverture) pour l'export Google Slides (720 px = 19,05 cm). */
+.obs-pres-safe{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:50% 0;transform:translateY(37.8px) scale(.9475)}
 .obs-pres-osb-brand{position:absolute;top:14px;left:44px;width:112px;z-index:4}
 .obs-pres-osb-brand img{display:block;width:100%;height:auto}
 .obs-pres-confidential{position:absolute;right:44px;top:15px;z-index:4;border-radius:999px;background:#06402B;color:#fff;padding:8px 14px;font-size:10px;font-weight:900;letter-spacing:.16em;line-height:1;text-transform:uppercase;outline:none}

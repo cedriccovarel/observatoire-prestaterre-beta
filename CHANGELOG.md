@@ -1,5 +1,11 @@
 # Historique
 
+## V6.37
+
+- Présentation : marge du haut réduite à 1 cm (au lieu de 2 cm).
+- Générateur de rapports : l'intitulé de l'exigence de référence est transmis à Obslide, qui reconnaît ainsi les exigences obligatoires d'une mention ou d'un profil quelle que soit la version du référentiel.
+- Écran de chargement : le papillon projette son ombre au sol.
+
 ## V6.36
 
 **Présentation : mise en page pour Google Slides**
