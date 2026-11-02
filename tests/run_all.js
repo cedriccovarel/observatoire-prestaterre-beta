@@ -493,6 +493,13 @@ addRow('OP-101', 'EVA-X', 'Promoteur B', LN, ['2.4.6']);                        
 addRow('OP-0200', 'EVA-B1', 'Promoteur B', LN, ['1.1.1', '2.4.6', '9.9.9']);
 addRow('OP-0300', 'EVA-C1', 'Bailleur <b>C</b>', LR, ['1.2.1', '1.2.2']);
 R1.push(['Exigence orpheline', 'EVA-Z', 'Promoteur A', '', 'BEE Logement Neuf', '04/05/2026', 'Bretagne', '35', '', '', 'En cours', '']);
+atest('V6.39 : « Compteur général d’eau » (Rénovation) et « Compteurs d’eau » (Neuf) = une seule exigence', async () => {
+  const rows = [['4.1.1 - Compteurs d’eau par bâtiment et par type d’usage', 'EVA-W1', 'Promoteur A', 'OP-0701', ...LN, 'Bretagne', '35', '4.1.1', '', 'En cours', ''],
+    ['4.1.1 - Compteur général d’eau par bâtiment et par type d’usage', 'EVA-W2', 'Promoteur A', 'OP-0702', ...LR, 'Bretagne', '35', '4.1.1', '', 'En cours', '']];
+  const m = reqModule(rows); await m.connect();
+  const names = new Set(m.api.exportVisibleRows().rows.map(r => r.requirement));
+  assert.deepStrictEqual([...names], ['4.1.1 - Compteurs d’eau par bâtiment et par type d’usage']);
+});
 atest('source non connectée, clé absente puis clé incorrecte : états explicites, aucune donnée', async () => {
   const m = reqModule(R1, { key: '' });
   assert.strictEqual(m.api.getOperationRequirements('OP-0101').state, 'disconnected');

@@ -69,6 +69,9 @@
     return '';
   };
   const pick=(...vals)=>{for(const v of vals){if(v!==undefined&&v!==null&&String(v).trim()!=='')return v;}return '';};
+  // V6.39 : intitulés différents d'une même exigence (Neuf / Rénovation) → un seul intitulé dans tous les décomptes.
+  const SAME_REQUIREMENT=[[/compteur g[ée]n[ée]ral d['’`]eau par b[âa]timent et par type d['’`]usage/i,'Compteurs d’eau par bâtiment et par type d’usage']];
+  const sameRequirement=v=>SAME_REQUIREMENT.reduce((t,[re,label])=>t.replace(re,label),String(v??''));
   function normalizeRow(r){
     const referential=pick(r.referential,alias(r,['Évaluation: Opération: Référentiel: Nom du référentiel','Référentiel']));
     let y=Number(pick(r.year,r.versionYear,0))||0;
@@ -94,14 +97,14 @@
       groupSector:String(pick(r.groupSector,alias(r,["Évaluation: Opération: Maître d'ouvrage: Groupe principal Secteur d'activité"]))),
       operationYear:Number(pick(r.operationYear,alias(r,['Évaluation: Opération: Année','Evaluation: Operation: Annee','Année opération','Annee operation'])))||0,
       socialZone:String(pick(r.socialZone,alias(r,['Évaluation: Opération: Zonage logement social 1/2/3','Evaluation: Operation: Zonage logement social 1/2/3','Zonage logement social 1/2/3','Zonage']))),
-      requirementReference:String(requirementReference), requirementLabel:String(requirementLabel), requirementCode:String(requirementCode), requirementNumber:String(requirementNumber),
+      requirementReference:String(requirementReference), requirementLabel:sameRequirement(requirementLabel), requirementCode:String(requirementCode), requirementNumber:String(requirementNumber),
       associatedRequirementReferenceTitle:String(associatedRequirementReferenceTitle), target:String(pick(r.target,'')),
       referentialVersionDate:String(pick(r.referentialVersionDate,alias(r,['Version du ref ( date )','Version du ref (date)']))),
       requirementValidated:String(pick(r.requirementValidated,alias(r,['Exigence validée','Exigence validee']))),
       sourceRow:Number(r.sourceRow)||0,
       programName:String(pick(r.programName,alias(r,['Évaluation: Opération: Nom du programme (client)','Nom du programme (client)']))),
       programType:String(pick(r.programType,PROGRAM_TYPE_MISSING)),programTypeSource:String(pick(r.programTypeSource,'')),
-      theme:String(theme), requirement:String(requirement), nature:String(pick(r.nature,natureFromRef(referential))), sector:String(pick(r.sector,sectorFromRef(referential)))
+      theme:String(theme), requirement:sameRequirement(requirement), nature:String(pick(r.nature,natureFromRef(referential))), sector:String(pick(r.sector,sectorFromRef(referential)))
     };
   }
 

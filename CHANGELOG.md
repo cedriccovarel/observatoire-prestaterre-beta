@@ -1,5 +1,12 @@
 # Historique
 
+## V6.39
+
+- Exigences : « Compteur général d’eau par bâtiment et par type d’usage » (BEE Logement Rénovation) et « Compteurs d’eau par bâtiment et par type d’usage » (BEE Logement Neuf) sont comptées comme une seule exigence (intitulé Neuf) dans tous les décomptes et dans les lignes transmises à Obslide.
+
+**Écran de chargement**
+- Un compteur d’eau est posé en façade à la végétalisation ; son aiguille tourne vite pendant l’arrosage (immobile si mouvements réduits).
+
 ## V6.38
 
 **Compatibilité des exigences avec les mentions : référentiels 2026 complétés**

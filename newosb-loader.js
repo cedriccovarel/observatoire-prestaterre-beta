@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.38 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.39 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -628,6 +628,20 @@
     return { x: 262, y: GROUND, tool: 'can' };
   }
 
+  // V6.39 : compteur d'eau posé en façade à la végétalisation ; l'aiguille tourne vite pendant l'arrosage (immobile si mouvements réduits).
+  function waterMeter(ctx, r, t, still) {
+    const k = ease((stageK(r, 4) - 0.1) * 4); if (k <= 0) return;
+    const x = B.x + 41, y = GROUND - 16, tg = techTarget(r), watering = tg.tool === 'can' && Math.abs(ui.tech.x - tg.x) < 2;
+    ctx.save(); ctx.globalAlpha = k;
+    ctx.strokeStyle = '#6b7b82'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + 7, y + 11); ctx.lineTo(x + 7, GROUND + 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(30,40,36,.18)'; rr(ctx, x + 1, y + 1, 14, 12, 2); ctx.fill();
+    ctx.fillStyle = '#eef3f5'; rr(ctx, x, y, 14, 12, 2); ctx.fill(); ctx.strokeStyle = '#5d7480'; ctx.lineWidth = 0.8; rr(ctx, x, y, 14, 12, 2); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2f7fbf'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x + 7, y + 6, 3.8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const a = still ? -0.8 : t * (watering ? 7 : 0.6);
+    ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(x + 7, y + 6); ctx.lineTo(x + 7 + Math.cos(a) * 3, y + 6 + Math.sin(a) * 3); ctx.stroke();
+    ctx.restore();
+  }
+
   // V6.35 : en fin de chantier, le technicien plante un panneau Prestaterre Certification.
   const SIGN = { x: 368, from: 0.62, to: 0.9 };
   const logo = typeof Image === 'function' ? new Image() : null; if (logo) logo.src = 'assets/prestaterre_logo_green.png';
@@ -795,6 +809,7 @@
     building(ctx, r, t);
     fence(ctx, r);
     cones(ctx, r);
+    waterMeter(ctx, r, t, still);
     flowers(ctx, r, t, still);
     sign(ctx, r);
     updateTruck(r, dt, still);
