@@ -1,5 +1,13 @@
 # Historique
 
+## V6.42
+
+- Fenêtre « Données » (et seulement elle) : encart « Source réellement lue » avec le nom du classeur Google, l’onglet, le nombre de lignes lues (et les lignes exploitables), la date de dernière modification du classeur et l’heure de lecture par l’Observatoire. Permet de vérifier qu’une mise à jour du tableau « Tous contrats » est bien prise en compte.
+- Script OPERATIONS V06.42 : la réponse « meta » ajoute ces informations (aucune donnée métier). **Mettre à jour Code_Operations.gs puis créer une nouvelle version du déploiement** ; sans cela, l’encart indique « non communiqué ».
+
+**Écran de chargement**
+- Une goutte perle au robinet du compteur d’eau pendant l’arrosage (absente si mouvements réduits).
+
 ## V6.41
 
 - Vue d’ensemble, recherche par mot-clé (ex. « crèche ») : une carte liste les opérations trouvées ; « Retirer » écarte un faux positif (opération qui cite le mot sans en être une), « Remettre » / « Tout remettre » l’annule. Les opérations retirées sortent de tous les onglets, du générateur et des liens de partage tant que la recherche est active.

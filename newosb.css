@@ -1449,3 +1449,8 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-kw-code{border:0;background:none;padding:0;font:inherit;font-weight:700;color:#0b6b4a;cursor:pointer;text-decoration:underline}
 .obs-kw-remove{border:1px solid #e3c4c0;background:#fff;color:#9b2c22;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}.obs-kw-remove:hover{background:#fbeceb}
 .req-kw-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:10px 14px;border:1px solid #cfe0d7;border-radius:12px;background:#eef6f1;font-size:13px;color:#173b3f}
+/* V6.42 — source réellement lue, dans la fenêtre « Données » */
+.data-source-info{margin-top:10px;padding:10px 12px;border:1px solid #cfe0d7;border-radius:10px;background:#f4f9f6;font-size:12px;color:#173b3f}
+.data-source-info b{display:block;margin-bottom:6px;font-size:12px}
+.data-source-info dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:0}
+.data-source-info dt{color:#5f7472}.data-source-info dd{margin:0;font-weight:600;overflow-wrap:anywhere}

@@ -146,6 +146,12 @@ const call = (gs, params) => JSON.parse(gs.doGet({ parameter: params }).text);
 const KEY = 'cle-de-test-0123456789abcdef';
 const opsGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props } });
 test('pont + bonne clé : lecture meta + bloc de données', () => { const gs = opsGs(); const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.deepStrictEqual(m.headers.slice(0, 4), HEADERS.slice(0, 4)); const c = gs.newosbBridgeRequest({ mode: 'chunk', offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow, key: KEY }); assert.strictEqual(c.rows.length, ROWS.length); });
+test('V6.42 : meta indique le classeur et l’onglet lus ; affichage limité à la fenêtre « Données »', () => {
+  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.sourceInfo.sheet, 'OPERATIONS');
+  const a = read('app.js'), h = read('index.html');
+  assert(a.includes('source:json?.sourceInfo||null,readAt:Date.now()') && a.includes('dataUpdateFilterUI();dataRenderSourceInfo();}}'));
+  assert(h.includes('<div id="dataSourceInfo" class="data-source-info" hidden></div>') && (h.match(/dataSourceInfo/g) || []).length === 1, 'un seul encart, dans la fenêtre Données');
+});
 test('clé absente, incorrecte ou non configurée : refus (authError), aucune donnée', () => {
   const gs = opsGs();
   for (const k of [undefined, '', 'faux', KEY + 'x', KEY.slice(0, -1)]) { const r = gs.newosbBridgeRequest({ mode: 'meta', key: k }); assert.strictEqual(r.ok, false); assert.strictEqual(r.authError, true); assert(!r.headers && !r.rows && !r.totalRows); }

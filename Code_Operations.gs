@@ -59,7 +59,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.35',
+  VERSION: '06.42',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -190,6 +190,7 @@ function newosbApiRequest_(params) {
       lastColumn: meta.lastColumn,
       headerRow: meta.headerRow,
       firstDataRow: meta.firstDataRow,
+      sourceInfo: newosbSourceInfo_(meta),
       headerScore: meta.headerScore,
       recognizedHeaderHints: meta.recognizedHeaderHints,
       chunkSize: OBSERVATOIRE_CONFIG.DEFAULT_CHUNK_SIZE,
@@ -470,6 +471,15 @@ function genererCleAccesObservatoire() {
   PropertiesService.getScriptProperties().setProperty(OBSERVATOIRE_CONFIG.ACCESS_KEY_PROPERTY, out);
   Logger.log('Nouvelle cle enregistree dans la propriete NEWOSB_ACCESS_KEY (40 caracteres). Consulte-la dans Parametres du projet > Proprietes du script.');
   return { ok: true, length: out.length };
+}
+
+// V6.42 : classeur et onglet réellement lus, affichés dans la fenêtre « Données » (vérifier qu'on lit le bon fichier).
+function newosbSourceInfo_(meta) {
+  const out = { sheet: OBSERVATOIRE_CONFIG.SHEET_NAME };
+  // Information seulement : une erreur ici ne doit jamais bloquer la lecture des données.
+  try { if (meta.sheet && meta.sheet.getName) out.sheet = meta.sheet.getName(); } catch (e) {}
+  try { const ss = getSpreadsheet_(); out.spreadsheet = ss.getName(); try { out.modifiedAt = DriveApp.getFileById(ss.getId()).getLastUpdated().toISOString(); } catch (e) {} } catch (e) {}
+  return out;
 }
 
 function getSpreadsheet_() {
