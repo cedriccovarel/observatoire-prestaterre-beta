@@ -1,5 +1,12 @@
 # Historique
 
+## V6.40
+
+- Exigences, recherche manuelle : un clic sur un résultat déplie la liste des opérations concernées dans la sélection (code, programme, maître d’ouvrage, département, année, référentiel, nombre d’occurrences), triée par occurrences ; un clic sur le code ouvre la fiche de l’opération. Le bouton « Filtrer la page sur cette exigence » remplace l’ancien clic sur le résultat. Codes, programmes et MOA suivent le mode anonymisé.
+
+**Écran de chargement**
+- Un voyant bleu clignote sur le compteur d’eau pendant l’arrosage (fixe si mouvements réduits).
+
 ## V6.39
 
 - Exigences : « Compteur général d’eau par bâtiment et par type d’usage » (BEE Logement Rénovation) et « Compteurs d’eau par bâtiment et par type d’usage » (BEE Logement Neuf) sont comptées comme une seule exigence (intitulé Neuf) dans tous les décomptes et dans les lignes transmises à Obslide.

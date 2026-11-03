@@ -16,7 +16,7 @@
   const state={
     url:'', rows:[], connected:false, loading:false, error:'', errorKind:'', loadProgress:'', warnings:[],
     filters:{year:[],referential:[],programType:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[],period:[],nature:[],mention:[],moaSector:[],theme:[]},
-    filterSearch:{}, requirement:'', mentionFocus:'', search:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
+    filterSearch:{}, requirement:'', mentionFocus:'', search:'', searchOpen:'', searchEditing:false, infoRequirement:'', infoKind:'', openFilter:'',
     loadedAt:'',
     views:{chronology:'list',topGlobal:'list',target1:'list',target2:'list',target3:'list',target4:'list',evolution:'list',mentions:'list',mentionReqs:'list'},
     pages:{},
@@ -221,7 +221,7 @@
   const FILTER_LABELS={year:'Année',referential:'Référentiel',programType:'Type de programme',moaGroup:'Groupe MOA',status:'Avancement',moa:'Maître d’ouvrage',region:'Région',department:'Département',profile:'Profil',socialZone:'Zonage',nature:'Nature',mention:'Mention',moaSector:'Secteur MOA',theme:'Thème',period:'Période réf.'};
   function disconnect(){
     loadToken++;bridge?.clearKey();bridge?.destroy('Source Exigences déconnectée.');
-    clearPrivateData();state.via='';state.loading=false;state.error='';state.errorKind='';state.search='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
+    clearPrivateData();state.via='';state.loading=false;state.error='';state.errorKind='';state.search='';state.searchOpen='';state.infoRequirement='';state.compat.manualMention='';state.compat.context='';
     emit();
   }
   function forgetSource(){disconnect();state.url='';try{localStorage.removeItem(STORAGE_KEY);}catch{}emit();}
@@ -493,6 +493,14 @@
   }
   function breakdownCell(label,item){return `<div class="req-search-dim"><span>${esc(label)}</span><b title="${attr(item.name)}">${esc(item.name)}</b><em>${fmt(item.count)} occ.</em></div>`;}
 
+  // Opérations de la sélection où l'exigence apparaît ; data-op-code ouvre la fiche (newosb.js).
+  function searchOperationsHtml(name,rows){
+    const anon=privacy()?.enabled?.(),m=new Map();
+    rows.forEach(r=>{const k=String(r.operationCode||'').trim();if(!k)return;if(!m.has(k))m.set(k,{code:k,rows:[]});m.get(k).rows.push(r);});
+    const ops=[...m.values()].sort((a,b)=>b.rows.length-a.rows.length||a.code.localeCompare(b.code,'fr'));
+    if(!ops.length)return '<div class="req-search-ops obs-empty">Aucune opération dans la sélection.</div>';
+    return `<div class="req-search-ops"><div class="req-search-ops-head"><b>${fmt(ops.length)} opération${ops.length>1?'s':''} concernée${ops.length>1?'s':''}</b><button type="button" data-req-requirement="${attr(enc(name))}">${norm(state.requirement)===norm(name)?'× Retirer le filtre':'Filtrer la page sur cette exigence'}</button></div><table class="req-matrix"><thead><tr><th>Opération</th><th>Programme</th><th>Maître d’ouvrage</th><th>Dép.</th><th>Année</th><th>Référentiel</th><th>Occ.</th></tr></thead><tbody>${ops.map(o=>{const r=o.rows[0],code=displayOperation(o.code),prog=anon?privacy().operationName({code:o.code}):(r.programName||'—');return `<tr><td><button type="button" class="req-table-select" data-op-code="${attr(code)}" title="Ouvrir la fiche">${esc(code)}</button></td><td>${esc(prog)}</td><td>${esc(displayMoa(r.moa)||'—')}</td><td>${esc(r.department||'—')}</td><td>${esc(r.operationYear||r.year||'—')}</td><td>${esc(r.referential||'—')}</td><td><b>${fmt(o.rows.length)}</b></td></tr>`;}).join('')}</tbody></table></div>`;
+  }
   function manualSearchHtml(){
     const q=state.search.trim();
     let results=[];
@@ -500,7 +508,7 @@
     const selectionBase=filteredRows({ignoreRequirement:true}), allBase=state.rows, selectionActive=hasAnyFilters();
     return `<article class="obs-card req-search-card"><div class="req-search-head"><div><span>RECHERCHE MANUELLE</span><h2>Rechercher une exigence dans RAPPORT</h2><p>Code ou mots-clés : <b>3.3.14</b>, <b>IC Construction</b>, <b>Analyse de site</b>… Les cases cochées filtrent les occurrences et les profils / territoires / référentiels dominants.</p></div><label class="req-manual-search"><span>⌕</span><input data-req-search type="search" value="${attr(state.search)}" placeholder="Rechercher une exigence…" autocomplete="off"></label></div>${!q?`<div class="req-search-hint">Saisis une référence ou un intitulé pour connaître son nombre d’occurrences et où cette exigence apparaît le plus souvent.</div>`:results.length?`<div class="req-search-results">${results.map(x=>{
       const all=occurrenceRows(reportRowsForRequirement(x.name,allBase)),sel=occurrenceRows(reportRowsForRequirement(x.name,selectionBase)),basis=sel,breakdown=searchBreakdown(basis),evAll=evaluations(all).length,evSel=evaluations(sel).length;
-      return `<div class="req-search-result req-search-result-rich"><div class="req-search-result-main"><button type="button" class="req-search-select" data-req-requirement="${attr(enc(x.name))}"><span>${esc(x.name)}</span><small>${fmt(evAll)} dossier${evAll>1?'s':''} dans RAPPORT · ${fmt(evSel)} dans la sélection${selectionActive?' filtrée':''}</small></button><div class="req-search-counts"><div class="req-search-count"><b>${fmt(all.length)}</b><span>occ. RAPPORT</span></div><div class="req-search-count is-selection"><b>${fmt(sel.length)}</b><span>occ. sélection</span></div>${infoButton(x.name)}</div></div><div class="req-search-breakdown">${breakdownCell('Profil',breakdown.profile)}${breakdownCell('Région',breakdown.region)}${breakdownCell('Département',breakdown.department)}${breakdownCell('Référentiel',breakdown.referential)}${breakdownCell('Mention',breakdown.mention)}</div></div>`;
+      return `<div class="req-search-result req-search-result-rich"><div class="req-search-result-main"><button type="button" class="req-search-select" data-req-search-open="${attr(enc(x.name))}" aria-expanded="${state.searchOpen===x.name}"><span>${esc(x.name)}</span><small>${fmt(evAll)} dossier${evAll>1?'s':''} dans RAPPORT · ${fmt(evSel)} dans la sélection${selectionActive?' filtrée':''}</small></button><div class="req-search-counts"><div class="req-search-count"><b>${fmt(all.length)}</b><span>occ. RAPPORT</span></div><div class="req-search-count is-selection"><b>${fmt(sel.length)}</b><span>occ. sélection</span></div>${infoButton(x.name)}</div></div><div class="req-search-breakdown">${breakdownCell('Profil',breakdown.profile)}${breakdownCell('Région',breakdown.region)}${breakdownCell('Département',breakdown.department)}${breakdownCell('Référentiel',breakdown.referential)}${breakdownCell('Mention',breakdown.mention)}</div>${state.searchOpen===x.name?searchOperationsHtml(x.name,sel):''}</div>`;
     }).join('')}</div>`:`<div class="obs-empty">Aucune exigence correspondant à « ${esc(q)} ».</div>`}</article>`;
   }
 
@@ -758,6 +766,7 @@
     const kind=e.target.closest('[data-req-info-kind]');if(kind){state.infoKind=kind.dataset.reqInfoKind||'';emit();return true;}
     const close=e.target.closest('[data-req-info-close]');if(close&&!e.target.closest('[data-req-info-panel]')){state.infoRequirement='';state.infoKind='';emit();return true;}
     if(e.target.matches('.req-info-close')){state.infoRequirement='';state.infoKind='';emit();return true;}
+    const so=e.target.closest('[data-req-search-open]');if(so){const v=dec(so.dataset.reqSearchOpen);state.searchOpen=state.searchOpen===v?'':v;emit();return true;}
     const req=e.target.closest('[data-req-requirement]');if(req){const v=dec(req.dataset.reqRequirement);state.requirement=norm(state.requirement)===norm(v)?'':v;emit();return true;}
     if(e.target.closest('[data-req-clear-requirement]')){state.requirement='';emit();return true;}
     const clear=e.target.closest('[data-req-filter-clear]');if(clear){state.openFilter=clear.dataset.reqFilterClear;state.filters[clear.dataset.reqFilterClear]=[];if(clear.dataset.reqFilterClear==='region'){const valid=filterOptions().department;state.filters.department=filterValues('department').filter(d=>valid.some(v=>norm(v)===norm(d)));}emit();return true;}

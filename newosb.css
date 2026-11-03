@@ -1442,3 +1442,4 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-label-summary td button b{grid-column:2;font-size:10px;color:#71847b;font-weight:700}
 .obs-label-summary td.is-zero{color:#a8b3ad}
 @media(max-width:760px){.obs-label-pies{grid-template-columns:1fr}.obs-label-pie .obs-pie-layout{grid-template-columns:96px minmax(0,1fr)}.obs-label-pie .obs-pie-chart{width:92px}}
+.req-search-ops{margin-top:9px;padding-top:8px;border-top:1px solid #edf2ef;max-height:360px;overflow:auto}.req-search-ops-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;font-size:11px}.req-search-ops-head button{border:1px solid #cfe0d7;background:#fff;border-radius:8px;padding:4px 9px;font-size:10px;cursor:pointer}.req-search-select[aria-expanded="true"]>span::after{content:" ▾"}

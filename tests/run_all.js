@@ -500,6 +500,22 @@ atest('V6.39 : « Compteur général d’eau » (Rénovation) et « Compteurs d�
   const names = new Set(m.api.exportVisibleRows().rows.map(r => r.requirement));
   assert.deepStrictEqual([...names], ['4.1.1 - Compteurs d’eau par bâtiment et par type d’usage']);
 });
+atest('V6.40 : un clic sur un résultat de recherche liste les opérations concernées, qui ouvrent la fiche', async () => {
+  const row = (req, ev, moa, op, rv) => [req, ev, moa, op, ...rv, 'Bretagne', '35', req.slice(0, 5), '', 'En cours', ''];
+  const m = reqModule([row('2.4.6 - Gestion des eaux pluviales', 'EVA-P1', 'Promoteur A', 'OP-0801', LN), row('2.4.6 - Gestion des eaux pluviales', 'EVA-P2', 'Bailleur <b>C</b>', 'OP-0802', LR),
+    row('2.4.6 - Gestion des eaux pluviales', 'EVA-P4', 'Bailleur <b>C</b>', 'OP-0802', LR), row('1.1.1 - Analyse de site', 'EVA-P3', 'Promoteur B', 'OP-0803', LN)]); await m.connect();
+  m.api.handleInput({ target: m.el({ 'data-req-search': '' }, { value: 'eaux pluviales' }) });
+  const name = encodeURIComponent('2.4.6 - Gestion des eaux pluviales');
+  assert(m.api.render().includes(`data-req-search-open="${name}"`)); assert(!m.api.render().includes('opérations concernées'));
+  assert.strictEqual(m.api.handleClick({ target: m.el({ 'data-req-search-open': name }) }), true);
+  const html = m.api.render(), ops = html.slice(html.indexOf('req-search-ops'));
+  assert(ops.includes('2 opérations concernées'), ops.slice(0, 300));
+  assert(ops.includes('data-op-code="OP-0801"') && ops.includes('data-op-code="OP-0802"') && !ops.includes('data-op-code="OP-0803"'));
+  assert(ops.indexOf('OP-0802') < ops.indexOf('OP-0801'), 'trié par nombre d’occurrences');
+  assert(ops.includes('Bailleur &lt;b&gt;C&lt;/b&gt;') && !ops.includes('Bailleur <b>C</b>'), 'MOA échappé');
+  assert.strictEqual(m.api.handleClick({ target: m.el({ 'data-op-code': 'OP-0801' }) }), false, 'clic transmis à newosb.js (fiche)');
+  m.api.handleClick({ target: m.el({ 'data-req-search-open': name }) }); assert(!m.api.render().includes('opérations concernées'), 'second clic : replié');
+});
 atest('source non connectée, clé absente puis clé incorrecte : états explicites, aucune donnée', async () => {
   const m = reqModule(R1, { key: '' });
   assert.strictEqual(m.api.getOperationRequirements('OP-0101').state, 'disconnected');

@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.40 | Voyant bleu qui clignote sur le compteur d'eau pendant l'arrosage (fixe si mouvements réduits). |
 | V6.39 | Compteur d'eau en façade à la végétalisation, aiguille qui tourne vite pendant l'arrosage (immobile si mouvements réduits). |
 | V6.38 | Reflet de soleil qui balaie le panneau Prestaterre Certification une fois planté (absent si mouvements réduits). |
 | V6.37 | Ombre du papillon au sol, plus nette quand il descend vers les fleurs. |
