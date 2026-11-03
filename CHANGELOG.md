@@ -1,5 +1,16 @@
 # Historique
 
+## V6.44
+
+- Fenêtre « Données », encart « Source réellement lue » :
+  - bouton **Ouvrir le classeur lu ↗** : ouvre exactement le classeur Google que lit le script (lien fourni par le script) ;
+  - version du script OPERATIONS affichée ;
+  - **Vérifier une opération dans les lignes lues** : code, n° de contrat ou nom → absente des lignes lues, ligne ignorée (ni code ni nom), lignes regroupées sous un même code, lue mais hors statistiques (étape perdue / abandonnée / annulée), lue mais masquée par les filtres ou la recherche, ou lue et affichée.
+- Script OPERATIONS V06.44 (lien du classeur dans la réponse « meta ») : **mettre à jour Code_Operations.gs puis créer une nouvelle version du déploiement.**
+
+**Écran de chargement**
+- Petite étiquette « m³ » sous le cadran du compteur d’eau.
+
 ## V6.43
 
 - Recherche de la vue d’ensemble plus exhaustive :

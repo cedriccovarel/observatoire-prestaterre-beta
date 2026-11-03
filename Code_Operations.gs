@@ -1,5 +1,7 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.42 (script OPERATIONS, version API 06.42)
+ * PRESTATERRE OBSERVATOIRE - V6.44 (script OPERATIONS, version API 06.44)
+ *
+ * Changements V6.44 : sourceInfo ajoute le lien du classeur lu (bouton « Ouvrir le classeur lu » de la fenetre Donnees).
  *
  * Changements V6.42 : la reponse « meta » indique le classeur, l'onglet lus et la date de modification
  *   du classeur (sourceInfo), affiches dans la fenetre « Donnees » de l'Observatoire. Aucune donnee metier.
@@ -62,7 +64,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.42',
+  VERSION: '06.44',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -481,7 +483,7 @@ function newosbSourceInfo_(meta) {
   const out = { sheet: OBSERVATOIRE_CONFIG.SHEET_NAME };
   // Information seulement : une erreur ici ne doit jamais bloquer la lecture des données.
   try { if (meta.sheet && meta.sheet.getName) out.sheet = meta.sheet.getName(); } catch (e) {}
-  try { const ss = getSpreadsheet_(); out.spreadsheet = ss.getName(); try { out.modifiedAt = DriveApp.getFileById(ss.getId()).getLastUpdated().toISOString(); } catch (e) {} } catch (e) {}
+  try { const ss = getSpreadsheet_(); out.spreadsheet = ss.getName(); try { out.url = ss.getUrl(); } catch (e) {} try { out.modifiedAt = DriveApp.getFileById(ss.getId()).getLastUpdated().toISOString(); } catch (e) {} } catch (e) {}
   return out;
 }
 

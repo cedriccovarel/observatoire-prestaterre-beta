@@ -146,6 +146,20 @@ const call = (gs, params) => JSON.parse(gs.doGet({ parameter: params }).text);
 const KEY = 'cle-de-test-0123456789abcdef';
 const opsGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props } });
 test('pont + bonne clé : lecture meta + bloc de données', () => { const gs = opsGs(); const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.deepStrictEqual(m.headers.slice(0, 4), HEADERS.slice(0, 4)); const c = gs.newosbBridgeRequest({ mode: 'chunk', offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow, key: KEY }); assert.strictEqual(c.rows.length, ROWS.length); });
+test('V6.44 : fenêtre Données — lien du classeur lu et vérification d’une opération (absente, ignorée, fusionnée, hors statistiques, masquée)', () => {
+  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.44');
+  const a = read('app.js'), start = a.indexOf('  function dataLookupReport('), end = a.indexOf('\n  function dataLookup(){');
+  const dataNorm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const win = { NEWOSB_CORE: { isExcludedOperation: o => /perdu/i.test(o.stage || ''), affairStage: o => o.stage } };
+  const report = new Function('dataNorm', 'window', a.slice(start, end) + '\nreturn dataLookupReport;')(dataNorm, win);
+  const r1 = { Code: 'OPE-000101', Nom: 'Résidence fictive A' }, r2 = { Code: 'OPE-000101', Nom: 'Résidence fictive A bât 2' }, r3 = { Code: 'OPE-000202', Nom: 'Fictive perdue' }, r4 = { Code: 'OPE-000303', Nom: 'Fictive masquée' }, r5 = { Code: '', Nom: '', Contrat: '00009999' };
+  const ops = [{ code: 'OPE-000101', name: 'Résidence fictive A', rawRows: [r1, r2] }, { code: 'OPE-000202', name: 'Fictive perdue', stage: 'Perdue', rawRows: [r3] }, { code: 'OPE-000303', name: 'Fictive masquée', rawRows: [r4] }];
+  const visible = new Set(['OPE-000101']), run = q => report(q, [r1, r2, r3, r4, r5], ops, visible, c => c).map(x => x.state);
+  assert.deepStrictEqual(run('OPE-000101'), ['ok', 'ok']); assert(report('OPE-000101', [r1, r2], ops, visible, c => c)[0].text.includes('2 lignes regroupées'));
+  assert.deepStrictEqual(run('OPE-000202'), ['excluded']); assert.deepStrictEqual(run('ope 000303'), ['hidden']);
+  assert.deepStrictEqual(run('00009999'), ['ignored']); assert.deepStrictEqual(run('OPE-999999'), ['absent']); assert.deepStrictEqual(run(''), []);
+  assert(a.includes('rel="noopener">Ouvrir le classeur lu ↗</a>') && a.includes("/^https:\\/\\/docs\\.google\\.com\\//.test("), 'lien limité à docs.google.com');
+});
 test('V6.43 : recherche exhaustive (variantes, ordre libre, 3ème = 3, nombres dans la même mention)', () => {
   const src = read('newosb.js'), start = src.indexOf('  const SEARCH_ORD='), end = src.indexOf('\n  }', src.indexOf('  function keywordMatch(o){')) + 4;
   const normalize = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&lt;br\s*\/?\s*&gt;/gi, ' ').replace(/<br\s*\/?\s*>/gi, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
@@ -165,7 +179,7 @@ test('V6.43 : recherche exhaustive (variantes, ordre libre, 3ème = 3, nombres d
 test('V6.42 : meta indique le classeur et l’onglet lus ; affichage limité à la fenêtre « Données »', () => {
   const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.sourceInfo.sheet, 'OPERATIONS');
   const a = read('app.js'), h = read('index.html');
-  assert(a.includes('source:json?.sourceInfo||null,readAt:Date.now()') && a.includes('dataUpdateFilterUI();dataRenderSourceInfo();}}'));
+  assert(a.includes('source:json?.sourceInfo||null,version:json?.version||\'\',readAt:Date.now(),rows}') && a.includes('dataUpdateFilterUI();dataRenderSourceInfo();}}'));
   assert(h.includes('<div id="dataSourceInfo" class="data-source-info" hidden></div>') && (h.match(/dataSourceInfo/g) || []).length === 1, 'un seul encart, dans la fenêtre Données');
 });
 test('clé absente, incorrecte ou non configurée : refus (authError), aucune donnée', () => {
@@ -553,7 +567,7 @@ test('V6.41 : retrait manuel des faux positifs de la recherche, repris dans le p
   const n = read('newosb.js'), sh = read('newosb-share.js');
   assert(n.includes('searchExcluded:new Set()') && n.includes("if(q && !options.keepExcluded && state.searchExcluded.has(String(o.code))) return false;"));
   assert(n.includes('${kpis(ops)}${keywordCard()}') && n.includes('data-kw-toggle') && n.includes('data-kw-reset'));
-  assert(n.includes('window.NEWOSB_APP={shareScope,keywordScope,clearSearch:'));
+  assert(n.includes('window.NEWOSB_APP={shareScope,keywordScope,') && n.includes('clearSearch:()=>{'));
   assert(n.includes("state.search='';state.searchExcluded.clear();"), 'anonymisation : retraits effacés (codes changés)');
   assert(sh.includes("plural(scope.removed, 'opération retirée', 'opérations retirées')"));
 });

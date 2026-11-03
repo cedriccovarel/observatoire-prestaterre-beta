@@ -1454,3 +1454,11 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .data-source-info b{display:block;margin-bottom:6px;font-size:12px}
 .data-source-info dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 12px;margin:0}
 .data-source-info dt{color:#5f7472}.data-source-info dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+/* V6.44 — lien du classeur lu et vérification d'une opération */
+.data-source-info>.btn{margin-top:8px;display:inline-block}
+.data-lookup{margin-top:10px;padding-top:8px;border-top:1px solid #dbe8e1}
+.data-lookup label{display:block;margin-bottom:4px;font-weight:600}
+.data-lookup-row{display:flex;gap:6px}.data-lookup-row input{flex:1;min-width:0}
+.data-lookup-result p{margin:6px 0 0;padding:6px 8px;border-radius:8px;background:#fff}
+.data-lookup-result .is-ok{color:#0b6b4a}.data-lookup-result .is-absent,.data-lookup-result .is-ignored{color:#9b2c22;background:#fbeceb}
+.data-lookup-result .is-excluded,.data-lookup-result .is-hidden{color:#7a5200;background:#fff4d6}

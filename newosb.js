@@ -3216,7 +3216,7 @@
       privacy:!!privacy()?.enabled?.()
     };
   }
-  window.NEWOSB_APP={shareScope,keywordScope,clearSearch:()=>{state.search='';state.searchExcluded.clear();if(searchEl)searchEl.value='';renderPage();},currentPage:()=>state.page};
+  window.NEWOSB_APP={shareScope,keywordScope,visibleCodes:()=>new Set(filteredOperations().map(o=>String(o.code))),clearSearch:()=>{state.search='';state.searchExcluded.clear();if(searchEl)searchEl.value='';renderPage();},currentPage:()=>state.page};
   if(SHARE){
     window.addEventListener('newosb:sharestate',()=>{
       if(shareReady()){
