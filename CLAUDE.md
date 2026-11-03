@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.43 | Halo bleu pâle autour du cadran du compteur d'eau pendant l'arrosage. |
 | V6.42 | Goutte qui perle au robinet du compteur d'eau pendant l'arrosage (absente si mouvements réduits). |
 | V6.41 | Totaliseur du compteur d'eau qui se remplit pendant l'arrosage (à moitié et fixe si mouvements réduits). |
 | V6.40 | Voyant bleu qui clignote sur le compteur d'eau pendant l'arrosage (fixe si mouvements réduits). |

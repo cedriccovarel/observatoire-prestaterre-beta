@@ -1188,7 +1188,7 @@
       if(!globalFilterMatch('department',String(o.department))) return false;
       if(!globalFilterMatch('profile',o.profile||'Non précisé')) return false;
       if(!globalFilterMatch('socialZone',o.socialZone||'Non précisé')) return false;
-      if(q && !keywordMatch(o,q)) return false;
+      if(q && !keywordMatch(o)) return false;
       if(q && !options.keepExcluded && state.searchExcluded.has(String(o.code))) return false;
       for(const cf of state.crossFilters){
         if(ignoreCrossKeys.has(cf.key)) continue;
@@ -1197,7 +1197,32 @@
       return true;
     });
   }
-  function keywordMatch(o,q){ return [o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance,o.tags].some(v=>norm(v).includes(q)); }
+  // V6.43 : recherche exhaustive. Variantes séparées par « , » « ; » « | » ou « ou » (l'une ou l'autre) ; dans une variante,
+  // tous les mots, dans n'importe quel ordre ; « 3ème », « 3e », « troisième » = 3. Une variante qui contient un nombre doit
+  // être entière dans la même mention (ou le même champ) : « Biosourcé niveau 3 2024 » ne mélange pas deux labels.
+  const SEARCH_ORD={premier:'1',premiere:'1',deuxieme:'2',second:'2',seconde:'2',troisieme:'3',quatrieme:'4',cinquieme:'5'};
+  const SEARCH_SUFFIX=new Set(['e','eme','er','ere','nd','nde']);
+  const searchTokens=t=>norm(t).split(' ').filter(w=>w&&!SEARCH_SUFFIX.has(w)).map(w=>SEARCH_ORD[w]||w.replace(/^(\d+)(?:er|ere|eme|e|nd|nde)$/,'$1'));
+  let searchParsed={raw:null,alts:[]};
+  function searchAlternatives(){
+    const raw=String(state.search||'');
+    if(searchParsed.raw!==raw) searchParsed={raw,alts:raw.split(/\s*(?:[,;|]|\bou\b)\s*/i).map(searchTokens).filter(a=>a.length).map(words=>({words,num:words.some(w=>/^\d+$/.test(w))}))};
+    return searchParsed.alts;
+  }
+  const searchSegmentsCache=new WeakMap();
+  function searchSegments(o){
+    let segs=searchSegmentsCache.get(o);
+    if(!segs){ segs=[o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance,o.tags]
+      .flatMap(v=>String(v??'').split(/&lt;br\s*\/?\s*&gt;|<br\s*\/?\s*>|[;|\n]/i)).map(searchTokens).filter(t=>t.length); searchSegmentsCache.set(o,segs); }
+    return segs;
+  }
+  // Petit nombre (niveau, numéro) : mot entier ; année, code : début ou morceau du mot ; texte : morceau du mot.
+  const searchHit=(seg,w)=>/^\d{1,2}$/.test(w)?seg.includes(w):seg.some(t=>t.includes(w));
+  function keywordMatch(o){
+    const alts=searchAlternatives(); if(!alts.length) return true;
+    const segs=searchSegments(o);
+    return alts.some(a=>a.num?segs.some(seg=>a.words.every(w=>searchHit(seg,w))):a.words.every(w=>segs.some(seg=>searchHit(seg,w))));
+  }
   // V6.41 : recherche de la vue d'ensemble pour l'onglet Exigences (codes réels), indépendante des autres filtres.
   let keywordCache=null;
   function keywordScope(){
@@ -1205,10 +1230,10 @@
     const raw=runtime().connected?engine.getOperations():engine.getDemoOperations(), anon=!!privacy()?.enabled?.();
     const key=`${q}\u0001${[...state.searchExcluded].join('\u0002')}\u0001${anon}`;
     if(keywordCache&&keywordCache.raw===raw&&keywordCache.key===key) return keywordCache.scope;
-    const ops=sourceOperations().filter(o=>keywordMatch(o,q)&&!state.searchExcluded.has(String(o.code)));
+    const ops=sourceOperations().filter(o=>keywordMatch(o)&&!state.searchExcluded.has(String(o.code)));
     let codes=ops.map(o=>String(o.code||'').trim()).filter(Boolean);
     if(anon&&runtime().connected){const real=engine.resolveRealCodes?.(codes);if(real?.codes)codes=real.codes;}
-    const scope={search:String(state.search).trim(),codes,count:ops.length,removed:sourceOperations().filter(o=>keywordMatch(o,q)&&state.searchExcluded.has(String(o.code))).length};
+    const scope={search:String(state.search).trim(),codes,count:ops.length,removed:sourceOperations().filter(o=>keywordMatch(o)&&state.searchExcluded.has(String(o.code))).length};
     keywordCache={raw,key,scope}; return scope;
   }
   // Résultats de la recherche : retirer les faux positifs (ex. « crèche » cité sans en être une).

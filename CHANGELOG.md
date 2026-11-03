@@ -1,5 +1,16 @@
 # Historique
 
+## V6.43
+
+- Recherche de la vue d’ensemble plus exhaustive :
+  - plusieurs recherches à la fois, séparées par une virgule, « ; », « | » ou « ou » (ex. « Biosourcé 3e niveau 2024, Biosourcé 2e niveau 2024, Biosourcé 1er niveau 2024 ») ;
+  - mots dans n’importe quel ordre ; « 3ème », « 3eme », « 3e », « troisième » et « 3 » sont équivalents (idem 1er / première, 2e / second) ;
+  - une recherche qui contient un nombre doit se trouver entière dans une même mention (ou un même champ) : « Biosourcé niveau 3 2024 » ne retient pas une opération « Biosourcé 2024 niveau 1 » + « BBCA niveau 3 ».
+- Infobulle sur le champ de recherche avec ces règles.
+
+**Écran de chargement**
+- Halo bleu pâle autour du cadran du compteur d’eau pendant l’arrosage.
+
 ## V6.42
 
 - Fenêtre « Données » (et seulement elle) : encart « Source réellement lue » avec le nom du classeur Google, l’onglet, le nombre de lignes lues (et les lignes exploitables), la date de dernière modification du classeur et l’heure de lecture par l’Observatoire. Permet de vérifier qu’une mise à jour du tableau « Tous contrats » est bien prise en compte.

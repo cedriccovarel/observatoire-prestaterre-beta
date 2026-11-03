@@ -146,6 +146,22 @@ const call = (gs, params) => JSON.parse(gs.doGet({ parameter: params }).text);
 const KEY = 'cle-de-test-0123456789abcdef';
 const opsGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props } });
 test('pont + bonne clé : lecture meta + bloc de données', () => { const gs = opsGs(); const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.deepStrictEqual(m.headers.slice(0, 4), HEADERS.slice(0, 4)); const c = gs.newosbBridgeRequest({ mode: 'chunk', offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow, key: KEY }); assert.strictEqual(c.rows.length, ROWS.length); });
+test('V6.43 : recherche exhaustive (variantes, ordre libre, 3ème = 3, nombres dans la même mention)', () => {
+  const src = read('newosb.js'), start = src.indexOf('  const SEARCH_ORD='), end = src.indexOf('\n  }', src.indexOf('  function keywordMatch(o){')) + 4;
+  const normalize = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/&lt;br\s*\/?\s*&gt;/gi, ' ').replace(/<br\s*\/?\s*>/gi, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  const state = { search: '' };
+  const match = new Function('state', 'norm', src.slice(start, end) + '\nreturn keywordMatch;')(state, normalize);
+  const op = (code, mentions) => ({ code, name: 'Programme fictif', moa: 'Bailleur fictif', city: 'Lyon', mentions });
+  const ops = [op('A', 'NF Habitat HQE<br>Bâtiment Biosourcé 2024 - 3ème niveau'), op('B', 'Label Biosourcé 2024 niveau 2'), op('C', 'Biosourcé 2024 - 1er niveau'),
+    op('D', 'Biosourcé 2013 - Niveau 3'), op('E', 'Biosourcé 2024 niveau 1<br>BBCA niveau 3'), op('F', 'Effinergie 2017')];
+  const find = q => { state.search = q; return ops.filter(match).map(o => o.code); };
+  assert.deepStrictEqual(find('Biosourcé 3eme niveau 2024'), ['A'], 'ordre libre, 3eme = 3ème');
+  assert.deepStrictEqual(find('Biosourcé 3e niveau 2024, Biosourcé 2ème niveau 2024 ou biosourcé premier niveau 2024'), ['A', 'B', 'C', 'E'], 'trois variantes');
+  assert.deepStrictEqual(find('biosourcé niveau 3 2024'), ['A'], 'E exclu : niveau 3 et Biosourcé 2024 sont deux mentions différentes');
+  assert.deepStrictEqual(find('biosourcé 2024'), ['A', 'B', 'C', 'E'], 'toutes les variantes 2024');
+  assert.deepStrictEqual(find('lyon effinergie'), ['F'], 'sans nombre : mots dans des champs différents');
+  assert.deepStrictEqual(find(''), ['A', 'B', 'C', 'D', 'E', 'F']);
+});
 test('V6.42 : meta indique le classeur et l’onglet lus ; affichage limité à la fenêtre « Données »', () => {
   const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.sourceInfo.sheet, 'OPERATIONS');
   const a = read('app.js'), h = read('index.html');
