@@ -1,5 +1,8 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.35 (script OPERATIONS, version API 06.35)
+ * PRESTATERRE OBSERVATOIRE - V6.42 (script OPERATIONS, version API 06.42)
+ *
+ * Changements V6.42 : la reponse « meta » indique le classeur, l'onglet lus et la date de modification
+ *   du classeur (sourceInfo), affiches dans la fenetre « Donnees » de l'Observatoire. Aucune donnee metier.
  *
  * Changements V6.35 : archivage des liens de partage (mode sharearchive, colonne « Archive le (ms) »
  *   ajoutee a OBSERVATOIRE_PARTAGES). Archiver ne change pas l'acces : un lien actif archive fonctionne
