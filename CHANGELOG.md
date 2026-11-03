@@ -1,5 +1,14 @@
 # Historique
 
+## V6.41
+
+- Vue d’ensemble, recherche par mot-clé (ex. « crèche ») : une carte liste les opérations trouvées ; « Retirer » écarte un faux positif (opération qui cite le mot sans en être une), « Remettre » / « Tout remettre » l’annule. Les opérations retirées sortent de tous les onglets, du générateur et des liens de partage tant que la recherche est active.
+- Exigences : la recherche de la vue d’ensemble s’applique (seules les exigences des opérations trouvées, moins celles retirées), avec un bandeau qui la rappelle et un bouton « Retirer la recherche ».
+- Partage : un lien créé pendant une recherche gèle les opérations retenues (déjà le cas) ; le résumé du lien indique aussi le nombre d’opérations retirées à la main.
+
+**Écran de chargement**
+- Le totaliseur du compteur d’eau se remplit pendant l’arrosage (à moitié et fixe si mouvements réduits).
+
 ## V6.40
 
 - Exigences, recherche manuelle : un clic sur un résultat déplie la liste des opérations concernées dans la sélection (code, programme, maître d’ouvrage, département, année, référentiel, nombre d’occurrences), triée par occurrences ; un clic sur le code ouvre la fiche de l’opération. Le bouton « Filtrer la page sur cette exigence » remplace l’ancien clic sur le résultat. Codes, programmes et MOA suivent le mode anonymisé.

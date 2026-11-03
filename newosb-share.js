@@ -56,6 +56,7 @@
     });
     (scope.cross || []).forEach(c => { out.push(anonymized && HIDDEN_KEYS_WHEN_ANONYMIZED.includes(c.key) ? 'Filtre analytique (valeur masquée)' : `Analyse : ${c.label}`); });
     if (String(scope.search || '').trim()) out.push(anonymized ? 'Recherche textuelle appliquée' : `Recherche : ${String(scope.search).trim()}`);
+    if (scope.removed) out.push(`${plural(scope.removed, 'opération retirée', 'opérations retirées')} à la main`);
     return out.join(' · ') || 'Toutes les opérations de la base';
   }
 

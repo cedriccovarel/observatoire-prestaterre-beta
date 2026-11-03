@@ -516,6 +516,25 @@ atest('V6.40 : un clic sur un résultat de recherche liste les opérations conce
   assert.strictEqual(m.api.handleClick({ target: m.el({ 'data-op-code': 'OP-0801' }) }), false, 'clic transmis à newosb.js (fiche)');
   m.api.handleClick({ target: m.el({ 'data-req-search-open': name }) }); assert(!m.api.render().includes('opérations concernées'), 'second clic : replié');
 });
+atest('V6.41 : la recherche de la vue d’ensemble (« crèche ») s’applique à l’onglet Exigences, opérations retirées comprises', async () => {
+  const row = (req, ev, op) => [req, ev, 'MOA fictif', op, ...LN, 'Bretagne', '35', req.slice(0, 5), '', 'En cours', ''];
+  const m = reqModule([row('2.4.6 - Gestion des eaux pluviales', 'EVA-K1', 'OP-0901'), row('1.1.1 - Analyse de site', 'EVA-K2', 'OP-0902'), row('1.1.1 - Analyse de site', 'EVA-K3', 'OP-0903')]); await m.connect();
+  assert.strictEqual(m.api.auditInfo().evaluations, 3); assert(!m.api.render().includes('req-kw-banner'), 'sans recherche : pas de bandeau');
+  let cleared = 0; const scope = { search: 'crèche', codes: ['op-0901', 'OP-0903'], count: 2, removed: 1 };
+  m.ctx.NEWOSB_APP = { keywordScope: () => scope, clearSearch: () => { cleared++; } };
+  assert.strictEqual(m.api.auditInfo().evaluations, 2, 'seules les opérations trouvées (codes normalisés)');
+  const html = m.api.render(); assert(html.includes('« crèche »') && html.includes('2 opérations') && html.includes('1 retirée à la main'), html.slice(0, 400));
+  assert.strictEqual(m.api.handleClick({ target: m.el({ 'data-req-kw-clear': '' }) }), true); assert.strictEqual(cleared, 1);
+  scope.codes = []; scope.count = 0; m.ctx.NEWOSB_APP.keywordScope = () => ({ ...scope }); assert.strictEqual(m.api.auditInfo().evaluations, 0, 'aucune opération trouvée : aucune exigence');
+});
+test('V6.41 : retrait manuel des faux positifs de la recherche, repris dans le partage', () => {
+  const n = read('newosb.js'), sh = read('newosb-share.js');
+  assert(n.includes('searchExcluded:new Set()') && n.includes("if(q && !options.keepExcluded && state.searchExcluded.has(String(o.code))) return false;"));
+  assert(n.includes('${kpis(ops)}${keywordCard()}') && n.includes('data-kw-toggle') && n.includes('data-kw-reset'));
+  assert(n.includes('window.NEWOSB_APP={shareScope,keywordScope,clearSearch:'));
+  assert(n.includes("state.search='';state.searchExcluded.clear();"), 'anonymisation : retraits effacés (codes changés)');
+  assert(sh.includes("plural(scope.removed, 'opération retirée', 'opérations retirées')"));
+});
 atest('source non connectée, clé absente puis clé incorrecte : états explicites, aucune donnée', async () => {
   const m = reqModule(R1, { key: '' });
   assert.strictEqual(m.api.getOperationRequirements('OP-0101').state, 'disconnected');

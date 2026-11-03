@@ -229,9 +229,14 @@
   function periodMatch(y,p){if(!p)return true;if(p==='pre2024')return y&&y<2024;if(p==='2024')return y===2024;if(p==='2025plus')return y>=2025;return String(y)===String(p);}
   function rowHasMention(r,m){return !m||splitMulti(r.mentions).some(x=>norm(x)===norm(m));}
   function rowHasAnyMention(r,mentions){return !mentions.length||mentions.some(m=>rowHasMention(r,m));}
+  // V6.41 : recherche de la vue d'ensemble (ex. « crèche ») appliquée aux exigences, moins les opérations retirées à la main.
+  let keywordMemo={scope:null,set:null};
+  function keywordCodes(){const sc=window.NEWOSB_APP?.keywordScope?.();if(!sc)return null;if(sc!==keywordMemo.scope)keywordMemo={scope:sc,set:new Set(sc.codes.map(normId))};return keywordMemo.set;}
+  function keywordBanner(){const sc=window.NEWOSB_APP?.keywordScope?.();if(!sc)return '';return `<div class="req-kw-banner" role="status"><span>Recherche de la vue d’ensemble appliquée : <b>« ${esc(sc.search)} »</b> · ${fmt(sc.count)} opération${sc.count>1?'s':''}${sc.removed?` · ${fmt(sc.removed)} retirée${sc.removed>1?'s':''} à la main`:''}</span><button type="button" class="btn btn-secondary" data-req-kw-clear>Retirer la recherche</button></div>`;}
   function filteredRows(options={}){
-    const req=options.ignoreRequirement?'':state.requirement;
+    const req=options.ignoreRequirement?'':state.requirement, kw=keywordCodes();
     return state.rows.filter(r=>{
+      if(kw&&!kw.has(normId(r.operationCode)))return false;
       if(options.forceReferential&&norm(r.referential)!==norm(options.forceReferential))return false;
       if(!options.forceReferential&&!matchesFilter('referential',r.referential))return false;
       if(hasFilter('year')&&!filterValues('year').some(v=>String(r.operationYear)===String(v)))return false;
@@ -724,7 +729,7 @@
     if(!state.connected&&state.share)return source;
     if(!state.connected)return `${source}<div class="req-empty-state"><span>▤</span><h2>Exigences non chargées</h2><p>Connecte la source OPERATIONS (bouton <b>Données</b>) : les exigences de l’onglet <b>RAPPORT</b> sont chargées en même temps, avec la même URL et la même clé. Les référentiels BEE Logement Neuf et Rénovation du 04/05/2026 sont déjà intégrés pour les fiches d’information « i » et la recherche manuelle.</p><a href="Code_Exigences.gs" download>Télécharger Code_Exigences.gs</a></div>${infoModal()}`;
     const rows=filteredRows(), occ=occurrenceRows(rows), evs=evaluations(rows), refs=uniq(evs.map(r=>r.referential)), years=uniq(evs.map(r=>r.year).filter(Boolean)).sort((a,b)=>a-b), neuf=evs.filter(r=>r.nature==='Neuf').length,reno=evs.filter(r=>r.nature==='Rénovation').length;
-    return `${source}${filtersHtml()}<div class="req-page-title"><div><span>ANALYSE DES EXIGENCES</span><h1>${filterValues('profile').length===1?`Profil ${esc(filterValues('profile')[0].replace(/^Profil\s+/i,''))}`:filterValues('profile').length>1?`${filterValues('profile').length} profils sélectionnés`:'Toutes évaluations'}</h1><p>Retraitement dynamique de RAPPORT · filtres par profil, région et département · fiches référentiel 2026 accessibles avec le bouton <b>i</b>.</p></div><div class="req-page-meta">${years.length?`${years[0]}–${years[years.length-1]}`:'—'}<small>${refs.length} référentiel${refs.length>1?'s':''}</small></div></div>
+    return `${source}${filtersHtml()}${keywordBanner()}<div class="req-page-title"><div><span>ANALYSE DES EXIGENCES</span><h1>${filterValues('profile').length===1?`Profil ${esc(filterValues('profile')[0].replace(/^Profil\s+/i,''))}`:filterValues('profile').length>1?`${filterValues('profile').length} profils sélectionnés`:'Toutes évaluations'}</h1><p>Retraitement dynamique de RAPPORT · filtres par profil, région et département · fiches référentiel 2026 accessibles avec le bouton <b>i</b>.</p></div><div class="req-page-meta">${years.length?`${years[0]}–${years[years.length-1]}`:'—'}<small>${refs.length} référentiel${refs.length>1?'s':''}</small></div></div>
     <div class="obs-grid-kpi req-kpis"><article class="obs-kpi"><span>Dossiers analysés</span><strong>${fmt(evs.length)}</strong><small>évaluations uniques</small></article><article class="obs-kpi"><span>Exigences sélectionnées</span><strong>${fmt(occ.length)}</strong><small>occurrences distinctes</small></article><article class="obs-kpi"><span>Neuf</span><strong>${fmt(neuf)}</strong><small>${fmt(pct(neuf,evs.length),1)} % du panel</small></article><article class="obs-kpi"><span>Rénovation</span><strong>${fmt(reno)}</strong><small>${fmt(pct(reno,evs.length),1)} % du panel</small></article></div>
     ${manualSearchHtml()}
     <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>RÉPARTITION SECTORIELLE</span><h2>Neuf / Rénovation</h2></div><small>${fmt(evs.length)} dossiers</small></div>${sectorCard(rows)}</article><article class="obs-card"><div class="obs-card-head"><div><span>STRUCTURE DU PANEL</span><h2>Chronologie par référentiel</h2></div><div class="req-head-actions"><small>année de version du référentiel</small>${reqViewToggle('chronology')}</div></div>${panelChronology(rows)}</article></div>
@@ -739,6 +744,7 @@
     if(state.focusSelector){const sel=state.focusSelector;state.focusSelector='';const el=document.querySelector(sel);if(el){try{el.focus({preventScroll:true});}catch{}}}
   }
   function handleClick(e){
+    if(e.target.closest('[data-req-kw-clear]')){window.NEWOSB_APP?.clearSearch?.();return true;}
     if(state.share){
       if(e.target.closest('[data-req-share-retry]')){window.NEWOSB_SHARE?.startRequirements?.(true);return true;}
       if(e.target.closest('[data-req-connect],[data-req-disconnect],[data-req-forget],[data-req-reset-filters]'))return true;

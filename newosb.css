@@ -1443,3 +1443,9 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-label-summary td.is-zero{color:#a8b3ad}
 @media(max-width:760px){.obs-label-pies{grid-template-columns:1fr}.obs-label-pie .obs-pie-layout{grid-template-columns:96px minmax(0,1fr)}.obs-label-pie .obs-pie-chart{width:92px}}
 .req-search-ops{margin-top:9px;padding-top:8px;border-top:1px solid #edf2ef;max-height:360px;overflow:auto}.req-search-ops-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;font-size:11px}.req-search-ops-head button{border:1px solid #cfe0d7;background:#fff;border-radius:8px;padding:4px 9px;font-size:10px;cursor:pointer}.req-search-select[aria-expanded="true"]>span::after{content:" ▾"}
+/* V6.41 — résultats de la recherche (retrait manuel) et bandeau de recherche dans l'onglet Exigences */
+.obs-kw-card .obs-card-head{align-items:flex-start}.obs-kw-tools{display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:420px;text-align:right}
+.obs-kw-list{max-height:360px;overflow:auto}.obs-kw-list tr.is-removed td{color:#8a9894;text-decoration:line-through}.obs-kw-list tr.is-removed td:last-child{text-decoration:none}
+.obs-kw-code{border:0;background:none;padding:0;font:inherit;font-weight:700;color:#0b6b4a;cursor:pointer;text-decoration:underline}
+.obs-kw-remove{border:1px solid #e3c4c0;background:#fff;color:#9b2c22;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer}.obs-kw-remove:hover{background:#fbeceb}
+.req-kw-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:10px 14px;border:1px solid #cfe0d7;border-radius:12px;background:#eef6f1;font-size:13px;color:#173b3f}

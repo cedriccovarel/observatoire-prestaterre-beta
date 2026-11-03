@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.40 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.41 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -641,6 +641,8 @@
     ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(x + 7, y + 6); ctx.lineTo(x + 7 + Math.cos(a) * 3, y + 6 + Math.sin(a) * 3); ctx.stroke();
     // V6.40 : un voyant bleu clignote sur le compteur pendant l'arrosage (fixe si mouvements réduits).
     if (watering) { ctx.fillStyle = still || Math.sin(t * 10) > 0 ? '#3aa0e8' : '#c9dbe6'; ctx.beginPath(); ctx.arc(x + 12, y + 2.5, 1.1, 0, Math.PI * 2); ctx.fill(); }
+    // V6.41 : le totaliseur sous le cadran se remplit pendant l'arrosage (à moitié et fixe si mouvements réduits).
+    if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     ctx.restore();
   }
 

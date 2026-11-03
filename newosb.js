@@ -69,6 +69,8 @@
   const state = {
     page:'overview',
     search:'',
+    // V6.41 : opérations retirées à la main des résultats de la recherche (codes affichés) ; actif seulement avec une recherche.
+    searchExcluded:new Set(),
     filters:{year:[],createdYear:[],referential:[],programType:[],moaGroup:[],status:[],moa:[],region:[],department:[],profile:[],socialZone:[]},
     crossFilters:[],
     activeOperation:null,
@@ -1186,13 +1188,35 @@
       if(!globalFilterMatch('department',String(o.department))) return false;
       if(!globalFilterMatch('profile',o.profile||'Non précisé')) return false;
       if(!globalFilterMatch('socialZone',o.socialZone||'Non précisé')) return false;
-      if(q && ![o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance,o.tags].some(v=>norm(v).includes(q))) return false;
+      if(q && !keywordMatch(o,q)) return false;
+      if(q && !options.keepExcluded && state.searchExcluded.has(String(o.code))) return false;
       for(const cf of state.crossFilters){
         if(ignoreCrossKeys.has(cf.key)) continue;
         if(!matchesCross(o,cf)) return false;
       }
       return true;
     });
+  }
+  function keywordMatch(o,q){ return [o.code,o.name,o.moa,o.moaGroup,o.referential,o.department,o.city,o.nature,o.rawStatus,o.mentions,o.performance,o.tags].some(v=>norm(v).includes(q)); }
+  // V6.41 : recherche de la vue d'ensemble pour l'onglet Exigences (codes réels), indépendante des autres filtres.
+  let keywordCache=null;
+  function keywordScope(){
+    const q=norm(state.search); if(!q) return null;
+    const raw=runtime().connected?engine.getOperations():engine.getDemoOperations(), anon=!!privacy()?.enabled?.();
+    const key=`${q}\u0001${[...state.searchExcluded].join('\u0002')}\u0001${anon}`;
+    if(keywordCache&&keywordCache.raw===raw&&keywordCache.key===key) return keywordCache.scope;
+    const ops=sourceOperations().filter(o=>keywordMatch(o,q)&&!state.searchExcluded.has(String(o.code)));
+    let codes=ops.map(o=>String(o.code||'').trim()).filter(Boolean);
+    if(anon&&runtime().connected){const real=engine.resolveRealCodes?.(codes);if(real?.codes)codes=real.codes;}
+    const scope={search:String(state.search).trim(),codes,count:ops.length,removed:sourceOperations().filter(o=>keywordMatch(o,q)&&state.searchExcluded.has(String(o.code))).length};
+    keywordCache={raw,key,scope}; return scope;
+  }
+  // Résultats de la recherche : retirer les faux positifs (ex. « crèche » cité sans en être une).
+  function keywordCard(){
+    const q=norm(state.search); if(!q) return '';
+    const ops=filteredOperations({keepExcluded:true}), removed=ops.filter(o=>state.searchExcluded.has(String(o.code))).length;
+    return `<article class="obs-card obs-kw-card"><div class="obs-card-head"><div><span>RECHERCHE</span><h2>« ${esc(String(state.search).trim())} » : ${fmt(ops.length-removed)} opération${ops.length-removed>1?'s':''} retenue${ops.length-removed>1?'s':''}</h2></div><div class="obs-kw-tools"><small>Retire celles qui ne correspondent pas : elles sortent de tous les onglets, de l’onglet Exigences et des liens de partage.</small>${removed?`<button type="button" class="btn btn-secondary" data-kw-reset>Tout remettre (${fmt(removed)})</button>`:''}</div></div>
+      <div class="obs-table-wrap obs-kw-list"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>${ops.map(o=>{const out=state.searchExcluded.has(String(o.code));return `<tr class="${out?'is-removed':''}"><td><button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td><button type="button" class="btn ${out?'btn-secondary':'obs-kw-remove'}" data-kw-toggle="${attr(o.code)}" aria-pressed="${out}">${out?'Remettre':'Retirer'}</button></td></tr>`;}).join('')}</tbody></table></div></article>`;
   }
   function filteredOperations(options={}){ return filterOperationList(baseOperations(),options); }
   function filteredTechnicalOperations(options={}){ return filterOperationList(baseTechnicalOperations(),options); }
@@ -1419,7 +1443,7 @@
     const ops=filteredOperations();
     const deps=countBy(ops,o=>departmentName(o.department));
     const moas=countBy(ops,o=>o.moa);
-    return `${pageHead('overview')}${kpis(ops)}
+    return `${pageHead('overview')}${kpis(ops)}${keywordCard()}
       <div class="obs-grid-2">
         <article class="obs-card"><div class="obs-card-head"><div><span>DYNAMIQUE</span><h2>Évolution des projets</h2></div><div class="obs-evolution-head-tools"><small>Une courbe par référentiel · clique sur une année ou la légende pour filtrer · clique sur « Total général » dans la légende pour l’afficher/masquer</small></div></div><div class="obs-chart">${evolutionSvg(ops,state.overviewShowTotal)}</div>${lostAbandonedNotice()}</article>
         <article class="obs-card"><div class="obs-card-head"><div><span>TERRITOIRES</span><h2>Départements les plus représentés</h2></div><button class="obs-card-action" data-page-link="territories">Explorer</button></div>${topBars(deps,8,'departmentName')}</article>
@@ -3117,6 +3141,8 @@
     if(e.target.closest('[data-drilldown-current]')){changePage('operations');return;}
     const tag=e.target.closest('[data-tag-kind][data-tag-name]'); if(tag){const ops=filteredOperations().filter(o=>operationHasTag(o,tag.dataset.tagKind,tag.dataset.tagName));engine.openExplorer(tag.dataset.tagName,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const tagChip=e.target.closest('[data-tag-filter][data-tag-value]'); if(tagChip){const kind=tagChip.dataset.tagFilter,val=tagChip.dataset.tagValue;const ops=filteredOperations().filter(o=>operationHasTag(o,kind,val));engine.openExplorer(val,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
+    const kt=e.target.closest('[data-kw-toggle]'); if(kt){const c=kt.dataset.kwToggle;if(state.searchExcluded.has(c))state.searchExcluded.delete(c);else state.searchExcluded.add(c);preserveUiScroll(()=>renderPage());return;}
+    if(e.target.closest('[data-kw-reset]')){state.searchExcluded.clear();preserveUiScroll(()=>renderPage());return;}
     const op=e.target.closest('[data-op-code]'); if(op){openOperation(op.dataset.opCode);return;}
     if(e.target.closest('[data-open-generator]')){const scope=generatorLaunchScope();engine.openGenerator(scope,()=>generatorHandoffData(scope));return;}
     if(e.target.closest('[data-open-source]')){engine.showDataSource();return;}
@@ -3148,7 +3174,7 @@
   document.addEventListener('fullscreenchange',()=>{if(state.page==='presentation')requestAnimationFrame(fitPresentationPreview);const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';});
   window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
-  window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';renderFilters();renderPage();});
+  window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';state.searchExcluded.clear();renderFilters();renderPage();});
   window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(mapPopEl){closeMapPopover();return;}if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 
   // V6.15 : périmètre affiché, pour la création d'un lien de partage (newosb-share.js).
@@ -3160,11 +3186,12 @@
       parts:SHARE_FILTER_LABELS.map(([key,label])=>({key,label,values:globalFilterValues(key).map(v=>key==='status'?(STATUS_LABELS[v]||v):(key==='department'?`${v} ${departmentName(v)}`:String(v)))})),
       cross:state.crossFilters.map(f=>({key:f.key,label:f.label||String(f.value||'')})),
       search:String(state.search||''),
+      removed:String(state.search||'').trim()?keywordScope()?.removed||0:0,
       page:state.page,
       privacy:!!privacy()?.enabled?.()
     };
   }
-  window.NEWOSB_APP={shareScope,currentPage:()=>state.page};
+  window.NEWOSB_APP={shareScope,keywordScope,clearSearch:()=>{state.search='';state.searchExcluded.clear();if(searchEl)searchEl.value='';renderPage();},currentPage:()=>state.page};
   if(SHARE){
     window.addEventListener('newosb:sharestate',()=>{
       if(shareReady()){
