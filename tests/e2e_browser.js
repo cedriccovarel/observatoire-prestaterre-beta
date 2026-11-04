@@ -705,7 +705,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       }
       check(errors.length === 0, 'remise des données à Obslide : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
-    console.log('\nL. Complément TotalRecoll : l’onglet TotalRecoll complète les cellules vides du Sheet, sans rien stocker (V6.49)');
+    console.log('\nL. Complément TotalRecoll : l’onglet TotalRecoll complète les cellules vides du Sheet, sans rien stocker (V6.49, V6.50)');
     { const GH = 'https://cedriccovarel.github.io', OBS = GH + '/observatoire-prestaterre-beta';
       // TOTALRECOLL_DIR=/chemin/TotalRecoll : vrai TotalRecoll (fichiers fictifs Tous contrats + session ExtracTerre).
       const TOTALRECOLL_DIR = process.env.TOTALRECOLL_DIR || '';
@@ -713,6 +713,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       // TotalRecoll simulé : envoie à l'Observatoire qui l'a ouvert (même origine) et garde l'accusé de réception.
       const PAYLOAD = { type: 'totalrecoll:operations', v: 1, buildings: [
         { contract: '00001007', ope: '', building: 'Bât. A', cells: { 'Cep projet': 65, 'DH Zone traversante (DH ZT)': 410 } },
+        { contract: '00001007', ope: '', building: 'Bât. B', cells: { 'Cep projet': 70 } },
         { contract: '00001003', ope: '', building: '', cells: { 'Cep projet': 61 } },
         { contract: '00009999', ope: '', building: '', cells: { 'Cep projet': 1 } }] };
       const STUB = `<!doctype html><title>TotalRecoll (simulé)</title><script>window.__ack=null;addEventListener('message',e=>{if(e.origin===location.origin&&e.source===opener&&e.data&&e.data.type==='newosb:recoll:ack')window.__ack=e.data;});window.send=()=>opener.postMessage(${JSON.stringify(PAYLOAD)},location.origin);</script>`;
@@ -725,7 +726,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       });
       const { page, context, errors } = await scenario(browser, OBS, { NEWOSB_ALLOWED_ORIGINS: GH }, { matrix: withContracts, beforeGoto: serve });
       const raw = code => page.evaluate(c => (window.NEWOSB_ENGINE.getOperations().find(o => o.code === c)?.rawRows || []).map(r => [r['Cep projet'], r['DH Zone traversante (DH ZT)']]), code);
-      const before = await raw('OP-5');
+      const before = await raw('OP-5'), opsBefore = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().length);
       // Un message qui ne vient pas de l'onglet TotalRecoll ouvert par l'Observatoire est ignoré.
       await page.evaluate(p => window.postMessage(p, location.origin), PAYLOAD); await page.waitForTimeout(300);
       check(JSON.stringify(await raw('OP-5')) === JSON.stringify(before) && !/Complément TotalRecoll actif/.test(await page.textContent('#dataSourceInfo')), 'message reçu d’un autre onglet que TotalRecoll ignoré');
@@ -737,7 +738,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'trc-')), sf = path.join(dir, 'tous_contrats.xlsx'), et = path.join(dir, 'session.json');
         fs.writeFileSync(sf, '\ufeffNuméro du contrat,Opération: Code interne,Cep projet\n00001007,OPE-000005,\n00001003,OPE-000001,\n');
         fs.writeFileSync(et, JSON.stringify({ format: 'extracterre-session', operations: [
-          { title: 'A', identity: { contract: '00001007' }, rows: [{ contract_number: '00001007', building: 'Bât. A', cep: 65, dh_zt: 410 }] },
+          { title: 'A', identity: { contract: '00001007' }, rows: [{ contract_number: '00001007', building: 'Bât. A', cep: 65, dh_zt: 410 }, { contract_number: '00001007', building: 'Bât. B', cep: 70 }] },
           { title: 'B', identity: { contract: '00001003' }, rows: [{ contract_number: '00001003', cep: 61 }] },
           { title: 'C', identity: { contract: '00009999' }, rows: [{ contract_number: '00009999', cep: 1 }] }] }));
         await tr.waitForLoadState('load', { timeout: 30000 });
@@ -754,14 +755,16 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         ack = await tr.waitForFunction(() => window.__ack, null, { timeout: 15000 }).then(h => h.jsonValue(), () => null);
       }
       const after = await raw('OP-5'), op1 = await raw('OP-1');
-      check(ack?.ok && ack.stats.filledCells === 2 && ack.stats.ecarts === 1 && ack.stats.unmatchedOperations === 1, 'accusé de réception à TotalRecoll : 2 cellules remplies, 1 écart, 1 opération absente du Sheet ' + JSON.stringify(ack?.stats || ack));
+      check(ack?.ok && ack.stats.filledCells === 3 && ack.stats.ecarts === 1 && ack.stats.unmatchedOperations === 1, 'accusé de réception à TotalRecoll : 3 cellules remplies, 1 écart, 1 opération absente du Sheet ' + JSON.stringify(ack?.stats || ack));
       check(after[0][0] === 65 && after[0][1] === 410 && op1[0][0] === '60', `cellule vide remplie (Cep OP-5 = ${after[0][0]}, DH ZT ajoutée = ${after[0][1]}), valeur du Sheet conservée (Cep OP-1 = ${op1[0][0]})`);
+      const ops = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().length);
+      check(after.length === 2 && after[1][0] === 70 && ops === opsBefore, `V6.50 : 2e bâtiment ajouté à l’opération (Cep ${after[1]?.[0]}), toujours ${ops} opérations (${opsBefore} avant)`);
       const info = await page.textContent('#dataSourceInfo');
-      check(/Complément TotalRecoll actif/.test(info) && /1 écart \(/.test(info) && /Colonnes absentes du Sheet ajoutées : .*DH Zone traversante \(DH ZT\)/.test(info), 'fenêtre Données : bilan du complément affiché');
+      check(/Complément TotalRecoll actif/.test(info) && /1 écart \(/.test(info) && /1 bâtiment ajouté/.test(info) && /Voir les colonnes ajoutées/.test(info) && /Opérations renseignées, avant → avec le complément/.test(info) && /Cep\s*\d+ → \d+/.test(info), 'fenêtre Données : bilan du complément affiché (bâtiment ajouté, apport champ par champ)');
       check(!/Bât\. A|"Cep projet"|410/.test(await page.evaluate(() => JSON.stringify(localStorage) + JSON.stringify(sessionStorage))), 'complément absent du stockage du navigateur');
       await page.click('[data-recoll-clear]'); await page.waitForTimeout(300);
       const cleared = await raw('OP-5');
-      check(cleared[0][0] === '' && cleared[0][1] === undefined && !/Complément TotalRecoll actif/.test(await page.textContent('#dataSourceInfo')), '« Retirer le complément » : retour au Sheet seul');
+      check(cleared.length === 1 && cleared[0][0] === '' && cleared[0][1] === undefined && !/Complément TotalRecoll actif/.test(await page.textContent('#dataSourceInfo')), '« Retirer le complément » : retour au Sheet seul');
       check(errors.length === 0, 'complément TotalRecoll : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
     console.log('\nI. Écran de chargement : chantier de rénovation, une seule barre pour OPERATIONS + RAPPORT (V6.23)');

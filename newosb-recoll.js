@@ -3,6 +3,11 @@
  * d'onglet à onglet (postMessage, même origine), les valeurs techniques ExtracTerre par bâtiment ; elles ne
  * remplissent que les cellules VIDES du Sheet et les colonnes qu'il n'a pas. Une valeur différente déjà présente
  * dans le Sheet est gardée et signalée comme écart. Rien n'est stocké ni envoyé ailleurs : tout reste en mémoire.
+ * V6.50 — Une cellule du Sheet qui n'est qu'un bouche-trou (« NC », « - », « #N/A »…) compte comme vide. Un code
+ * postal, un code INSEE, une latitude, une longitude ou une année illisible dans le Sheet (ex. un nom de personne
+ * dans « Code postal ») est remplacé par la valeur ExtracTerre valide et compté à part (« corrigées »). Quand le
+ * Sheet a moins de lignes que de bâtiments, les bâtiments suivants deviennent des lignes ajoutées à l'opération
+ * (identifiants seuls + valeurs ExtracTerre, marquées __recollExtra) : leurs données comptent dans les moyennes.
  */
 (function (root, factory) {
   const api = factory();
@@ -23,7 +28,19 @@
     return m ? 'OPE-' + m[1].padStart(6, '0') : '';
   }
   const normHeader = h => String(h ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[’']/g, "'").replace(/\s+/g, ' ').replace(/\s*:\s*$/, '').trim();
-  const isEmpty = v => v == null || String(v).trim() === '' || v === '#N/A';
+  // Bouche-trous des exports (comparés après normHeader) : la cellule est considérée comme vide.
+  const PLACEHOLDERS = new Set(['-', '--', '—', '–', '.', '?', 'nc', 'n/c', 'n.c.', 'na', 'n/a', 'n.a.', 'nd', 'n/d', 'n.d.', 'non renseigne', 'non renseignee', 'a renseigner', 'inconnu', '#n/a', '#ref!', '#value!', '#valeur!', '#div/0!', '#name?', '#nom?']);
+  const isEmpty = v => v == null || String(v).trim() === '' || PLACEHOLDERS.has(normHeader(v));
+  // Colonnes au format fixe : une valeur du Sheet hors format est une erreur de saisie, remplacée si ExtracTerre a mieux.
+  const num = v => { const n = Number(String(v ?? '').replace(/\s/g, '').replace(',', '.')); return String(v ?? '').trim() !== '' && Number.isFinite(n) ? n : null; };
+  const FORMATS = [
+    [/^(code postal|cp)$/, v => /^\d{4,5}$/.test(String(v).trim())],
+    [/^code insee( commune)?$/, v => /^(\d{4,5}|2[ab]\d{3})$/i.test(String(v).trim())],
+    [/^latitude( commune)?$/, v => { const n = num(v); return n !== null && n >= -90 && n <= 90 && n !== 0; }],
+    [/^longitude( commune)?$/, v => { const n = num(v); return n !== null && n >= -180 && n <= 180 && n !== 0; }],
+    [/^annee( de construction)?$/, v => { const n = num(v); return n !== null && n >= 1000 && n <= 2100; }]
+  ];
+  const formatOf = h => { const nh = normHeader(h); const f = FORMATS.find(([re]) => re.test(nh)); return f ? f[1] : null; };
   function same(a, b) {
     const na = Number(String(a).replace(/\s/g, '').replace(',', '.')), nb = Number(String(b).replace(/\s/g, '').replace(',', '.'));
     if (String(a).trim() !== '' && String(b).trim() !== '' && Number.isFinite(na) && Number.isFinite(nb)) return Math.abs(na - nb) <= 1e-6 * Math.max(1, Math.abs(na));
@@ -51,10 +68,10 @@
   }
 
   /* rows : lignes du Sheet (objets en-tête → valeur), jamais modifiées.
-   * keys : { contract: en-tête du n° de contrat, code: en-tête du code OPE } (résolus par l'Observatoire). */
+   * keys : { contract, code, name : en-têtes du n° de contrat, du code OPE et du nom (résolus par l'Observatoire) }. */
   function merge(rows, payload, keys = {}) {
-    const stats = { buildings: 0, operations: 0, matchedOperations: 0, unmatchedOperations: 0, conflicts: 0, mismatches: 0, filledCells: 0, ecarts: 0, rowsCompleted: 0, addedColumns: [] };
-    const details = { unmatched: [], conflicts: [], mismatches: [], ecarts: [] };
+    const stats = { buildings: 0, operations: 0, matchedOperations: 0, unmatchedOperations: 0, conflicts: 0, mismatches: 0, filledCells: 0, correctedCells: 0, ecarts: 0, rowsCompleted: 0, addedRows: 0, addedColumns: [] };
+    const details = { unmatched: [], conflicts: [], mismatches: [], ecarts: [], corrected: [] };
     if (!Array.isArray(rows) || !rows.length || !payload || !Array.isArray(payload.buildings)) return { rows: Array.isArray(rows) ? rows : [], stats, details };
     const headers = Object.keys(rows[0] || {});
     const headerByNorm = new Map(headers.map(h => [normHeader(h), h]));
@@ -79,27 +96,40 @@
       if (!target) { stats.unmatchedOperations++; push(details.unmatched, { contract: op.contract, ope: op.ope }); continue; }
       stats.matchedOperations++;
       const k = target.length, n = op.buildings.length;
-      // Lignes du Sheet déjà découpées par bâtiment : appariement dans l'ordre ; sinon les premières seulement.
+      // Lignes du Sheet déjà découpées par bâtiment : appariement dans l'ordre. Bâtiments en plus : lignes ajoutées.
       if (k !== n) { stats.mismatches++; push(details.mismatches, { contract: op.contract, ope: op.ope, sheetRows: k, buildings: n }); }
-      op.buildings.slice(0, Math.min(k, n)).forEach((b, i) => {
-        const row = out[target[i]]; let filled = 0;
+      op.buildings.forEach((b, i) => {
+        let ri = i < k ? target[i] : -1;
+        if (ri < 0) {
+          // Identifiants de l'opération seulement : les colonnes de l'opération (logements, statut…) restent sur la 1re ligne.
+          const tpl = out[target[0]], extra = {};
+          headers.forEach(h => { extra[h] = ''; });
+          [keys.code, keys.contract, keys.name].forEach(h => { if (h && h in tpl) extra[h] = tpl[h]; });
+          Object.defineProperty(extra, '__recollExtra', { value: true });
+          out.push(extra); ri = out.length - 1; stats.addedRows++;
+        }
+        const row = out[ri]; let filled = 0, fixed = 0;
         for (const [col, v] of Object.entries(b.cells)) {
           if (isEmpty(v)) continue;
           const nk = normHeader(col);
           let h = headerByNorm.get(nk);
           if (!h) { h = col; headerByNorm.set(nk, h); headers.push(h); added.add(h); }
           if (isEmpty(row[h])) { row[h] = v; filled++; continue; }
-          if (!same(row[h], v)) { stats.ecarts++; push(details.ecarts, { contract: op.contract, ope: op.ope, building: b.building, column: h, sheet: row[h], totalrecoll: v }); }
+          if (same(row[h], v)) continue;
+          const ok = formatOf(h);
+          if (ok && !ok(row[h]) && ok(v)) { stats.correctedCells++; push(details.corrected, { contract: op.contract, ope: op.ope, building: b.building, column: h, sheet: row[h], totalrecoll: v }); row[h] = v; fixed++; continue; }
+          stats.ecarts++; push(details.ecarts, { contract: op.contract, ope: op.ope, building: b.building, column: h, sheet: row[h], totalrecoll: v });
         }
-        if (filled) { stats.filledCells += filled; touched.add(target[i]); }
+        stats.filledCells += filled;
+        if (filled || fixed) touched.add(ri);
       });
     }
-    stats.rowsCompleted = touched.size;
+    stats.rowsCompleted = [...touched].filter(i => i < rows.length).length;
     stats.addedColumns = [...added];
     // Colonnes ajoutées présentes sur toutes les lignes : l'Observatoire lit les en-têtes sur la 1re ligne.
     if (added.size) out.forEach(r => { added.forEach(h => { if (!(h in r)) r[h] = ''; }); });
     return { rows: out, stats, details };
   }
 
-  return { MESSAGE_TYPE, normContract, normOpe, normHeader, validatePayload, merge };
+  return { MESSAGE_TYPE, normContract, normOpe, normHeader, isEmpty, validatePayload, merge };
 });

@@ -998,7 +998,43 @@ section('14. Complément TotalRecoll (newosb-recoll.js) — V6.49');
   test('en-têtes rapprochés sans accents ni casse', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'CEP PROJET': 81 } }])), K); assert.strictEqual(r.rows[3]['Cep projet'], 81); assert.deepStrictEqual(r.stats.addedColumns, []); });
   test('contrat et OPE de deux opérations différentes : conflit, rien n’est écrit', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '1234', ope: 'OPE-000102', cells: { 'Cep projet': 99 } }])), K); assert.strictEqual(r.stats.conflicts, 1); assert(r.rows.every(x => x['Cep projet'] !== 99)); });
   test('opération absente du Sheet signalée, jamais ajoutée', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '9999', cells: { 'Cep projet': 1 } }])), K); assert.strictEqual(r.stats.unmatchedOperations, 1); assert.strictEqual(r.rows.length, 4); });
-  test('nombre de bâtiments différent : premières lignes seulement, signalé', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '1235', cells: { 'Bbio projet': 1 } }, { contract: '1235', cells: { 'Bbio projet': 2 } }])), K); assert.strictEqual(r.stats.mismatches, 1); assert.strictEqual(r.rows[2]['Bbio projet'], 1); assert.strictEqual(r.rows.length, 4); });
+  test('V6.50 — bâtiments en plus du Sheet : lignes ajoutées à l’opération (identifiants + valeurs ExtracTerre seulement)', () => {
+    const base = sheet(); base[2]['Nom de l’opération'] = 'Résidence test'; base[2]['Total logements'] = '40';
+    base.forEach((r, i) => { if (i !== 2) { r['Nom de l’opération'] = ''; r['Total logements'] = ''; } });
+    const r = RC.merge(base, RC.validatePayload(msg([{ contract: '1235', cells: { 'Bbio projet': 1 } }, { contract: '1235', building: 'B', cells: { 'Bbio projet': 2, 'Cep projet': 75 } }])), { ...K, name: 'Nom de l’opération' });
+    assert.strictEqual(r.stats.mismatches, 1); assert.strictEqual(r.stats.addedRows, 1); assert.strictEqual(r.rows.length, 5);
+    assert.strictEqual(r.rows[2]['Bbio projet'], 1);
+    const x = r.rows[4]; assert.strictEqual(x.__recollExtra, true); assert(!Object.keys(x).includes('__recollExtra'));
+    assert.deepStrictEqual(Object.keys(x), Object.keys(r.rows[0]));
+    assert.strictEqual(x['Opération: Code interne'], 'OPE-102'); assert.strictEqual(x['Numéro du contrat'], '1235'); assert.strictEqual(x['Nom de l’opération'], 'Résidence test');
+    assert.strictEqual(x['Total logements'], ''); assert.strictEqual(x['Bbio projet'], 2); assert.strictEqual(x['Cep projet'], 75);
+    assert.strictEqual(r.stats.rowsCompleted, 1);
+  });
+  test('V6.50 — bouche-trous du Sheet (NC, -, #N/A…) remplis comme des cellules vides', () => {
+    const base = sheet(); base[3]['Cep projet'] = 'NC'; base[3]['Bbio projet'] = ' - ';
+    const r = RC.merge(base, RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'Cep projet': 80, 'Bbio projet': 40 } }])), K);
+    assert.strictEqual(r.rows[3]['Cep projet'], 80); assert.strictEqual(r.rows[3]['Bbio projet'], 40); assert.strictEqual(r.stats.filledCells, 2); assert.strictEqual(r.stats.ecarts, 0);
+    assert(RC.isEmpty('#N/A') && RC.isEmpty('n/c') && !RC.isEmpty('0') && !RC.isEmpty('Non'));
+  });
+  test('V6.50 — code postal, INSEE, coordonnées ou année illisibles dans le Sheet corrigés par ExtracTerre ; valeur lisible différente = écart', () => {
+    const base = sheet(); Object.assign(base[3], { 'Code postal': 'Jean DUPONT', 'Code INSEE': 'x', 'Latitude': '0', 'Année': 'ancien' }); Object.assign(base[2], { 'Code postal': '75011' });
+    base.forEach((r, i) => { if (i < 2) Object.assign(r, { 'Code postal': '', 'Code INSEE': '', 'Latitude': '', 'Année': '' }); if (i === 2) Object.assign(r, { 'Code INSEE': '', 'Latitude': '', 'Année': '' }); });
+    const r = RC.merge(base, RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'Code postal': '89000', 'Code INSEE': '89024', 'Latitude': 47.79, 'Année': 1968 } }, { contract: '1235', cells: { 'Code postal': '75012' } }])), K);
+    assert.deepStrictEqual([r.rows[3]['Code postal'], r.rows[3]['Code INSEE'], r.rows[3]['Latitude'], r.rows[3]['Année']], ['89000', '89024', 47.79, 1968]);
+    assert.strictEqual(r.stats.correctedCells, 4); assert.strictEqual(r.details.corrected[0].sheet, 'Jean DUPONT');
+    assert.strictEqual(r.rows[2]['Code postal'], '75011'); assert.strictEqual(r.stats.ecarts, 1); assert.strictEqual(r.stats.filledCells, 0);
+  });
+  test('V6.50 — une valeur ExtracTerre hors format ne corrige jamais le Sheet', () => {
+    const base = sheet(); base[3]['Code postal'] = 'Jean DUPONT';
+    const r = RC.merge(base, RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'Code postal': 'Auxerre' } }])), K);
+    assert.strictEqual(r.rows[3]['Code postal'], 'Jean DUPONT'); assert.strictEqual(r.stats.correctedCells, 0); assert.strictEqual(r.stats.ecarts, 1);
+  });
+  test('V6.50 — lignes ajoutées exclues du contrôle ligne à ligne de l’avancement ; apport affiché champ par champ', () => {
+    const a = read('app.js');
+    assert(a.includes('if(r.__recollExtra)return;')); assert(a.includes('sourceRows:rows.length-nExtra'));
+    assert(a.includes('rc.gains=dataRecollGains(rows,res.rows,keys)')); assert(a.includes('data-recoll-gains'));
+    assert(a.includes("name:h('name')"));
+  });
   test('message refusé : mauvais type, mauvaise version, valeurs non simples écartées', () => {
     assert.strictEqual(RC.validatePayload({ type: 'autre', v: 1, buildings: [] }), null);
     assert.strictEqual(RC.validatePayload({ type: RC.MESSAGE_TYPE, v: 2, buildings: [] }), null);

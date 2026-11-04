@@ -1,5 +1,17 @@
 # Historique
 
+## V6.50
+
+- **Complément TotalRecoll plus utile** (analyse sur le Sheet réel : seules ~150 opérations recevaient des données, et une seule ligne par opération) :
+  - **tous les bâtiments** d’une opération sont repris : quand le Sheet n’a qu’une ligne pour une opération à plusieurs bâtiments, les bâtiments suivants sont ajoutés à l’opération (identifiants + valeurs ExtracTerre seulement, en mémoire) ; leurs valeurs comptent dans les moyennes et les répartitions, sans changer les nombres d’opérations, de logements ni le contrôle de l’avancement ;
+  - une cellule du Sheet qui n’est qu’un **bouche-trou** (« NC », « - », « #N/A », « n/d »…) est remplie comme une cellule vide ;
+  - **code postal, code INSEE, latitude, longitude ou année illisibles** dans le Sheet (ex. un nom de personne dans « Code postal ») sont remplacés par la valeur ExtracTerre si elle est valide, et listés à part (« Voir les valeurs illisibles corrigées ») ; une valeur lisible différente reste un écart (Sheet conservé) ;
+  - le panneau montre **ce que le complément apporte, champ par champ** : nombre d’opérations renseignées avant → avec le complément (ville, coordonnées, chauffage, isolants, Bbio, Cep, DH, IC…).
+- Toujours rien de stocké ni d’envoyé ; les liens partagés lisent le Sheet seul.
+
+**Écran de chargement**
+- Petit plomb de scellé rouge accroché au raccord du compteur d’eau.
+
 ## V6.49
 
 - **Complément TotalRecoll** (fenêtre Données, source Apps Script) : « Ouvrir TotalRecoll », faire le recollement, puis « Envoyer à l’Observatoire » dans TotalRecoll. Les valeurs techniques ExtracTerre remplissent uniquement les cellules **vides** du Sheet OPERATIONS (et ajoutent les colonnes qu’il n’a pas, ex. DH ZT) ; une valeur déjà présente dans le Sheet est gardée et listée comme écart.

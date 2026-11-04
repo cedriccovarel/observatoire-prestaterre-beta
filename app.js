@@ -6981,6 +6981,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       // V6.13.6 : décompte ligne à ligne de ce qui est lu en BC, en « État du dossier », ou absent.
       const rc={primary:{},fallback:{},proposal:0,emptyCoded:0,noCode:0,noCodeFromFallback:0,invalid:{primary:new Map(),fallback:new Map()},invalidCount:0,invalidTotals:{primary:0,fallback:0}};
       rows.forEach(r=>{
+        if(r.__recollExtra)return; // V6.50 : bâtiment ajouté par le complément TotalRecoll, pas une ligne du Sheet
         const hasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
         const p=DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{state:'empty',source:'none'};
         if(!hasCode)rc.noCode++;
@@ -6998,7 +6999,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       if(!pd.fallback?.header&&rc.proposal>0)pd.message+=` ⚠ Colonne « ${DATA_RULES?.PROGRESS_FALLBACK_HEADER||'État du dossier'} » introuvable : ${rc.proposal.toLocaleString('fr-FR')} lignes sans code interne n’ont aucun avancement.`;}
       const conflicts=[];
       grouped.forEach(g=>{const keys=[...new Set((g.rawRows||[]).map(r=>(DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback).key:'unknown')).filter(k=>k!=='unknown'))];if(keys.length>1)conflicts.push({code:g.code,name:g.name,keys,retained:g.status});});
-      pd.reconciliation={sourceRows:rows.length,rowsWithStatus:filled,rowsWithoutCode:noCode,rowsWithoutIdentity:rows.length-mapped.length,projects:grouped.size,multiRowProjects:[...grouped.values()].filter(g=>(g.rawRows||[]).length>1).length,excludedProjects:[...grouped.values()].filter(g=>g.analysisExcluded).length,conflicts:conflicts.slice(0,200),conflictCount:conflicts.length};
+      const nExtra=rows.filter(r=>r.__recollExtra).length;pd.reconciliation={sourceRows:rows.length-nExtra,rowsWithStatus:filled,rowsWithoutCode:noCode,rowsWithoutIdentity:rows.length-mapped.length,projects:grouped.size,multiRowProjects:[...grouped.values()].filter(g=>(g.rawRows||[]).length>1).length,excludedProjects:[...grouped.values()].filter(g=>g.analysisExcluded).length,conflicts:conflicts.slice(0,200),conflictCount:conflicts.length};
       pd.valueCounts=[...counts.values()].sort((a,b)=>b.count-a.count);
     }
     return [...grouped.values()];
@@ -7329,11 +7330,19 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   // envoyé. Les liens partagés lisent toujours le Sheet seul (le script ne connaît pas ce complément).
   const DATA_TOTALRECOLL_URL='https://cedriccovarel.github.io/TotalRecoll/';
   let dataRecollWin=null;
-  function dataRecollKeys(rows){const headers=Object.keys(rows[0]||{}),h=k=>{const i=dataResolveHeader(headers,DATA_FIELD_ALIASES[k],k);return i>=0?headers[i]:null;};return {code:h('code'),contract:h('contractNumber')};}
+  function dataRecollKeys(rows){const headers=Object.keys(rows[0]||{}),h=k=>{const i=dataResolveHeader(headers,DATA_FIELD_ALIASES[k],k);return i>=0?headers[i]:null;};return {code:h('code'),contract:h('contractNumber'),name:h('name')};}
   function dataRecollRows(rows){const R=window.NEWOSB_RECOLL,rc=dataRuntime.recoll;if(!R||!rc?.payload||!Array.isArray(rows)||!rows.length)return rows;
-    const res=R.merge(rows,rc.payload,dataRecollKeys(rows));rc.stats=res.stats;rc.details=res.details;rc.appliedAt=Date.now();
+    const keys=dataRecollKeys(rows),res=R.merge(rows,rc.payload,keys);rc.stats=res.stats;rc.details=res.details;rc.appliedAt=Date.now();
+    rc.gains=dataRecollGains(rows,res.rows,keys);
     if(Array.isArray(dataRuntime.sourceHeaders))res.stats.addedColumns.forEach(h=>{if(!dataRuntime.sourceHeaders.includes(h))dataRuntime.sourceHeaders.push(h);});
     return res.rows;}
+  // V6.50 : ce que le complément apporte, champ par champ de l'Observatoire : opérations renseignées avant → après.
+  const DATA_RECOLL_GAIN_FIELDS=[['city','Ville'],['postalCode','Code postal'],['insee','Code INSEE'],['latitude','Coordonnées GPS'],['address','Adresse'],['constructionYear','Année de construction'],['structure','Mode constructif'],['wallInsulation','Isolant des façades'],['roofInsulation','Isolant des toitures'],['floorInsulation','Isolant des planchers bas'],['windowMaterial','Menuiseries'],['heatingAfter','Chauffage après travaux'],['ecsAfter','ECS après travaux'],['ventilation','Ventilation'],['cooling','Refroidissement'],['bbio','Bbio'],['cep','Cep'],['cepnr','Cep,nr'],['ubatAfter','Ubat'],['dh','DH'],['tic','Tic'],['icEnergy','IC énergie'],['icConstruction','IC construction'],['dpeEnergyBefore','DPE avant travaux'],['dpeEnergyAfter','DPE après travaux']];
+  function dataRecollGains(before,after,keys){const R=window.NEWOSB_RECOLL;if(!R||!before?.length||!after?.length)return[];
+    const opOf=r=>(keys.code&&R.normOpe(r[keys.code]))||(keys.contract&&R.normContract(r[keys.contract]))||(keys.code&&String(r[keys.code]??'').trim())||'';
+    const count=(rows,h)=>{if(!h)return 0;const s=new Set();rows.forEach(r=>{if(!R.isEmpty(r[h])){const k=opOf(r);if(k)s.add(k);}});return s.size;};
+    const hb=Object.keys(before[0]||{}),ha=Object.keys(after[0]||{}),res=(hs,k)=>{const i=dataResolveHeader(hs,DATA_FIELD_ALIASES[k],k);return i>=0?hs[i]:null;};
+    return DATA_RECOLL_GAIN_FIELDS.map(([k,label])=>({key:k,label,before:count(before,res(hb,k)),after:count(after,res(ha,k))})).filter(g=>g.after>g.before);}
   function dataRecollRebuild(){const rows=dataRuntime.sourceMeta?.rows;if(!dataRuntime.connected||dataRuntime.mode!=='appsScript'||!Array.isArray(rows)||!rows.length)return false;
     const ops=dataRowsToOperations(dataRecollRows(rows));if(!ops.length)return false;
     dataRuntime.sourceOperations=ops;dataRuntime.operations=dataPrivacyApply(ops);dataRuntime.filtered=[...dataRuntime.operations];
@@ -7352,15 +7361,17 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     if(!rc||!s)return `<div class="data-recoll"><b>Complément TotalRecoll</b>${intro}<p class="data-recoll-status">Aucun complément. Ouvre TotalRecoll, fais le recollement puis clique sur « Envoyer à l’Observatoire ».</p>${actions}</div>`;
     const when=new Date(rc.receivedAt).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'});
     const lines=[`Reçu le ${when} : ${pl(s.buildings,'bâtiment','bâtiments')} (${pl(s.operations,'opération','opérations')}).`,
-      `${pl(s.matchedOperations,'opération retrouvée','opérations retrouvées')} dans le Sheet · ${pl(s.rowsCompleted,'ligne complétée','lignes complétées')} · ${pl(s.filledCells,'cellule vide remplie','cellules vides remplies')}.`];
-    if(s.addedColumns.length)lines.push(`Colonnes absentes du Sheet ajoutées : ${s.addedColumns.join(', ')}.`);
-    const warn=[];if(s.ecarts)warn.push(`${pl(s.ecarts,'écart','écarts')} (valeur du Sheet conservée)`);if(s.unmatchedOperations)warn.push(`${pl(s.unmatchedOperations,'opération absente','opérations absentes')} du Sheet`);if(s.conflicts)warn.push(`${pl(s.conflicts,'conflit','conflits')} contrat / OPE (ignorés)`);if(s.mismatches)warn.push(`${pl(s.mismatches,'opération dont','opérations dont')} le nombre de bâtiments diffère du Sheet`);
+      `${pl(s.matchedOperations,'opération retrouvée','opérations retrouvées')} dans le Sheet · ${pl(s.rowsCompleted,'ligne complétée','lignes complétées')} · ${pl(s.filledCells,'cellule vide remplie','cellules vides remplies')}${s.correctedCells?` · ${pl(s.correctedCells,'valeur illisible corrigée','valeurs illisibles corrigées')}`:''}${s.addedRows?` · ${pl(s.addedRows,'bâtiment ajouté','bâtiments ajoutés')} aux opérations qui n’avaient qu’une ligne`:''}.`];
+    const gains=(rc.gains||[]).map(g=>`<li><span>${esc(g.label)}</span><b>${f(g.before)} → ${f(g.after)}</b></li>`).join('');
+    const warn=[];if(s.ecarts)warn.push(`${pl(s.ecarts,'écart','écarts')} (valeur du Sheet conservée)`);if(s.unmatchedOperations)warn.push(`${pl(s.unmatchedOperations,'opération absente','opérations absentes')} du Sheet`);if(s.conflicts)warn.push(`${pl(s.conflicts,'conflit','conflits')} contrat / OPE (ignorés)`);
     const d=rc.details||{},list=(title,items,fmt)=>items?.length?`<details class="data-uncounted"><summary>${esc(title)}</summary>${items.map(x=>`<p>${esc(fmt(x))}</p>`).join('')}</details>`:'';
-    return `<div class="data-recoll is-on"><b>Complément TotalRecoll actif</b>${intro}${lines.map(l=>`<p class="data-recoll-status">${esc(l)}</p>`).join('')}${warn.length?`<p class="data-recoll-warn">${esc(warn.join(' · '))}.</p>`:''}
+    return `<div class="data-recoll is-on"><b>Complément TotalRecoll actif</b>${intro}${lines.map(l=>`<p class="data-recoll-status">${esc(l)}</p>`).join('')}${gains?`<p class="data-recoll-gain-title">Opérations renseignées, avant → avec le complément</p><ul class="data-recoll-gains">${gains}</ul>`:''}${warn.length?`<p class="data-recoll-warn">${esc(warn.join(' · '))}.</p>`:''}
       ${list('Voir les écarts',d.ecarts,x=>`${id(x)}${x.building?` · ${x.building}`:''} · ${x.column} : Sheet « ${x.sheet} », TotalRecoll « ${x.totalrecoll} »`)}
       ${list('Voir les opérations absentes du Sheet',d.unmatched,id)}
       ${list('Voir les conflits',d.conflicts,x=>`${id(x)} : le contrat et l’OPE désignent deux opérations différentes du Sheet`)}
-      ${list('Voir les nombres de bâtiments différents',d.mismatches,x=>`${id(x)} : ${x.sheetRows} ligne(s) dans le Sheet, ${x.buildings} bâtiment(s) dans TotalRecoll — seuls les ${Math.min(x.sheetRows,x.buildings)} premiers complètent le Sheet`)}${actions}</div>`;}
+      ${list('Voir les valeurs illisibles corrigées',d.corrected,x=>`${id(x)}${x.building?` · ${x.building}`:''} · ${x.column} : Sheet « ${x.sheet} » → « ${x.totalrecoll} »`)}
+      ${list('Voir les nombres de bâtiments différents',d.mismatches,x=>`${id(x)} : ${x.sheetRows} ligne(s) dans le Sheet, ${x.buildings} bâtiment(s) dans TotalRecoll — ${x.buildings>x.sheetRows?`${x.buildings-x.sheetRows} bâtiment(s) ajouté(s) à l’opération`:`seuls les ${x.buildings} premiers bâtiments complètent le Sheet`}`)}
+      ${s.addedColumns.length?list('Voir les colonnes ajoutées (absentes du Sheet)',[s.addedColumns.join(', ')],x=>x):''}${actions}</div>`;}
   window.addEventListener('message',e=>{const R=window.NEWOSB_RECOLL;if(!R||e.data?.type!==R.MESSAGE_TYPE)return;
     // Seul l'onglet TotalRecoll ouvert depuis cet Observatoire, sur la même origine, est écouté.
     if(e.origin!==location.origin||!dataRecollWin||e.source!==dataRecollWin)return;
