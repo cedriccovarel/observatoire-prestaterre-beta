@@ -1,5 +1,12 @@
 # Historique
 
+## V6.48
+
+- Graphiques **Labels** (Certification par année, Territoires par région) : le nombre d'opérations est écrit dans chaque segment de l'empilement (quand le segment est assez grand pour être lisible ; sinon au survol), en plus du total conservé au-dessus / au bout de la barre.
+
+**Écran de chargement**
+- Quatre repères de graduation autour du cadran du compteur d'eau.
+
 ## V6.47
 
 - **⚙ Personnaliser** (barre latérale) : sur chaque onglet (sauf Exigences et Présentation), déplacer les encarts (glisser-déposer ou ↑ ↓, ← → dans une ligne de 2-3 encarts) et masquer ceux qui ne servent pas. Réglage mémorisé par onglet dans ce navigateur ; « Réinitialiser cet onglet » revient à l'affichage d'origine ; « Terminer » ou Échap pour sortir.

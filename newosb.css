@@ -1480,7 +1480,7 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-hstack-row{display:grid;grid-template-columns:minmax(120px,210px) 1fr 48px;gap:10px;align-items:center;font-size:12px}
 .obs-hstack-row>b{font-weight:600;color:#173b2c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .obs-hstack-row>strong{text-align:right;color:#173b2c}
-.obs-hstack-track{height:16px;background:#edf2ef;border-radius:4px}
+.obs-hstack-track{height:20px;background:#edf2ef;border-radius:4px}
 .obs-hstack-bar{display:flex;gap:2px;height:100%;border-radius:4px;overflow:hidden}
 .obs-hstack-bar span{min-width:2px;height:100%}
 .obs-housing-table tr.is-total td{border-top:2px solid #cfe0d7;font-weight:700}
@@ -1518,3 +1518,5 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-label-group-form{display:flex;gap:8px;flex-wrap:wrap}.obs-label-group-form input{flex:1;min-width:200px;padding:7px 10px;border:1px solid #cfe0d7;border-radius:8px;font:inherit}
 .obs-label-group-help{color:#5e7168}
 .obs-card-action.is-active{background:#06402b;color:#fff}
+.obs-label-year-chart .obs-status-year-stack span{display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--seg-ink,#fff);font-size:10px;font-weight:800;line-height:1}
+.obs-hstack-bar span{display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:10px;font-weight:800;line-height:1}
