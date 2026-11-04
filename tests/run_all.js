@@ -972,6 +972,43 @@ atest('onglet Exigences : filtre « Type de programme » (ordre de la liste, cum
   assert(read('requirements.js').includes("${checkFilter('programType','Type de programme',o.programType)}"));
 });
 
+section('14. Complément TotalRecoll (newosb-recoll.js) — V6.49');
+{
+  const RC = require(path.join(ROOT, 'newosb-recoll.js'));
+  const K = { contract: 'Numéro du contrat', code: 'Opération: Code interne' };
+  const sheet = () => [
+    { 'Numéro du contrat': '00001234', 'Opération: Code interne': 'OPE-000101', 'Cep projet': '', 'Bbio projet': '45' },
+    { 'Numéro du contrat': '00001234', 'Opération: Code interne': 'OPE-000101', 'Cep projet': '', 'Bbio projet': '' },
+    { 'Numéro du contrat': '1235', 'Opération: Code interne': 'OPE-102', 'Cep projet': '70', 'Bbio projet': '' },
+    { 'Numéro du contrat': '', 'Opération: Code interne': 'OPE-000103', 'Cep projet': '', 'Bbio projet': '' }
+  ];
+  const msg = buildings => ({ type: RC.MESSAGE_TYPE, v: 1, buildings });
+  test('remplit seulement les cellules vides, bâtiments appariés dans l’ordre', () => {
+    const p = RC.validatePayload(msg([{ contract: '1234', ope: 'OPE-101', cells: { 'Cep projet': 61, 'Bbio projet': 50 } }, { contract: '00001234', cells: { 'Cep projet': 62, 'Bbio projet': 51 } }]));
+    const r = RC.merge(sheet(), p, K);
+    assert.strictEqual(r.rows[0]['Cep projet'], 61); assert.strictEqual(r.rows[0]['Bbio projet'], '45');
+    assert.strictEqual(r.rows[1]['Cep projet'], 62); assert.strictEqual(r.rows[1]['Bbio projet'], 51);
+    assert.strictEqual(r.stats.filledCells, 3); assert.strictEqual(r.stats.ecarts, 1); assert.strictEqual(r.stats.rowsCompleted, 2);
+    assert.deepStrictEqual(r.details.ecarts[0], { contract: '00001234', ope: 'OPE-000101', building: '', column: 'Bbio projet', sheet: '45', totalrecoll: 50 });
+  });
+  test('les lignes du Sheet ne sont jamais modifiées (copie)', () => { const base = sheet(); RC.merge(base, RC.validatePayload(msg([{ contract: '1234', cells: { 'Cep projet': 61 } }])), K); assert.strictEqual(base[0]['Cep projet'], ''); });
+  test('valeur identique (format numérique différent) : ni écart ni remplissage', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '1235', cells: { 'Cep projet': '70,0' } }])), K); assert.strictEqual(r.stats.ecarts, 0); assert.strictEqual(r.stats.filledCells, 0); });
+  test('rattachement par OPE quand le contrat est absent du Sheet', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ ope: 'ope 103', cells: { 'Cep projet': 80 } }])), K); assert.strictEqual(r.rows[3]['Cep projet'], 80); assert.strictEqual(r.stats.matchedOperations, 1); });
+  test('colonne absente du Sheet ajoutée sur toutes les lignes (en-têtes lus sur la 1re ligne)', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'DH ZT': 420 } }])), K); assert.deepStrictEqual(r.stats.addedColumns, ['DH ZT']); assert('DH ZT' in r.rows[0]); assert.strictEqual(r.rows[3]['DH ZT'], 420); });
+  test('en-têtes rapprochés sans accents ni casse', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ ope: 'OPE-000103', cells: { 'CEP PROJET': 81 } }])), K); assert.strictEqual(r.rows[3]['Cep projet'], 81); assert.deepStrictEqual(r.stats.addedColumns, []); });
+  test('contrat et OPE de deux opérations différentes : conflit, rien n’est écrit', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '1234', ope: 'OPE-000102', cells: { 'Cep projet': 99 } }])), K); assert.strictEqual(r.stats.conflicts, 1); assert(r.rows.every(x => x['Cep projet'] !== 99)); });
+  test('opération absente du Sheet signalée, jamais ajoutée', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '9999', cells: { 'Cep projet': 1 } }])), K); assert.strictEqual(r.stats.unmatchedOperations, 1); assert.strictEqual(r.rows.length, 4); });
+  test('nombre de bâtiments différent : premières lignes seulement, signalé', () => { const r = RC.merge(sheet(), RC.validatePayload(msg([{ contract: '1235', cells: { 'Bbio projet': 1 } }, { contract: '1235', cells: { 'Bbio projet': 2 } }])), K); assert.strictEqual(r.stats.mismatches, 1); assert.strictEqual(r.rows[2]['Bbio projet'], 1); assert.strictEqual(r.rows.length, 4); });
+  test('message refusé : mauvais type, mauvaise version, valeurs non simples écartées', () => {
+    assert.strictEqual(RC.validatePayload({ type: 'autre', v: 1, buildings: [] }), null);
+    assert.strictEqual(RC.validatePayload({ type: RC.MESSAGE_TYPE, v: 2, buildings: [] }), null);
+    const p = RC.validatePayload(msg([{ contract: '1234', cells: { a: { x: 1 }, b: [1], c: 'ok', d: 3 } }, { cells: { e: 1 } }]));
+    assert.deepStrictEqual(p.buildings.length, 1); assert.deepStrictEqual(p.buildings[0].cells, { c: 'ok', d: 3 });
+  });
+  test('l’Observatoire n’écoute que l’onglet TotalRecoll qu’il a ouvert, sur la même origine', () => { const a = read('app.js'); assert(a.includes("e.origin!==location.origin||!dataRecollWin||e.source!==dataRecollWin")); });
+  test('le complément n’est ni stocké ni envoyé au script', () => { const a = read('app.js'), seg = a.slice(a.indexOf('V6.49 : complément TotalRecoll'), a.indexOf('// Où est passée une opération')); assert(!/localStorage|sessionStorage|indexedDB|dataAppsScriptRequest|fetch\(/.test(seg)); assert(!/localStorage|sessionStorage|fetch\(/.test(read('newosb-recoll.js'))); });
+}
+
 section('7. Cohérence du paquet');
 const index = read('index.html'), gen = read('generator.html');
 const scripts = h => [...h.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]);
@@ -981,7 +1018,7 @@ test('l’Observatoire et le générateur chargent la même version d’app.js',
 test('tous les fichiers référencés existent', () => { for (const h of [index, gen]) for (const f of [...scripts(h), ...[...h.matchAll(/href="([^"?#:]+\.(?:css|png))/g)].map(m => m[1])]) assert(fs.existsSync(path.join(ROOT, f)), f); });
 test('un seul script Apps Script OPERATIONS à la racine (pas de doGet en double)', () => assert(!fs.existsSync(path.join(ROOT, 'Code.gs'))));
 test('plus de copie périmée du script dans app.js', () => assert(!/NEWOSB V05\.22\\n \* Source OPERATIONS/.test(read('app.js'))));
-test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-loader.js', 'newosb-mentions.js', 'mentions_catalog.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
+test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-loader.js', 'newosb-mentions.js', 'mentions_catalog.js', 'newosb-recoll.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
 test('l’avancement n’est plus déduit de « État du dossier » ni du statut commercial', () => { const a = read('app.js'); assert(!a.includes('dataRawValue(r,fields.status)||dataRawValue(r,fields.dossierState)||affairStage')); });
 
 (async () => {

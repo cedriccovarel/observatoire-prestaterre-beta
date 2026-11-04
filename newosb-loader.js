@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.48 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.49 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -647,6 +647,8 @@
     if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     // V6.44 : petite étiquette « m³ » sous le cadran du compteur (même pendant les mouvements réduits).
     ctx.fillStyle = '#5d7480'; ctx.font = '600 3px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('m³', x + 7, y + 12.6); ctx.textAlign = 'start';
+    // V6.49 : petit moyeu sombre au pivot de l'aiguille, au centre du cadran.
+    ctx.fillStyle = '#3d4a50'; ctx.beginPath(); ctx.arc(x + 7, y + 6, 0.7, 0, Math.PI * 2); ctx.fill();
     // V6.48 : quatre repères de graduation autour du cadran.
     ctx.strokeStyle = '#2f7fbf'; ctx.lineWidth = 0.5; for (let q = 0; q < 4; q++) { const ga = q * Math.PI / 2; ctx.beginPath(); ctx.moveTo(x + 7 + Math.cos(ga) * 2.9, y + 6 + Math.sin(ga) * 2.9); ctx.lineTo(x + 7 + Math.cos(ga) * 3.6, y + 6 + Math.sin(ga) * 3.6); ctx.stroke(); }
     // V6.47 : collier de raccord bleu où le tuyau sort du boîtier du compteur.

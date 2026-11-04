@@ -1520,3 +1520,11 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-card-action.is-active{background:#06402b;color:#fff}
 .obs-label-year-chart .obs-status-year-stack span{display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--seg-ink,#fff);font-size:10px;font-weight:800;line-height:1}
 .obs-hstack-bar span{display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:10px;font-weight:800;line-height:1}
+/* V6.49 — complément TotalRecoll */
+.data-recoll{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px dashed #b9d3c6;background:#f7fbf9}
+.data-recoll.is-on{border-style:solid;border-color:#0b6b4a;background:#eef7f2}
+.data-recoll>b{display:block;color:#06402b}
+.data-recoll-note{margin:4px 0 6px;font-size:.92em;color:#4a6158}
+.data-recoll-status{margin:4px 0 0}
+.data-recoll-warn{margin:6px 0 0;padding:6px 8px;border-radius:8px;background:#fff4d6;color:#7a5200}
+.data-recoll-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}

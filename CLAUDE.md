@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.49 | Petit moyeu sombre au pivot de l'aiguille du compteur d'eau. |
 | V6.48 | Quatre repères de graduation autour du cadran du compteur d'eau. |
 | V6.47 | Collier de raccord bleu à la sortie du tuyau du compteur d'eau. |
 | V6.46 | Deux vis de fixation en haut du boîtier du compteur d'eau. |
@@ -55,3 +56,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   l'Observatoire (postMessage, même origine) les lignes source des opérations affichées (converties par Obslide) et
   les lignes RAPPORT affichées par l'onglet Exigences (ses propres filtres) ; rien n'est stocké. Scénario e2e K
   (`OBSLIDE_DIR=/chemin/obslide` pour tester avec le vrai Obslide).
+- Complément TotalRecoll (V6.49, `newosb-recoll.js`) : TotalRecoll (dépôt `cedriccovarel/TotalRecoll`, même origine) envoie par
+  postMessage les valeurs ExtracTerre par bâtiment à l'onglet Observatoire qui l'a ouvert ; elles ne remplissent que les cellules
+  vides du Sheet, en mémoire seulement (jamais stockées, jamais envoyées au script). Les liens partagés lisent le Sheet seul.
+  Scénario e2e L (`TOTALRECOLL_DIR=/chemin/TotalRecoll` pour tester avec le vrai TotalRecoll).

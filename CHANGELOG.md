@@ -1,5 +1,15 @@
 # Historique
 
+## V6.49
+
+- **Complément TotalRecoll** (fenêtre Données, source Apps Script) : « Ouvrir TotalRecoll », faire le recollement, puis « Envoyer à l’Observatoire » dans TotalRecoll. Les valeurs techniques ExtracTerre remplissent uniquement les cellules **vides** du Sheet OPERATIONS (et ajoutent les colonnes qu’il n’a pas, ex. DH ZT) ; une valeur déjà présente dans le Sheet est gardée et listée comme écart.
+- Rapprochement par n° de contrat (0000xxxx) puis code OPE ; bâtiments appariés dans l’ordre des lignes du Sheet. Opérations absentes du Sheet, conflits contrat / OPE et nombres de bâtiments différents sont signalés, jamais ajoutés.
+- Rien n’est stocké ni envoyé : échange d’onglet à onglet (même origine, seul l’onglet TotalRecoll ouvert par l’Observatoire est écouté), complément gardé en mémoire de l’onglet et réappliqué à « Recharger ». « Retirer le complément » revient au Sheet seul.
+- Les liens partagés continuent de lire le Sheet seul (le script OPERATIONS ne connaît pas le complément).
+
+**Écran de chargement**
+- Petit moyeu sombre au pivot de l’aiguille du compteur d’eau.
+
 ## V6.48
 
 - Graphiques **Labels** (Certification par année, Territoires par région) : le nombre d'opérations est écrit dans chaque segment de l'empilement (quand le segment est assez grand pour être lisible ; sinon au survol), en plus du total conservé au-dessus / au bout de la barre.
