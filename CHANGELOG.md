@@ -1,5 +1,32 @@
 # Historique
 
+## V6.46
+
+**Vue d'ensemble**
+- L'encart « Opérations retenues » de la recherche peut être **réduit** (bouton « Réduire » / « Afficher la liste », mémorisé dans le navigateur).
+- Chiffres clés : 5e chiffre **Surface cumulée** (m², colonne « Total surface » de OPERATIONS, une fois par opération ; nombre d'opérations renseignées indiqué).
+- Nouvel encart **Répartition des surfaces par référentiel** (m² cumulés, clic = filtre référentiel).
+- Nouvel encart **Bâtiments et logements par type** : logement individuel (dont groupé), logement collectif et total, d'après le type de programme calculé.
+
+**Certification**
+- Nouvel histogramme empilé **Labels par année de création** : avec une recherche, seuls les labels qui y répondent (ex. « biosourcé 2024 » → 1er, 2e, 3e niveau) ; sans recherche, tous les labels et mentions (8 premiers + « Autres labels »). Bascule Toutes / En cours / Certifiées.
+
+**Territoire**
+- Même graphique par **région**, en barres empilées horizontales.
+
+Aucun changement du script Apps Script.
+
+**Écran de chargement**
+- Deux vis de fixation en haut du boîtier du compteur d'eau.
+
+## V6.45
+
+- Fenêtre « Données », encart « Source réellement lue » : nouvelle ligne **Lignes non comptées** quand le nombre d'opérations est inférieur au nombre de lignes lues, avec la raison (lignes regroupées sous un même code, lignes sans code interne ni nom d'opération, lignes vides) et, dans « Voir les lignes non comptées », les codes concernés et les **numéros de ligne du classeur**. Les codes respectent le mode anonymisé.
+- Script OPERATIONS V06.45 (numéros de ligne dans chaque bloc lu) : **mettre à jour Code_Operations.gs puis créer une nouvelle version du déploiement.** Avec un script plus ancien, les raisons s'affichent mais les numéros de ligne peuvent manquer.
+
+**Écran de chargement**
+- Reflet fixe sur la vitre du cadran du compteur d'eau.
+
 ## V6.44
 
 - Fenêtre « Données », encart « Source réellement lue » :

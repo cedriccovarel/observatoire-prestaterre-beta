@@ -1,5 +1,8 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.44 (script OPERATIONS, version API 06.44)
+ * PRESTATERRE OBSERVATOIRE - V6.45 (script OPERATIONS, version API 06.45)
+ *
+ * Changements V6.45 : chaque bloc (mode chunk) indique le numero de ligne du classeur de chaque ligne
+ *   transmise (rowNumbers) ; la fenetre Donnees liste ainsi les lignes non comptees comme operations.
  *
  * Changements V6.44 : sourceInfo ajoute le lien du classeur lu (bouton « Ouvrir le classeur lu » de la fenetre Donnees).
  *
@@ -64,7 +67,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.44',
+  VERSION: '06.45',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -238,6 +241,7 @@ function newosbApiRequest_(params) {
       totalRows: totalRows,
       done: offset + chunk.physicalCount >= totalRows,
       rows: chunk.rows,
+      rowNumbers: chunk.rowNumbers,
       durationMs: Date.now() - started
     };
   }
@@ -621,16 +625,18 @@ function getSheetMeta_() {
 
 function getRowsChunk_(sheet, meta, offset, limit) {
   if (!meta.totalRows || !meta.lastColumn || offset >= meta.totalRows) {
-    return { rows: [], physicalCount: 0 };
+    return { rows: [], rowNumbers: [], physicalCount: 0 };
   }
 
   const physicalCount = Math.min(limit, meta.totalRows - offset);
   const startRow = (meta.firstDataRow || 1) + offset;
   const rawRows = sheet.getRange(startRow, 1, physicalCount, meta.lastColumn).getDisplayValues();
-  const rows = rawRows.filter(function(row) {
-    return row.some(function(cell) { return String(cell || '').trim() !== ''; });
+  const rows = [], rowNumbers = [];
+  rawRows.forEach(function(row, i) {
+    if (!row.some(function(cell) { return String(cell || '').trim() !== ''; })) return;
+    rows.push(row); rowNumbers.push(startRow + i);
   });
-  return { rows: rows, physicalCount: physicalCount };
+  return { rows: rows, rowNumbers: rowNumbers, physicalCount: physicalCount };
 }
 
 function clampInteger_(value, min, max, fallback) {

@@ -95,6 +95,8 @@
     overviewMentionPage:1,
     overviewPerformancePage:1,
     overviewMentionView:'list',
+    labelStatusView:'all',
+    kwCollapsed:(()=>{try{return localStorage.getItem('newosb.kwCollapsed')==='1';}catch{return false;}})(),
     overviewPerformanceView:'list',
     territoryTableView:'list',
     moaTableView:'list',
@@ -1240,8 +1242,8 @@
   function keywordCard(){
     const q=norm(state.search); if(!q) return '';
     const ops=filteredOperations({keepExcluded:true}), removed=ops.filter(o=>state.searchExcluded.has(String(o.code))).length;
-    return `<article class="obs-card obs-kw-card"><div class="obs-card-head"><div><span>RECHERCHE</span><h2>« ${esc(String(state.search).trim())} » : ${fmt(ops.length-removed)} opération${ops.length-removed>1?'s':''} retenue${ops.length-removed>1?'s':''}</h2></div><div class="obs-kw-tools"><small>Retire celles qui ne correspondent pas : elles sortent de tous les onglets, de l’onglet Exigences et des liens de partage.</small>${removed?`<button type="button" class="btn btn-secondary" data-kw-reset>Tout remettre (${fmt(removed)})</button>`:''}</div></div>
-      <div class="obs-table-wrap obs-kw-list"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>${ops.map(o=>{const out=state.searchExcluded.has(String(o.code));return `<tr class="${out?'is-removed':''}"><td><button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td><button type="button" class="btn ${out?'btn-secondary':'obs-kw-remove'}" data-kw-toggle="${attr(o.code)}" aria-pressed="${out}">${out?'Remettre':'Retirer'}</button></td></tr>`;}).join('')}</tbody></table></div></article>`;
+    return `<article class="obs-card obs-kw-card"><div class="obs-card-head"><div><span>RECHERCHE</span><h2>« ${esc(String(state.search).trim())} » : ${fmt(ops.length-removed)} opération${ops.length-removed>1?'s':''} retenue${ops.length-removed>1?'s':''}</h2></div><div class="obs-kw-tools"><button type="button" class="obs-card-action" data-kw-collapse aria-expanded="${!state.kwCollapsed}">${state.kwCollapsed?'▸ Afficher la liste':'▾ Réduire'}</button>${state.kwCollapsed?'':`<small>Retire celles qui ne correspondent pas : elles sortent de tous les onglets, de l’onglet Exigences et des liens de partage.</small>`}${removed?`<button type="button" class="btn btn-secondary" data-kw-reset>Tout remettre (${fmt(removed)})</button>`:''}</div></div>
+      ${state.kwCollapsed?'':`<div class="obs-table-wrap obs-kw-list"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>${ops.map(o=>{const out=state.searchExcluded.has(String(o.code));return `<tr class="${out?'is-removed':''}"><td><button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td><button type="button" class="btn ${out?'btn-secondary':'obs-kw-remove'}" data-kw-toggle="${attr(o.code)}" aria-pressed="${out}">${out?'Remettre':'Retirer'}</button></td></tr>`;}).join('')}</tbody></table></div>`}</article>`;
   }
   function filteredOperations(options={}){ return filterOperationList(baseOperations(),options); }
   function filteredTechnicalOperations(options={}){ return filterOperationList(baseTechnicalOperations(),options); }
@@ -1322,6 +1324,7 @@
 
   function visualIconFor(label){
     const l=norm(label||'');
+    if(l.includes('surface')) return '◰';
     if(l.includes('logement')) return '⌂';
     if(l.includes('batiment')) return '▥';
     if(l.includes('maitre')||l.includes('moa')) return '◎';
@@ -1336,17 +1339,18 @@
     return '●';
   }
 
-  function kpiGrid(items){
-    return `<div class="obs-grid-kpi">${items.map(item=>`<article class="obs-kpi obs-kpi-visual ${item.className||''}" data-audit-label="${attr(item.label)}" data-audit-metric="${attr(item.metric||'')}" ${item.crossKey?crossAttrs(item.crossKey,item.crossValue,item.crossLabel||item.label):''}><i class="obs-kpi-visual-icon" aria-hidden="true">${visualIconFor(item.label)}</i><span>${esc(item.label)}</span><strong>${item.raw?item.value:esc(item.value)}</strong><small>${esc(item.note||'')}${item.sample!==undefined?lowSample(item.sample):''}</small><em class="obs-kpi-visual-ring" aria-hidden="true"></em></article>`).join('')}</div>`;
+  function kpiGrid(items,cls=''){
+    return `<div class="obs-grid-kpi ${cls}">${items.map(item=>`<article class="obs-kpi obs-kpi-visual ${item.className||''}" data-audit-label="${attr(item.label)}" data-audit-metric="${attr(item.metric||'')}" ${item.crossKey?crossAttrs(item.crossKey,item.crossValue,item.crossLabel||item.label):''}><i class="obs-kpi-visual-icon" aria-hidden="true">${visualIconFor(item.label)}</i><span>${esc(item.label)}</span><strong>${item.raw?item.value:esc(item.value)}</strong><small>${esc(item.note||'')}${item.sample!==undefined?lowSample(item.sample):''}</small><em class="obs-kpi-visual-ring" aria-hidden="true"></em></article>`).join('')}</div>`;
   }
   function kpis(ops){
     const grid=kpiGrid([
       {label:'Projets',value:fmt(ops.length),note:'codes internes uniques',metric:'code'},
       {label:'Logements',value:fmt(sum(ops,o=>o.dwellings)),note:'total déclaré',metric:'dwellings'},
       {label:'Bâtiments',value:fmt(sum(ops,o=>o.buildings)),note:'total déclaré',metric:'buildings'},
-      {label:'Maîtres d’ouvrage',value:fmt(uniq(ops.map(o=>o.moa)).length),note:'acteurs distincts',metric:'moa'}
-    ]);
-    return `<section class="obs-kpi-summary-group" aria-label="Chiffres clés de la sélection"><button type="button" class="obs-kpi-group-pres-btn" data-add-presentation="1" title="Ajouter les 4 chiffres clés à la présentation" aria-label="Ajouter les 4 chiffres clés à la présentation">▣</button>${grid}</section>`;
+      {label:'Maîtres d’ouvrage',value:fmt(uniq(ops.map(o=>o.moa)).length),note:'acteurs distincts',metric:'moa'},
+      {label:'Surface cumulée',value:`${fmt(sum(ops,o=>o.surface))}<em class="obs-kpi-unit"> m²</em>`,raw:true,note:surfaceNote(ops),metric:'surface'}
+    ],'obs-grid-kpi-5');
+    return `<section class="obs-kpi-summary-group" aria-label="Chiffres clés de la sélection"><button type="button" class="obs-kpi-group-pres-btn" data-add-presentation="1" title="Ajouter les 5 chiffres clés à la présentation" aria-label="Ajouter les 5 chiffres clés à la présentation">▣</button>${grid}</section>`;
   }
 
   function crossBars(items,{maxItems=10,key='',labelPrefix='',valueKey='name',totalOverride=0,rankOffset=0}={}){
@@ -1453,6 +1457,55 @@
     return overviewTagList(items,kind,pageKey);
   }
 
+  // V6.45 : surfaces (colonne « Total surface »), logement individuel / collectif, labels par année et par région.
+  function surfaceNote(ops){const n=ops.filter(o=>Number(o.surface)>0).length;return n===ops.length?'toutes opérations':`${fmt(n)} / ${fmt(ops.length)} opérations renseignées`;}
+  function surfaceByReferential(ops){
+    const map=new Map();ops.forEach(o=>{const v=Number(o.surface)||0;if(v<=0)return;const name=String(o.referential||'Non précisé').trim()||'Non précisé',k=norm(name);if(!map.has(k))map.set(k,{name,value:0,ops:0});const x=map.get(k);x.value+=v;x.ops++;});
+    const items=[...map.values()].sort((a,b)=>b.value-a.value);
+    if(!items.length)return '<div class="obs-empty">Aucune surface renseignée (colonne « Total surface »).</div>';
+    return `${crossBars(items,{maxItems:8,key:'referential',labelPrefix:'Référentiel'})}<div class="obs-table-note">${items.length>8?`8 premiers référentiels sur ${fmt(items.length)} · `:''}${esc(surfaceNote(ops))}.</div>`;
+  }
+  function housingTypeTotals(ops){
+    const kinds=[['Individuel (dont groupé)',o=>/individuel/i.test(o.programType||'')],['Collectif',o=>/^logement collectif/i.test(o.programType||'')]];
+    const rows=kinds.map(([label,test])=>{const sel=ops.filter(test);return {label,ops:sel.length,buildings:sum(sel,o=>o.buildings),dwellings:sum(sel,o=>o.dwellings)};});
+    const total={label:'Total',ops:rows[0].ops+rows[1].ops,buildings:rows[0].buildings+rows[1].buildings,dwellings:rows[0].dwellings+rows[1].dwellings};
+    if(!total.ops)return '<div class="obs-empty">Aucune opération de logement individuel ou collectif dans la sélection.</div>';
+    const others=ops.length-total.ops;
+    return `<div class="obs-table-wrap"><table class="obs-table obs-housing-table"><thead><tr><th>Logement</th><th title="Opérations">Opér.</th><th title="Bâtiments">Bât.</th><th title="Logements">Lgts</th></tr></thead><tbody>${[...rows,total].map((r,i)=>`<tr class="${i===2?'is-total':''}"><td><strong>${esc(r.label)}</strong></td><td>${fmt(r.ops)}</td><td>${fmt(r.buildings)}</td><td>${fmt(r.dwellings)}</td></tr>`).join('')}</tbody></table></div>${others?`<div class="obs-table-note">${fmt(others)} opération${others>1?'s':''} d’un autre type (tertiaire, résidences gérées, non déterminé…) non comptée${others>1?'s':''} ici.</div>`:''}`;
+  }
+  const LABEL_STATUS_VIEWS={all:'Toutes',ongoing:'En cours',compliant:'Certifiées'};
+  const LABEL_OTHER='Autres labels',LABEL_OTHER_COLOR='#9aa6a1';
+  function labelStatusScope(ops){const v=state.labelStatusView;return v==='compliant'?ops.filter(o=>o.status==='compliant'):v==='ongoing'?ops.filter(o=>o.status!=='compliant'&&o.status!=='proposal'):ops;}
+  // Avec une recherche, seules les mentions qui y répondent (« biosourcé 2024 » → 1er, 2e, 3e niveau) ; sinon toutes (BEE+, BEE, BBCA…).
+  function mentionMatchesSearch(name){const alts=searchAlternatives();if(!alts.length)return true;const seg=searchTokens(name);return alts.some(a=>a.words.every(w=>searchHit(seg,w)));}
+  function labelSeries(ops){
+    const all=aggregateCachedTags(ops,'mention'),hit=all.filter(x=>mentionMatchesSearch(x.name)),pick=hit.length?hit:all;
+    const keyOf=new Map(pick.map((x,i)=>[norm(x.name),i<8?x.name:LABEL_OTHER])),names=[...pick.slice(0,8).map(x=>x.name),...(pick.length>8?[LABEL_OTHER]:[])];
+    // Couleur liée au label (rang dans toute la sélection), stable quand on passe de « Toutes » à « Certifiées ».
+    const color=n=>n===LABEL_OTHER?LABEL_OTHER_COLOR:tagPaletteColor(names.indexOf(n));
+    return {names,color,searched:!!searchAlternatives().length&&!!hit.length,of:o=>[...new Set(cachedOperationTags(o,'mention').map(m=>keyOf.get(norm(m))).filter(Boolean))]};
+  }
+  function labelGroups(ops,groupOf,series){
+    const map=new Map();ops.forEach(o=>{const g=groupOf(o),ls=g?series.of(o):[];if(!ls.length)return;if(!map.has(g))map.set(g,new Map());const m=map.get(g);ls.forEach(l=>m.set(l,(m.get(l)||0)+1));});
+    return [...map.entries()].map(([name,m])=>({name,m,total:[...m.values()].reduce((a,b)=>a+b,0)}));
+  }
+  function labelChartTitle(series,by){return `${series.searched?`Labels « ${esc(String(state.search).trim())} »`:'Labels et mentions'} par ${by}`;}
+  function labelStatusToggle(){return `<div class="obs-view-toggle obs-label-status" role="group" aria-label="Avancement des opérations">${Object.entries(LABEL_STATUS_VIEWS).map(([k,l])=>`<button type="button" class="${state.labelStatusView===k?'is-active':''}" data-label-status="${k}" aria-pressed="${state.labelStatusView===k}">${l}</button>`).join('')}</div>`;}
+  function labelLegend(series,shown){return `<div class="obs-status-year-legend">${series.names.filter(n=>shown.has(n)).map(n=>`<span><i style="background:${series.color(n)}"></i>${esc(n)}</span>`).join('')}</div><div class="obs-table-note">Une opération qui porte plusieurs labels compte dans chacun.${state.labelStatusView==='ongoing'?' En cours : hors propositions commerciales.':''}</div>`;}
+  function labelSegTitle(group,n,v){return `${group} · ${n} : ${fmt(v)} opération${v>1?'s':''}`;}
+  function labelYearCard(ops){
+    const series=labelSeries(ops),groups=labelGroups(labelStatusScope(ops),o=>isYear(o.createdYear)?String(o.createdYear):'',series).sort((a,b)=>Number(a.name)-Number(b.name));
+    const mx=Math.max(1,...groups.map(g=>g.total)),shown=new Set(groups.flatMap(g=>[...g.m.keys()]));
+    const body=groups.length?`<div class="obs-status-year-chart obs-label-year-chart">${groups.map(g=>`<div class="obs-status-year-col"><div class="obs-status-year-stack" style="height:${Math.max(10,100*g.total/mx)}%">${series.names.map(n=>{const v=g.m.get(n)||0;return v?`<span style="height:${100*v/g.total}%;--status-color:${series.color(n)}" title="${attr(labelSegTitle(g.name,n,v))}"></span>`:'';}).join('')}</div><strong>${fmt(g.total)}</strong><span>${esc(g.name)}</span></div>`).join('')}</div>${labelLegend(series,shown)}`:'<div class="obs-empty">Aucun label renseigné avec une année de création pour cette sélection.</div>';
+    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'année de création')}</h2></div><div class="obs-card-head-tools">${labelStatusToggle()}</div></div>${body}</article>`;
+  }
+  function labelRegionCard(ops){
+    const series=labelSeries(ops),groups=labelGroups(labelStatusScope(ops),o=>operationRegion(o),series).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,'fr'));
+    const mx=Math.max(1,...groups.map(g=>g.total)),shown=new Set(groups.flatMap(g=>[...g.m.keys()]));
+    const body=groups.length?`<div class="obs-hstack">${groups.map(g=>`<div class="obs-hstack-row"><b title="${attr(g.name)}">${esc(g.name)}</b><div class="obs-hstack-track"><div class="obs-hstack-bar" style="width:${Math.max(1,100*g.total/mx).toFixed(1)}%">${series.names.map(n=>{const v=g.m.get(n)||0;return v?`<span style="flex:${v};background:${series.color(n)}" title="${attr(labelSegTitle(g.name,n,v))}"></span>`:'';}).join('')}</div></div><strong>${fmt(g.total)}</strong></div>`).join('')}</div>${labelLegend(series,shown)}`:'<div class="obs-empty">Aucun label renseigné pour cette sélection.</div>';
+    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'région')}</h2></div><div class="obs-card-head-tools">${labelStatusToggle()}</div></div>${body}</article>`;
+  }
+
   function lostAbandonedNotice(){
     const excluded=filteredExcludedOperations();
     if(!excluded.length)return '';
@@ -1469,6 +1522,10 @@
     const deps=countBy(ops,o=>departmentName(o.department));
     const moas=countBy(ops,o=>o.moa);
     return `${pageHead('overview')}${kpis(ops)}${keywordCard()}
+      <div class="obs-grid-2">
+        <article class="obs-card"><div class="obs-card-head"><div><span>SURFACES</span><h2>Répartition des surfaces par référentiel</h2></div><small>m² cumulés · clique pour filtrer</small></div>${surfaceByReferential(ops)}</article>
+        <article class="obs-card"><div class="obs-card-head"><div><span>LOGEMENT</span><h2>Bâtiments et logements par type</h2></div><small>Type de programme calculé</small></div>${housingTypeTotals(ops)}</article>
+      </div>
       <div class="obs-grid-2">
         <article class="obs-card"><div class="obs-card-head"><div><span>DYNAMIQUE</span><h2>Évolution des projets</h2></div><div class="obs-evolution-head-tools"><small>Une courbe par référentiel · clique sur une année ou la légende pour filtrer · clique sur « Total général » dans la légende pour l’afficher/masquer</small></div></div><div class="obs-chart">${evolutionSvg(ops,state.overviewShowTotal)}</div>${lostAbandonedNotice()}</article>
         <article class="obs-card"><div class="obs-card-head"><div><span>TERRITOIRES</span><h2>Départements les plus représentés</h2></div><button class="obs-card-action" data-page-link="territories">Explorer</button></div>${topBars(deps,8,'departmentName')}</article>
@@ -1505,6 +1562,7 @@
       </article>
       <article class="obs-card obs-territory-summary"><div class="obs-card-head"><div><span>${groupingRegion?'RÉGIONS':'DÉPARTEMENTS'}</span><h2>${state.mapFocusRegion?`Départements de ${esc(state.mapFocusRegion)}`:(groupingRegion?'Régions':'Départements')+' les plus représentés'}</h2></div><small>15 lignes maximum</small></div>${pagedCrossBars(summaryItems,{pageKey:'territorySummaryPage',pageKind:'territory-summary',pageSize:15,key:summaryKey,labelPrefix:summaryLabel})}</article>
     </div>
+    ${labelRegionCard(ops)}
     <article class="obs-card"><div class="obs-card-head"><div><span>DRILL-DOWN TERRITORIAL</span><h2>${state.mapFocusRegion?`Départements de ${esc(state.mapFocusRegion)}`:'Départements de la sélection'}</h2></div><div class="obs-card-head-tools"><small>15 lignes par page</small>${tableViewToggle('territory',state.territoryTableView,['list','bar'])}</div></div>${territoryTable(ops)}</article>`;
   }
 
@@ -1564,7 +1622,8 @@
       {label:'Perdus / abandonnés / annulés',value:fmt(inactive.length),note:'hors tunnel actif'}
     ])}
     <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Compter aussi les affaires annulées, abandonnées et perdues, comme dans la colonne BC de la Sheet"><input type="checkbox" data-tunnel-excluded-toggle="1" ${state.tunnelShowExcluded?'checked':''}><span>Inclure annulés / abandonnés</span></label><small>Chaque étape filtre l’ensemble du dashboard</small></div></div>${tunnel(state.tunnelShowExcluded?[...statusUniverse,...excluded]:statusUniverse,{analytic:true,includeExcluded:state.tunnelShowExcluded,excludedCount:excluded.length})}</article>
-    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année de création</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>`;
+    <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année de création</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>
+    ${labelYearCard(ops)}`;
   }
 
   function statusYearMatrix(ops){
@@ -3167,6 +3226,8 @@
     const tag=e.target.closest('[data-tag-kind][data-tag-name]'); if(tag){const ops=filteredOperations().filter(o=>operationHasTag(o,tag.dataset.tagKind,tag.dataset.tagName));engine.openExplorer(tag.dataset.tagName,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const tagChip=e.target.closest('[data-tag-filter][data-tag-value]'); if(tagChip){const kind=tagChip.dataset.tagFilter,val=tagChip.dataset.tagValue;const ops=filteredOperations().filter(o=>operationHasTag(o,kind,val));engine.openExplorer(val,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const kt=e.target.closest('[data-kw-toggle]'); if(kt){const c=kt.dataset.kwToggle;if(state.searchExcluded.has(c))state.searchExcluded.delete(c);else state.searchExcluded.add(c);preserveUiScroll(()=>renderPage());return;}
+    if(e.target.closest('[data-kw-collapse]')){state.kwCollapsed=!state.kwCollapsed;try{localStorage.setItem('newosb.kwCollapsed',state.kwCollapsed?'1':'0');}catch{}preserveUiScroll(()=>renderPage());return;}
+    const ls=e.target.closest('[data-label-status]');if(ls){state.labelStatusView=ls.dataset.labelStatus;preserveUiScroll(()=>renderPage());return;}
     if(e.target.closest('[data-kw-reset]')){state.searchExcluded.clear();preserveUiScroll(()=>renderPage());return;}
     const op=e.target.closest('[data-op-code]'); if(op){openOperation(op.dataset.opCode);return;}
     if(e.target.closest('[data-open-generator]')){const scope=generatorLaunchScope();engine.openGenerator(scope,()=>generatorHandoffData(scope));return;}

@@ -146,8 +146,24 @@ const call = (gs, params) => JSON.parse(gs.doGet({ parameter: params }).text);
 const KEY = 'cle-de-test-0123456789abcdef';
 const opsGs = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX, properties: { NEWOSB_ACCESS_KEY: KEY, ...props } });
 test('pont + bonne clé : lecture meta + bloc de données', () => { const gs = opsGs(); const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert.deepStrictEqual(m.headers.slice(0, 4), HEADERS.slice(0, 4)); const c = gs.newosbBridgeRequest({ mode: 'chunk', offset: 0, limit: 500, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow, key: KEY }); assert.strictEqual(c.rows.length, ROWS.length); });
+test('V6.45 : lignes non comptées (regroupées, sans code ni nom, vides) avec numéros de ligne du classeur', () => {
+  const gs = opsGs(), m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY });
+  const c = gs.newosbBridgeRequest({ mode: 'chunk', key: KEY, offset: 0, limit: 50, totalRows: m.totalRows, lastColumn: m.lastColumn, firstDataRow: m.firstDataRow });
+  assert(Array.isArray(c.rowNumbers) && c.rowNumbers.length === c.rows.length && c.rowNumbers[0] >= m.firstDataRow, 'n° de ligne par ligne transmise');
+  const a = read('app.js'), start = a.indexOf('  function dataUncountedReport('), end = a.indexOf('\n  }', start) + 4;
+  const report = new Function(a.slice(start, end) + '\nreturn dataUncountedReport;')();
+  const r1 = { Code: 'OPE-000101' }, r2 = { Code: 'OPE-000101' }, r3 = { Code: 'OPE-000101' }, r4 = { Code: '', Nom: '' }, r5 = { Code: 'OPE-000202' };
+  const ops = [{ code: 'OPE-000101', rawRows: [r1, r2, r3] }, { code: 'OPE-000202', rawRows: [r5] }];
+  const u = report([r1, r2, r3, r4, r5], [2, 3, 5, 6, 7], ops, 1, c => c.replace('OPE', 'ANO'));
+  assert.strictEqual(u.total, 4); assert.strictEqual(u.summary, '4 : 2 regroupées sous un même code, 1 sans code ni nom, 1 vide');
+  assert(u.details[0] === 'ANO-000101 : 3 lignes comptées comme 1 opération (lignes 2, 3, 5).', 'code affiché via le mode anonymisé');
+  assert(u.details.includes('Sans code interne ni nom d’opération, ignorées : ligne 6.'));
+  assert(report([r1, r2, r3, r4, r5], null, ops, 0, c => c).details.some(d => d.includes('mettre à jour Code_Operations.gs (V06.45)')));
+  assert.strictEqual(report([r5], [2], [ops[1]], 0, c => c).total, 0);
+  assert(a.includes("rowNumbers:json?.rowNumbers||null,emptyRows:json?.emptyRows??null"));
+});
 test('V6.44 : fenêtre Données — lien du classeur lu et vérification d’une opération (absente, ignorée, fusionnée, hors statistiques, masquée)', () => {
-  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.44');
+  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.45');
   const a = read('app.js'), start = a.indexOf('  function dataLookupReport('), end = a.indexOf('\n  function dataLookup(){');
   const dataNorm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const win = { NEWOSB_CORE: { isExcludedOperation: o => /perdu/i.test(o.stage || ''), affairStage: o => o.stage } };
