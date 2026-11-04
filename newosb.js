@@ -96,6 +96,9 @@
     overviewPerformancePage:1,
     overviewMentionView:'list',
     labelStatusView:'all',
+    labelGroupsOpen:false,
+    labelMergeDerogation:(()=>{try{return localStorage.getItem('newosb.labelMergeDerogation')!=='0';}catch{return true;}})(),
+    layoutEditing:false,
     kwCollapsed:(()=>{try{return localStorage.getItem('newosb.kwCollapsed')==='1';}catch{return false;}})(),
     overviewPerformanceView:'list',
     territoryTableView:'list',
@@ -1474,16 +1477,60 @@
     return `<div class="obs-table-wrap"><table class="obs-table obs-housing-table"><thead><tr><th>Logement</th><th title="Opérations">Opér.</th><th title="Bâtiments">Bât.</th><th title="Logements">Lgts</th></tr></thead><tbody>${[...rows,total].map((r,i)=>`<tr class="${i===2?'is-total':''}"><td><strong>${esc(r.label)}</strong></td><td>${fmt(r.ops)}</td><td>${fmt(r.buildings)}</td><td>${fmt(r.dwellings)}</td></tr>`).join('')}</tbody></table></div>${others?`<div class="obs-table-note">${fmt(others)} opération${others>1?'s':''} d’un autre type (tertiaire, résidences gérées, non déterminé…) non comptée${others>1?'s':''} ici.</div>`:''}`;
   }
   const LABEL_STATUS_VIEWS={all:'Toutes',ongoing:'En cours',compliant:'Certifiées'};
-  const LABEL_OTHER='Autres labels',LABEL_OTHER_COLOR='#9aa6a1';
+  const LABEL_OTHER='Autres labels',LABEL_OTHER_COLOR='#c9d6cf';
+  // Déclinaison de verts, foncé et clair en alternance pour séparer les segments voisins.
+  const LABEL_GREENS=['#06402b','#8fd4ad','#1e985f','#cdebd8','#2f5d46','#5cbf8a','#0b6b45','#b0dcc0'];
   function labelStatusScope(ops){const v=state.labelStatusView;return v==='compliant'?ops.filter(o=>o.status==='compliant'):v==='ongoing'?ops.filter(o=>o.status!=='compliant'&&o.status!=='proposal'):ops;}
   // Avec une recherche, seules les mentions qui y répondent (« biosourcé 2024 » → 1er, 2e, 3e niveau) ; sinon toutes (BEE+, BEE, BBCA…).
   function mentionMatchesSearch(name){const alts=searchAlternatives();if(!alts.length)return true;const seg=searchTokens(name);return alts.some(a=>a.words.every(w=>searchHit(seg,w)));}
+  // V6.47 : regroupement des labels. Automatique : « Avec / Sans dérogation de points » fusionnés (désactivable).
+  // Personnalisé : groupes nommés (ex. « Label biosourcé 2024 1er niveau »), mémorisés dans ce navigateur.
+  const LABEL_GROUPS_KEY='newosb.labelGroups.v1',LABEL_MERGE_KEY='newosb.labelMergeDerogation';
+  let labelUserGroups=(()=>{try{const g=JSON.parse(localStorage.getItem(LABEL_GROUPS_KEY)||'[]');return Array.isArray(g)?g.filter(x=>x&&x.name&&Array.isArray(x.members)):[];}catch{return [];}})();
+  function saveLabelUserGroups(){try{localStorage.setItem(LABEL_GROUPS_KEY,JSON.stringify(labelUserGroups));}catch{}}
+  const isNoLabel=m=>/^sans\s+mention$/i.test(String(m||'').trim());
+  function labelBaseName(m){
+    const t=String(m||'').replace(/\s+/g,' ').trim();
+    return state.labelMergeDerogation?t.replace(/\s*[-–,(]?\s*\b(?:avec|sans)\s+d[ée]rogations?\b(?:\s+(?:de|des|aux?)\s+(?:seuils?\s+(?:de\s+)?)?points?)?\)?/gi,'').replace(/\s{2,}/g,' ').trim()||t:t;
+  }
+  function labelGroupOf(m){const b=labelBaseName(m),k=norm(b),g=labelUserGroups.find(g=>g.members.includes(k));return g?g.name:b;}
   function labelSeries(ops){
-    const all=aggregateCachedTags(ops,'mention'),hit=all.filter(x=>mentionMatchesSearch(x.name)),pick=hit.length?hit:all;
-    const keyOf=new Map(pick.map((x,i)=>[norm(x.name),i<8?x.name:LABEL_OTHER])),names=[...pick.slice(0,8).map(x=>x.name),...(pick.length>8?[LABEL_OTHER]:[])];
+    const searched=!!searchAlternatives().length;
+    const labelsOf=(o,filter)=>[...new Set(cachedOperationTags(o,'mention').filter(m=>!isNoLabel(m)&&(!filter||mentionMatchesSearch(m)||mentionMatchesSearch(labelGroupOf(m)))).map(labelGroupOf))];
+    const rank=filter=>{const c=new Map();ops.forEach(o=>labelsOf(o,filter).forEach(n=>c.set(n,(c.get(n)||0)+1)));return [...c.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'fr')).map(([n])=>n);};
+    let filter=searched,pick=rank(filter);if(filter&&!pick.length){filter=false;pick=rank(false);}
+    const top=new Set(pick.slice(0,8)),names=[...top,...(pick.length>8?[LABEL_OTHER]:[])];
     // Couleur liée au label (rang dans toute la sélection), stable quand on passe de « Toutes » à « Certifiées ».
-    const color=n=>n===LABEL_OTHER?LABEL_OTHER_COLOR:tagPaletteColor(names.indexOf(n));
-    return {names,color,searched:!!searchAlternatives().length&&!!hit.length,of:o=>[...new Set(cachedOperationTags(o,'mention').map(m=>keyOf.get(norm(m))).filter(Boolean))]};
+    const color=n=>n===LABEL_OTHER?LABEL_OTHER_COLOR:LABEL_GREENS[Math.max(0,names.indexOf(n))%LABEL_GREENS.length];
+    return {names,color,searched:filter,of:o=>[...new Set(labelsOf(o,filter).map(n=>top.has(n)?n:LABEL_OTHER))]};
+  }
+  // Panneau « Regrouper » : cases à cocher sur les labels (après regroupement automatique) + nom du groupe.
+  function labelGroupPanel(ops){
+    if(!state.labelGroupsOpen)return '';
+    const filterOn=!!searchAlternatives().length,counts=new Map();
+    ops.forEach(o=>new Set(cachedOperationTags(o,'mention').filter(m=>!isNoLabel(m)).map(labelBaseName)).forEach(b=>{const k=norm(b);if(!counts.has(k))counts.set(k,{key:k,name:b,value:0,hit:false});const x=counts.get(k);x.value++;if(mentionMatchesSearch(b))x.hit=true;}));
+    let items=[...counts.values()];if(filterOn&&items.some(x=>x.hit))items=items.filter(x=>x.hit);
+    items.sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'fr'));
+    const groupOfKey=k=>labelUserGroups.find(g=>g.members.includes(k))?.name||'';
+    return `<div class="obs-label-groups" data-label-group-panel>
+      <label class="obs-label-merge"><input type="checkbox" data-label-merge-derog ${state.labelMergeDerogation?'checked':''}><span>Regrouper automatiquement « avec » et « sans dérogation de points »</span></label>
+      ${labelUserGroups.length?`<div class="obs-label-group-chips"><b>Groupes :</b>${labelUserGroups.map((g,i)=>`<span class="obs-label-group-chip">${esc(g.name)} <small>(${fmt(g.members.length)} label${g.members.length>1?'s':''})</small><button type="button" data-label-group-delete="${i}" title="Supprimer ce groupe" aria-label="Supprimer le groupe ${attr(g.name)}">✕</button></span>`).join('')}</div>`:''}
+      <div class="obs-label-group-list">${items.length?items.map(x=>{const g=groupOfKey(x.key);return `<label><input type="checkbox" data-label-group-pick value="${attr(x.key)}" data-label-name="${attr(x.name)}"><span>${esc(x.name)}</span><small>${fmt(x.value)}${g?` · groupe « ${esc(g)} »`:''}</small></label>`;}).join(''):'<div class="obs-empty">Aucun label dans la sélection.</div>'}</div>
+      <div class="obs-label-group-form"><input type="text" data-label-group-name placeholder="Nom du groupe, ex. Label biosourcé 2024 1er niveau" maxlength="80"><button type="button" class="btn" data-label-group-create>Regrouper les labels cochés</button></div>
+      <small class="obs-label-group-help">Coche au moins deux labels puis donne un nom : ils sont comptés ensemble dans les graphiques Labels (Certification et Territoires). Réglage mémorisé dans ce navigateur.</small>
+    </div>`;
+  }
+  function labelGroupsButton(){return `<button type="button" class="obs-card-action ${state.labelGroupsOpen?'is-active':''}" data-label-groups-toggle aria-expanded="${!!state.labelGroupsOpen}">Regrouper${labelUserGroups.length?` (${fmt(labelUserGroups.length)})`:''}</button>`;}
+  function toastMessage(text){const t=document.getElementById('toast');if(!t)return;t.textContent=text;t.classList.add('is-visible');setTimeout(()=>t.classList.remove('is-visible'),3200);}
+  function createLabelGroup(panel){
+    const picks=[...panel.querySelectorAll('[data-label-group-pick]:checked')];
+    if(picks.length<2){toastMessage('Coche au moins deux labels à regrouper.');return;}
+    const name=String(panel.querySelector('[data-label-group-name]')?.value||'').trim()||picks[0].dataset.labelName;
+    const members=picks.map(p=>p.value);
+    labelUserGroups=labelUserGroups.map(g=>({...g,members:g.members.filter(k=>!members.includes(k))})).filter(g=>g.members.length);
+    const same=labelUserGroups.find(g=>norm(g.name)===norm(name));
+    if(same)same.members=[...new Set([...same.members,...members])];else labelUserGroups.push({name,members});
+    saveLabelUserGroups();preserveUiScroll(()=>renderPage());
   }
   function labelGroups(ops,groupOf,series){
     const map=new Map();ops.forEach(o=>{const g=groupOf(o),ls=g?series.of(o):[];if(!ls.length)return;if(!map.has(g))map.set(g,new Map());const m=map.get(g);ls.forEach(l=>m.set(l,(m.get(l)||0)+1));});
@@ -1497,13 +1544,13 @@
     const series=labelSeries(ops),groups=labelGroups(labelStatusScope(ops),o=>isYear(o.createdYear)?String(o.createdYear):'',series).sort((a,b)=>Number(a.name)-Number(b.name));
     const mx=Math.max(1,...groups.map(g=>g.total)),shown=new Set(groups.flatMap(g=>[...g.m.keys()]));
     const body=groups.length?`<div class="obs-status-year-chart obs-label-year-chart">${groups.map(g=>`<div class="obs-status-year-col"><div class="obs-status-year-stack" style="height:${Math.max(10,100*g.total/mx)}%">${series.names.map(n=>{const v=g.m.get(n)||0;return v?`<span style="height:${100*v/g.total}%;--status-color:${series.color(n)}" title="${attr(labelSegTitle(g.name,n,v))}"></span>`:'';}).join('')}</div><strong>${fmt(g.total)}</strong><span>${esc(g.name)}</span></div>`).join('')}</div>${labelLegend(series,shown)}`:'<div class="obs-empty">Aucun label renseigné avec une année de création pour cette sélection.</div>';
-    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'année de création')}</h2></div><div class="obs-card-head-tools">${labelStatusToggle()}</div></div>${body}</article>`;
+    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'année de création')}</h2></div><div class="obs-card-head-tools">${labelGroupsButton()}${labelStatusToggle()}</div></div>${labelGroupPanel(ops)}${body}</article>`;
   }
   function labelRegionCard(ops){
     const series=labelSeries(ops),groups=labelGroups(labelStatusScope(ops),o=>operationRegion(o),series).sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,'fr'));
     const mx=Math.max(1,...groups.map(g=>g.total)),shown=new Set(groups.flatMap(g=>[...g.m.keys()]));
     const body=groups.length?`<div class="obs-hstack">${groups.map(g=>`<div class="obs-hstack-row"><b title="${attr(g.name)}">${esc(g.name)}</b><div class="obs-hstack-track"><div class="obs-hstack-bar" style="width:${Math.max(1,100*g.total/mx).toFixed(1)}%">${series.names.map(n=>{const v=g.m.get(n)||0;return v?`<span style="flex:${v};background:${series.color(n)}" title="${attr(labelSegTitle(g.name,n,v))}"></span>`:'';}).join('')}</div></div><strong>${fmt(g.total)}</strong></div>`).join('')}</div>${labelLegend(series,shown)}`:'<div class="obs-empty">Aucun label renseigné pour cette sélection.</div>';
-    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'région')}</h2></div><div class="obs-card-head-tools">${labelStatusToggle()}</div></div>${body}</article>`;
+    return `<article class="obs-card obs-label-chart-card"><div class="obs-card-head"><div><span>LABELS</span><h2>${labelChartTitle(series,'région')}</h2></div><div class="obs-card-head-tools">${labelGroupsButton()}${labelStatusToggle()}</div></div>${labelGroupPanel(ops)}${body}</article>`;
   }
 
   function lostAbandonedNotice(){
@@ -2208,6 +2255,7 @@
     if(!isolatedMode){ countEl.textContent=fmt(filteredOperations().length); renderFilterDependencies(); }
     updateFilterPanelBadge(requirementsMode);
     if(state.page==='presentation'){ fitPresentationItems(pageEl); fitPresentationPreview(); }
+    applyLayout();
     restoreUiScroll(scrollSnapshot);
     if(state.page==='territories') hydrateTerritoryMap(token);
     if(requirementsMode) window.NEWOSB_REQUIREMENTS?.afterRender?.();
@@ -3174,7 +3222,102 @@
   drawerTabs?.addEventListener('click',e=>{const b=e.target.closest('[data-drawer-tab]');if(!b)return;state.drawerTab=b.dataset.drawerTab;renderDrawer();});
   drawerBody?.addEventListener('click',e=>{const gm=e.target.closest('[data-group-moa]');if(gm){state.activeGroupMoa=gm.dataset.groupMoa;state.operationsPage=1;renderDrawer();return;}const gb=e.target.closest('[data-group-back]');if(gb){state.activeGroupMoa='';state.operationsPage=1;renderDrawer();return;}const opPager=e.target.closest('[data-table-page="operations"][data-page]');if(opPager&&state.activeMoaGroup){state.operationsPage=Math.max(1,Number(opPager.dataset.page)||1);renderDrawer();return;}const opLink=e.target.closest('[data-op-code]');if(opLink&&state.activeMoaGroup){openOperation(opLink.dataset.opCode);return;}const view=e.target.closest('[data-table-view="raw"][data-view]');if(view){state.rawView=view.dataset.view==='tiles'?'tiles':'list';renderDrawer();return;}const pager=e.target.closest('[data-table-page="raw"][data-page]');if(!pager)return;state.rawPage=Math.max(1,Number(pager.dataset.page)||1);renderDrawer();});
 
+
+  // V6.47 : personnalisation des encarts (⚙ dans la barre latérale) : ordre et encarts masqués, par onglet,
+  // mémorisés dans ce navigateur uniquement. Un encart = une carte ; une ligne de 2-3 cartes se déplace en bloc
+  // et ses cartes se réordonnent à l'intérieur de la ligne.
+  const LAYOUT_STORAGE_KEY='newosb.layout.v1', LAYOUT_EXCLUDED_PAGES=new Set(['requirements','presentation']);
+  const LAYOUT_UNIT='.obs-card,.obs-kpi-summary-group,.obs-grid-kpi';
+  let layoutPrefs=(()=>{try{return JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)||'{}')||{};}catch{return {};}})();
+  let layoutDrag=null;
+  function saveLayoutPrefs(){try{localStorage.setItem(LAYOUT_STORAGE_KEY,JSON.stringify(layoutPrefs));}catch{}}
+  function layoutPagePrefs(page){const p=layoutPrefs[page]||(layoutPrefs[page]={});p.order=p.order||[];p.hidden=p.hidden||[];p.inner=p.inner||{};return p;}
+  function layoutSupported(page){return !LAYOUT_EXCLUDED_PAGES.has(page);}
+  function layoutLabel(el){
+    if(el.matches('.obs-kpi-summary-group,.obs-grid-kpi'))return 'Chiffres clés';
+    const span=el.querySelector('.obs-card-head span, :scope > span'),h2=el.querySelector('h2');
+    return String(span?.textContent||h2?.textContent||'Encart').trim().replace(/\s+/g,' ');
+  }
+  // Clé stable : catégorie de l'encart (ex. SURFACES), numérotée si elle revient sur la page ; une ligne = ses cartes.
+  function layoutScan(){
+    const counts=new Map(),key=el=>{const base=norm(layoutLabel(el))||'encart',n=(counts.get(base)||0)+1;counts.set(base,n);return n>1?`${base}#${n}`:base;};
+    return [...pageEl.children].map(el=>{
+      if(el.matches(LAYOUT_UNIT)){el.dataset.layoutKey=key(el);return {el,key:el.dataset.layoutKey,cards:null};}
+      const cards=[...el.children].filter(c=>c.matches('.obs-card'));
+      if(!cards.length)return null;
+      cards.forEach(c=>c.dataset.layoutKey=key(c));
+      el.dataset.layoutKey='ligne:'+cards.map(c=>c.dataset.layoutKey).sort().join('+');
+      return {el,key:el.dataset.layoutKey,cards};
+    }).filter(Boolean);
+  }
+  // Ordre enregistré ; un encart inconnu (nouvelle version, recherche active…) reste derrière son voisin d'origine.
+  function layoutSorted(items,order){
+    if(!order?.length)return items;
+    const idx=new Map(order.map((k,i)=>[k,i])),known=items.filter(x=>idx.has(x.key)).sort((a,b)=>idx.get(a.key)-idx.get(b.key)),out=[...known];
+    items.forEach((x,i)=>{if(idx.has(x.key))return;const prev=items.slice(0,i).reverse().find(y=>out.includes(y));out.splice(prev?out.indexOf(prev)+1:0,0,x);});
+    return out;
+  }
+  function layoutReorder(elements,sorted){
+    if(elements.every((el,i)=>el===sorted[i]))return;
+    const slots=elements.map(el=>{const c=document.createComment('');el.before(c);return c;});
+    sorted.forEach((el,i)=>slots[i].replaceWith(el));
+  }
+  function layoutTools(key,scope,vertical,hidden,label){
+    const prev=vertical?'↑':'←',next=vertical?'↓':'→',where=scope==='page'?'':' dans la ligne';
+    return `<div class="obs-layout-tools" data-layout-tools><span class="obs-layout-grip" aria-hidden="true">⠿</span><b title="${attr(label)}">${esc(label)}</b><button type="button" data-layout-move="-1" data-layout-key="${attr(key)}" data-layout-scope="${attr(scope)}" title="Monter${where}" aria-label="Déplacer ${attr(label)} avant${where}">${prev}</button><button type="button" data-layout-move="1" data-layout-key="${attr(key)}" data-layout-scope="${attr(scope)}" title="Descendre${where}" aria-label="Déplacer ${attr(label)} après${where}">${next}</button>${hidden===null?'':`<button type="button" data-layout-hide="${attr(key)}" aria-pressed="${hidden}" title="${hidden?'Afficher':'Masquer'} cet encart">${hidden?'Afficher':'Masquer'}</button>`}</div>`;
+  }
+  function applyLayout(){
+    const page=state.page,editing=state.layoutEditing;
+    pageEl.classList.toggle('is-layout-editing',!!editing);
+    if(!layoutSupported(page)){if(editing)pageEl.insertAdjacentHTML('afterbegin','<div class="obs-layout-banner"><span><b>Personnalisation</b> non disponible sur cet onglet.</span><button type="button" class="btn btn-secondary" data-layout-done>Terminer</button></div>');return;}
+    const items=layoutScan();if(!items.length)return;
+    const p=layoutPrefs[page]||{},hidden=new Set(p.hidden||[]);
+    layoutReorder(items.map(x=>x.el),layoutSorted(items,p.order).map(x=>x.el));
+    items.forEach(x=>{
+      if(x.cards){
+        const cards=x.cards.map(c=>({el:c,key:c.dataset.layoutKey}));
+        layoutReorder(x.cards,layoutSorted(cards,p.inner?.[x.key]).map(c=>c.el));
+        const shown=x.cards.filter(c=>!hidden.has(c.dataset.layoutKey)).length;
+        x.cards.forEach(c=>c.classList.toggle('is-layout-hidden',hidden.has(c.dataset.layoutKey)));
+        x.el.classList.toggle('is-layout-hidden',!shown);
+        x.el.style.gridTemplateColumns=!editing&&shown&&shown<x.cards.length?`repeat(${shown},minmax(0,1fr))`:'';
+      }else x.el.classList.toggle('is-layout-hidden',hidden.has(x.key));
+    });
+    if(!editing)return;
+    items.forEach(x=>{
+      x.el.classList.add('obs-layout-unit');x.el.draggable=true;x.el.dataset.layoutScope='page';
+      x.el.insertAdjacentHTML('afterbegin',layoutTools(x.key,'page',true,x.cards?null:hidden.has(x.key),x.cards?`Ligne de ${x.cards.length} encarts`:layoutLabel(x.el)));
+      (x.cards||[]).forEach(c=>{const k=c.dataset.layoutKey;c.classList.add('obs-layout-unit');c.draggable=true;c.dataset.layoutScope=x.key;c.insertAdjacentHTML('afterbegin',layoutTools(k,x.key,false,hidden.has(k),layoutLabel(c)));});
+    });
+    const head=pageEl.querySelector(':scope > .obs-page-head'),banner=`<div class="obs-layout-banner" role="status"><span><b>Personnalisation de l’onglet</b> · glisse un encart ou utilise ↑ ↓ ← → ; « Masquer » le retire de l’onglet. Réglage mémorisé dans ce navigateur.</span><button type="button" class="btn btn-secondary" data-layout-reset>Réinitialiser cet onglet</button><button type="button" class="btn" data-layout-done>Terminer</button></div>`;
+    if(head)head.insertAdjacentHTML('afterend',banner);else pageEl.insertAdjacentHTML('afterbegin',banner);
+  }
+  function layoutScopeKeys(scope){
+    if(scope==='page')return [...pageEl.children].filter(el=>el.dataset.layoutScope==='page').map(el=>el.dataset.layoutKey);
+    const row=[...pageEl.children].find(el=>el.dataset.layoutKey===scope);
+    return row?[...row.children].filter(c=>c.dataset.layoutScope===scope).map(c=>c.dataset.layoutKey):[];
+  }
+  function layoutCommit(scope,keys){const p=layoutPagePrefs(state.page);if(scope==='page')p.order=keys;else p.inner[scope]=keys;saveLayoutPrefs();preserveUiScroll(()=>renderPage());}
+  function layoutMove(key,scope,delta){const keys=layoutScopeKeys(scope),i=keys.indexOf(key),j=i+delta;if(i<0||j<0||j>=keys.length)return;[keys[i],keys[j]]=[keys[j],keys[i]];layoutCommit(scope,keys);}
+  function layoutToggleHidden(key){const p=layoutPagePrefs(state.page),h=new Set(p.hidden);if(h.has(key))h.delete(key);else h.add(key);p.hidden=[...h];saveLayoutPrefs();preserveUiScroll(()=>renderPage());}
+  function setLayoutEditing(on){state.layoutEditing=!!on;document.querySelector('[data-layout-edit]')?.classList.toggle('is-active',state.layoutEditing);document.querySelector('[data-layout-edit]')?.setAttribute('aria-pressed',String(state.layoutEditing));preserveUiScroll(()=>renderPage());}
+  function handleLayoutClick(e){
+    if(!state.layoutEditing)return false;
+    const mv=e.target.closest('[data-layout-move]');if(mv){layoutMove(mv.dataset.layoutKey,mv.dataset.layoutScope,Number(mv.dataset.layoutMove));return true;}
+    const hd=e.target.closest('[data-layout-hide]');if(hd){layoutToggleHidden(hd.dataset.layoutHide);return true;}
+    if(e.target.closest('[data-layout-reset]')){delete layoutPrefs[state.page];saveLayoutPrefs();preserveUiScroll(()=>renderPage());return true;}
+    if(e.target.closest('[data-layout-done]')){setLayoutEditing(false);return true;}
+    return !!e.target.closest('.obs-layout-unit');
+  }
+  pageEl.addEventListener('dragstart',e=>{const u=state.layoutEditing&&e.target.closest?.('.obs-layout-unit');if(!u)return;layoutDrag={key:u.dataset.layoutKey,scope:u.dataset.layoutScope};u.classList.add('is-dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',layoutDrag.key);}catch{}e.stopPropagation();});
+  function layoutDropTarget(e){if(!layoutDrag)return null;let t=e.target.closest?.('.obs-layout-unit');while(t&&t.dataset.layoutScope!==layoutDrag.scope)t=t.parentElement?.closest('.obs-layout-unit');return t&&t.dataset.layoutKey!==layoutDrag.key?t:null;}
+  function layoutDropAfter(t,e){const r=t.getBoundingClientRect();return layoutDrag.scope==='page'?e.clientY>r.top+r.height/2:e.clientX>r.left+r.width/2;}
+  pageEl.addEventListener('dragover',e=>{const t=layoutDropTarget(e);pageEl.querySelectorAll('.is-drop-before,.is-drop-after').forEach(x=>x.classList.remove('is-drop-before','is-drop-after'));if(!t)return;e.preventDefault();t.classList.add(layoutDropAfter(t,e)?'is-drop-after':'is-drop-before');});
+  pageEl.addEventListener('drop',e=>{const t=layoutDropTarget(e);if(!t)return;e.preventDefault();const keys=layoutScopeKeys(layoutDrag.scope).filter(k=>k!==layoutDrag.key);keys.splice(keys.indexOf(t.dataset.layoutKey)+(layoutDropAfter(t,e)?1:0),0,layoutDrag.key);const scope=layoutDrag.scope;layoutDrag=null;layoutCommit(scope,keys);});
+  pageEl.addEventListener('dragend',()=>{layoutDrag=null;pageEl.querySelectorAll('.is-dragging,.is-drop-before,.is-drop-after').forEach(x=>x.classList.remove('is-dragging','is-drop-before','is-drop-after'));});
+  document.querySelector('[data-layout-edit]')?.addEventListener('click',()=>setLayoutEditing(!state.layoutEditing));
   pageEl.addEventListener('click',e=>{
+    if(handleLayoutClick(e))return;
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleClick?.(e)) return;
     const audit=e.target.closest('[data-audit-card],.obs-kpi[data-audit-label],.obs-coverage-row[data-audit-label]'); if(audit){const card=audit.closest('.obs-card'),title=audit.dataset.auditLabel||card?.querySelector('h2')?.textContent||'Source et calcul';openAudit(title,audit.dataset.auditMetric||'');return;}
     const entityToggle=e.target.closest('[data-operations-entity-toggle]');if(entityToggle){state.operationsEntityView=entityToggle.checked?'groups':'operations';state.operationsPage=1;renderPage();return;}
@@ -3227,6 +3370,9 @@
     const tagChip=e.target.closest('[data-tag-filter][data-tag-value]'); if(tagChip){const kind=tagChip.dataset.tagFilter,val=tagChip.dataset.tagValue;const ops=filteredOperations().filter(o=>operationHasTag(o,kind,val));engine.openExplorer(val,ops,`${ops.length} opération${ops.length>1?'s':''}`);return;}
     const kt=e.target.closest('[data-kw-toggle]'); if(kt){const c=kt.dataset.kwToggle;if(state.searchExcluded.has(c))state.searchExcluded.delete(c);else state.searchExcluded.add(c);preserveUiScroll(()=>renderPage());return;}
     if(e.target.closest('[data-kw-collapse]')){state.kwCollapsed=!state.kwCollapsed;try{localStorage.setItem('newosb.kwCollapsed',state.kwCollapsed?'1':'0');}catch{}preserveUiScroll(()=>renderPage());return;}
+    if(e.target.closest('[data-label-groups-toggle]')){state.labelGroupsOpen=!state.labelGroupsOpen;preserveUiScroll(()=>renderPage());return;}
+    const lgc=e.target.closest('[data-label-group-create]');if(lgc){createLabelGroup(lgc.closest('[data-label-group-panel]'));return;}
+    const lgd=e.target.closest('[data-label-group-delete]');if(lgd){labelUserGroups.splice(Number(lgd.dataset.labelGroupDelete),1);saveLabelUserGroups();preserveUiScroll(()=>renderPage());return;}
     const ls=e.target.closest('[data-label-status]');if(ls){state.labelStatusView=ls.dataset.labelStatus;preserveUiScroll(()=>renderPage());return;}
     if(e.target.closest('[data-kw-reset]')){state.searchExcluded.clear();preserveUiScroll(()=>renderPage());return;}
     const op=e.target.closest('[data-op-code]'); if(op){openOperation(op.dataset.opCode);return;}
@@ -3237,6 +3383,7 @@
 
   pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;renderPage();return;}
     const performanceCheck=e.target.closest?.('[data-performance-matrix-check]');if(performanceCheck){const kind=performanceCheck.dataset.performanceMatrixCheck,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances',vals=matrixSelectionValues(kind).slice(),value=performanceCheck.value,idx=vals.findIndex(v=>norm(v)===norm(value));if(performanceCheck.checked&&idx<0)vals.push(value);if(!performanceCheck.checked&&idx>=0)vals.splice(idx,1);state[key]=vals;state.performanceMatrixPage=1;renderPage();return;}
+    const lmd=e.target.closest?.('[data-label-merge-derog]');if(lmd){state.labelMergeDerogation=lmd.checked;try{localStorage.setItem(LABEL_MERGE_KEY,lmd.checked?'1':'0');}catch{}preserveUiScroll(()=>renderPage());return;}
     const tunnelExcluded=e.target.closest?.('[data-tunnel-excluded-toggle]');if(tunnelExcluded){state.tunnelShowExcluded=Boolean(tunnelExcluded.checked);renderPage();return;}
     const statusYearExcluded=e.target.closest?.('[data-status-year-excluded-toggle]');if(statusYearExcluded){state.statusYearShowExcluded=Boolean(statusYearExcluded.checked);state.statusYearPage=1;renderPage();return;}
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleChange?.(e)) return;
@@ -3261,7 +3408,7 @@
   window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
   window.addEventListener('newosb:datachange',()=>{updateSourceStatus();renderFilters();renderPage();});
   window.addEventListener('newosb:privacychange',()=>{state.filters.moa=[];state.autoMoaFromGroup=[];state.crossFilters=state.crossFilters.filter(f=>f.key!=='moa');state.activeOperation=null;closeDrawer();closeProjectWindow();if(searchEl){searchEl.value='';searchEl.placeholder=privacy()?.enabled?.()?'Rechercher un projet anonymisé, un référentiel…':'Rechercher un projet, un MOA…';}state.search='';state.searchExcluded.clear();renderFilters();renderPage();});
-  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(mapPopEl){closeMapPopover();return;}if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
+  window.addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(state.layoutEditing&&!projectWindowEl?.classList.contains('is-open')&&!mapPopEl){setLayoutEditing(false);return;}if(mapPopEl){closeMapPopover();return;}if(projectWindowEl?.classList.contains('is-open')){closeProjectWindow();return;}if(drawer.classList.contains('is-open'))closeDrawer();});
 
   // V6.15 : périmètre affiché, pour la création d'un lien de partage (newosb-share.js).
   const SHARE_FILTER_LABELS=[['year','Année certification'],['createdYear','Année de création'],['referential','Référentiel'],['programType','Type de programme'],['moaGroup','Groupe MOA'],['status','Avancement'],['moa','Maître d’ouvrage'],['region','Région'],['department','Département'],['profile','Profil'],['socialZone','Zonage']];

@@ -1,5 +1,18 @@
 # Historique
 
+## V6.47
+
+- **⚙ Personnaliser** (barre latérale) : sur chaque onglet (sauf Exigences et Présentation), déplacer les encarts (glisser-déposer ou ↑ ↓, ← → dans une ligne de 2-3 encarts) et masquer ceux qui ne servent pas. Réglage mémorisé par onglet dans ce navigateur ; « Réinitialiser cet onglet » revient à l'affichage d'origine ; « Terminer » ou Échap pour sortir.
+- Pendant la personnalisation, les encarts ne réagissent pas aux clics (pas de filtre déclenché par erreur) ; les encarts masqués restent visibles en grisé pour pouvoir les réafficher.
+- Graphiques **Labels** (Certification et Territoires) :
+  - « Avec dérogation de points » et « Sans dérogation de points » regroupés automatiquement sous le même label (désactivable) ;
+  - bouton **Regrouper** : cocher plusieurs labels et leur donner un nom (ex. « Label biosourcé 2024 1er niveau ») ; groupes mémorisés dans ce navigateur, supprimables ;
+  - « Sans mention » n'est plus compté comme un label ;
+  - couleurs en déclinaison de verts.
+
+**Écran de chargement**
+- Collier de raccord bleu à la sortie du tuyau du compteur d'eau.
+
 ## V6.46
 
 **Vue d'ensemble**

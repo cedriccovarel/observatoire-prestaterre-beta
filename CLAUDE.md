@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.47 | Collier de raccord bleu à la sortie du tuyau du compteur d'eau. |
 | V6.46 | Deux vis de fixation en haut du boîtier du compteur d'eau. |
 | V6.45 | Reflet fixe sur la vitre du cadran du compteur d'eau. |
 | V6.44 | Petite étiquette « m³ » sous le cadran du compteur d'eau. |

@@ -1485,3 +1485,36 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-hstack-bar span{min-width:2px;height:100%}
 .obs-housing-table tr.is-total td{border-top:2px solid #cfe0d7;font-weight:700}
 @media(max-width:520px){.obs-hstack-row{grid-template-columns:96px 1fr 40px}}
+/* V6.47 — personnalisation des encarts */
+.obs-nav .obs-nav-settings{margin-top:10px;border-top:1px solid rgba(255,255,255,.14);border-radius:0 0 10px 10px;padding-top:13px}
+.obs-nav .obs-nav-settings.is-active{background:#fff;color:var(--obs-green);border-radius:10px}
+.obs-page:not(.is-layout-editing) .is-layout-hidden{display:none!important}
+.obs-layout-banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 12px;padding:10px 14px;border:1px dashed #1e985f;border-radius:12px;background:#eef8f2;color:#173b2c;font-size:12px}
+.obs-layout-banner span{flex:1;min-width:220px}
+.is-layout-editing .obs-layout-unit{position:relative;outline:2px dashed rgba(30,152,95,.45);outline-offset:3px;cursor:grab}
+.is-layout-editing .obs-layout-unit:not(.obs-card):not(.obs-kpi-summary-group):not(.obs-grid-kpi){padding-top:34px}
+.is-layout-editing .obs-card.obs-layout-unit,.is-layout-editing .obs-kpi-summary-group.obs-layout-unit,.is-layout-editing .obs-grid-kpi.obs-layout-unit{padding-top:44px}
+.is-layout-editing .obs-card.obs-layout-unit>:not(.obs-layout-tools),.is-layout-editing .obs-kpi-summary-group.obs-layout-unit>:not(.obs-layout-tools),.is-layout-editing .obs-grid-kpi.obs-layout-unit>:not(.obs-layout-tools){pointer-events:none;user-select:none}
+.is-layout-editing .obs-layout-unit.is-layout-hidden{opacity:.45;background-image:repeating-linear-gradient(135deg,transparent 0 10px,rgba(23,59,44,.05) 10px 20px)}
+.is-layout-editing .obs-layout-unit.is-dragging{opacity:.35}
+.is-layout-editing .is-drop-before{box-shadow:0 -4px 0 #1e985f}.is-layout-editing .is-drop-after{box-shadow:0 4px 0 #1e985f}
+.is-layout-editing [data-layout-scope]:not([data-layout-scope="page"]).is-drop-before{box-shadow:-4px 0 0 #1e985f}.is-layout-editing [data-layout-scope]:not([data-layout-scope="page"]).is-drop-after{box-shadow:4px 0 0 #1e985f}
+.obs-layout-tools{position:absolute;top:6px;left:8px;right:8px;z-index:5;display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:9px;background:#06402b;color:#fff;font-size:11px;cursor:grab}
+.obs-layout-tools b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;letter-spacing:.02em}
+.obs-layout-grip{opacity:.7;font-size:13px}
+.obs-layout-tools button{border:0;border-radius:6px;background:rgba(255,255,255,.14);color:#fff;font:700 12px/1 Arial,sans-serif;padding:5px 8px;cursor:pointer}
+.obs-layout-tools button:hover{background:rgba(255,255,255,.28)}.obs-layout-tools button[aria-pressed="true"]{background:#d49a2a;color:#173b2c}
+.obs-layout-unit:not(.obs-card):not(.obs-kpi-summary-group):not(.obs-grid-kpi)>.obs-layout-tools{background:#2f6f53}
+@media (prefers-reduced-motion:no-preference){.obs-layout-tools button{transition:background .15s}}
+/* V6.47 — regroupement des labels */
+.obs-label-groups{margin:0 0 12px;padding:10px 12px;border:1px solid #d6e3dc;border-radius:10px;background:#f7fbf8;font-size:12px;display:flex;flex-direction:column;gap:8px}
+.obs-label-merge{display:flex;gap:8px;align-items:center;font-weight:600}
+.obs-label-group-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.obs-label-group-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 9px;border-radius:999px;background:#06402b;color:#fff;font-weight:600}
+.obs-label-group-chip small{opacity:.75}.obs-label-group-chip button{border:0;background:rgba(255,255,255,.18);color:#fff;border-radius:999px;width:20px;height:20px;cursor:pointer}
+.obs-label-group-list{max-height:220px;overflow:auto;border:1px solid #e1ebe5;border-radius:8px;background:#fff}
+.obs-label-group-list label{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid #eef3f0;cursor:pointer}
+.obs-label-group-list label:last-child{border-bottom:0}.obs-label-group-list small{color:#5e7168;white-space:nowrap}
+.obs-label-group-form{display:flex;gap:8px;flex-wrap:wrap}.obs-label-group-form input{flex:1;min-width:200px;padding:7px 10px;border:1px solid #cfe0d7;border-radius:8px;font:inherit}
+.obs-label-group-help{color:#5e7168}
+.obs-card-action.is-active{background:#06402b;color:#fff}
