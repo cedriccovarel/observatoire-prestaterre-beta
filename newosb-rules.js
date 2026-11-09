@@ -442,11 +442,73 @@
     return out;
   }
 
+  // ---- V6.56 : lignes dont le bloc technique est collé une colonne trop à gauche dans la Sheet ----------------
+  // Constat (export du 30/09/2026) : pour certaines lignes, les valeurs de « Zonage logement social » → « DPE GES après
+  // travaux final » sont décalées d'une colonne vers la gauche (l'adresse dans « Zonage », la structure de toiture dans
+  // « Mode constructif », les tags dans « DPE GES après »…). Recalage à la lecture, ligne par ligne, uniquement si les
+  // colonnes au type non ambigu sont nettement plus cohérentes une fois décalées. Rien n'est écrit dans la Sheet.
+  const nz = v => stripAccents(v).toLowerCase().replace(/[’']/g, ' ').replace(/[^a-z0-9.,/ +-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const numIn = (lo, hi) => v => { const t = String(v ?? '').trim().replace(',', '.'); if (!/^-?\d+(\.\d+)?$/.test(t)) return false; const n = Number(t); return n >= lo && n <= hi; };
+  const re = r => v => r.test(nz(v));
+  const SHIFT_TYPED = [
+    [/^zonage logement social/, re(/^(zone )?[123](\.0)?$|^[ab]$|^abis$|^b[12]$|^c$/)],
+    [/^adresse$/, re(/(^|\d.* )(rue|avenue|av|bd|boulevard|allee|chemin|place|impasse|route|quai|cours|square|residence|lieu dit)\b/)],
+    [/^nature$/, re(/neuf|renov|rehab|extension|construction|restructur/)],
+    [/^annee$|^annee de construction$/, re(/^(1[5-9]\d\d|20\d\d)(\.0+)?$|^(avant|apres|entre|vers) .*\d{4}/)],
+    [/^vecteur (chauffage|ecs) (avant|apres)/, v => nz(v).length < 60 && re(/gaz|electri|rcu|reseau|chauffage urbain|fioul|bois|granul|pac|pompe a chaleur|biomasse|solaire|cet|thermodyn/)(v)],
+    [/structure$/, v => re(/beton|brique|bois|parpaing|pierre|meuliere|maconnerie|acier|metal|hourdis|dalle|comble|rampant|vide sanitaire|terre plein|ossature|voute|solive|poutrelle/)(v) && !re(/laine|isol|polystyr|\bpse\b|\bpur\b|flocage/)(v)],
+    [/type d.?isolant$|type isolant$/, re(/laine|polystyr|\bpse\b|\bpur\b|\bpir\b|polyur|fibre|ouate|isol|flocage|projection|\bxps\b|liege|chanvre|cellul/)],
+    [/epaisseur isolant$/, v => numIn(10, 600)(v) || re(/\d\s*(mm|cm)\b/)(v)],
+    [/ r isolant$|^r isolant$/, numIn(0.3, 15)],
+    [/menuiseries? exterieures? materiau/, re(/pvc|bois|alu|acier|mixte/)],
+    [/menuiseries? exterieures? vitrage/, re(/vitrage|\d+ ?\/ ?\d+ ?\/ ?\d+|argon|\bar\b|feuillete/)],
+    [/menuiseries? exterieures? occultation/, re(/volet|store|persienne|\bbso\b|brise|occult|sans/)],
+    [/^ubat (initial|projet)/, numIn(0.1, 5)],
+    [/^tic (projet|ref)$/, numIn(15, 45)],
+    [/^cep max$|^cep,?nr max$/, numIn(25, 900)],
+    [/^dpe (energie|ges) (avant|apres)/, re(/^[a-g]$/)]
+  ];
+  function shiftLayout(headers) {
+    const typed = [];
+    (headers || []).forEach((h, i) => { const n = nz(h); const t = SHIFT_TYPED.find(([r]) => r.test(n)); if (t) typed.push({ i, test: t[1] }); });
+    if (typed.length < 6) return null;
+    return { start: Math.min(...typed.map(t => t.i)), typed };
+  }
+  function shiftScores(row, layout) {
+    let ap = 0, af = 0, sp = 0, sf = 0;
+    layout.typed.forEach(({ i, test }) => {
+      const a = row[i], b = row[i - 1];
+      if (String(a ?? '').trim()) { if (test(a)) ap++; else af++; }
+      if (String(b ?? '').trim()) { if (test(b)) sp++; else sf++; }
+    });
+    return { ap, af, sp, sf };
+  }
+  // Renvoie les lignes recalées (copies) et la liste des index recalés. Le décalage s'arrête à la première cellule
+  // vide après le dernier champ technique (ex. « TAG ») : les colonnes ajoutées ensuite (type de programme calculé
+  // par le script) ne bougent pas.
+  function realignShiftedRows(headers, rows) {
+    const layout = shiftLayout(headers); if (!layout || layout.start < 1) return { rows: rows || [], fixed: [], start: -1 };
+    const lastTyped = Math.max(...layout.typed.map(t => t.i)), width = (headers || []).length, fixed = [];
+    let endIndex = -1;
+    const out = (rows || []).map((row, k) => {
+      if (!Array.isArray(row)) return row;
+      const s = shiftScores(row, layout);
+      if (!(s.sp >= 4 && s.sp >= s.ap + 3 && s.sf < s.af)) return row;
+      let end = -1; for (let i = lastTyped + 1; i < width; i++) if (!String(row[i] ?? '').trim()) { end = i; break; }
+      if (end < 0) return row; // aucune cellule libre pour absorber le décalage : ligne laissée telle quelle
+      const r = row.slice(); while (r.length < width) r.push('');
+      for (let i = end; i >= layout.start; i--) r[i] = row[i - 1] ?? '';
+      r[layout.start - 1] = ''; // la vraie valeur de cette colonne a été écrasée par le collage : inconnue
+      endIndex = Math.max(endIndex, end); fixed.push(k); return r;
+    });
+    return { rows: out, fixed, start: layout.start, end: endIndex, startHeader: headers[layout.start], endHeader: endIndex >= 0 ? headers[endIndex] : '' };
+  }
+
   const api = {
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
     parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
-    PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
+    realignShiftedRows, shiftLayout, PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };
   root.NEWOSB_RULES = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

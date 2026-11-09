@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.54 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.56 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -647,6 +647,10 @@
     if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     // V6.44 : petite étiquette « m³ » sous le cadran du compteur (même pendant les mouvements réduits).
     ctx.fillStyle = '#5d7480'; ctx.font = '600 3px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('m³', x + 7, y + 12.6); ctx.textAlign = 'start';
+    // V6.56 : petit reflet clair sur le collier bleu du raccord (fixe).
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(x + 5.9, y + 12.6, 0.9, 0.5);
+    // V6.55 : petit joint noir à la jonction entre le collier bleu et le tuyau du compteur (fixe).
+    ctx.fillStyle = '#2b3236'; ctx.fillRect(x + 5.9, y + 13.8, 2.2, 0.45);
     // V6.54 : petite étiquette blanche « relevé » suspendue par un fil à la vis gauche du boîtier, légèrement inclinée (fixe).
     ctx.strokeStyle = '#8a9aa2'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(x + 1.8, y + 1.8); ctx.lineTo(x - 1.2, y + 4.2); ctx.stroke();
     ctx.save(); ctx.translate(x - 2.4, y + 5.6); ctx.rotate(-0.18); ctx.fillStyle = '#ffffff'; rr(ctx, -1.6, -1.4, 3.2, 4.2, 0.4); ctx.fill(); ctx.strokeStyle = '#b9c6cb'; ctx.lineWidth = 0.25; rr(ctx, -1.6, -1.4, 3.2, 4.2, 0.4); ctx.stroke(); ctx.fillStyle = '#c9d4d8'; ctx.fillRect(-1, 0, 2, 0.3); ctx.fillRect(-1, 1, 1.6, 0.3); ctx.restore();

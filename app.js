@@ -7273,7 +7273,11 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     idxByName.forEach((list,h)=>{if(list.length<2)return;list.slice(0,-1).forEach((i,n)=>{keys[i]=`${h} [${n+1}]`;});dups.push({header:h,letters:list.map(i=>DATA_RULES?DATA_RULES.columnLetter(i):String(i))});});
     return {keys,dups};
   }
-  function dataMatrixRowsToObjects(headers,rows){const {keys,dups}=dataUniqueHeaderKeys(headers);dataRuntime.duplicateHeaders=dups;dataRuntime.sourceKeys=keys;return (rows||[]).map(row=>{const out={};keys.forEach((h,i)=>{if(h)out[h]=row?.[i]??'';});return out;});}
+  // V6.56 : lignes dont le bloc technique est collé une colonne trop à gauche dans la Sheet → recalées à la lecture (en mémoire).
+  function dataMatrixRowsToObjects(headers,rows){const {keys,dups}=dataUniqueHeaderKeys(headers);dataRuntime.duplicateHeaders=dups;dataRuntime.sourceKeys=keys;
+    const re=DATA_RULES?.realignShiftedRows?DATA_RULES.realignShiftedRows(headers,rows):{rows:rows||[],fixed:[]},fixed=new Set(re.fixed);
+    dataRuntime.realigned=re.fixed.length?{count:re.fixed.length,index:re.fixed,startHeader:re.startHeader,endHeader:re.endHeader,startLetter:DATA_RULES.columnLetter(re.start-1),endLetter:DATA_RULES.columnLetter(re.end-1)}:null;
+    return (re.rows||[]).map((row,k)=>{const out={};keys.forEach((h,i)=>{if(h)out[h]=row?.[i]??'';});if(fixed.has(k))Object.defineProperty(out,'__realigned',{value:true,enumerable:false});return out;});}
   async function dataLoadAppsScript(url,onProgress){
     const ping=await dataAppsScriptRequest(url,{mode:'ping'},120000);
     if(ping&&ping.ok===false)throw new Error(ping.error||'Erreur Apps Script');
@@ -7317,7 +7321,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   function dataRenderSourceInfo(){const el=document.getElementById('dataSourceInfo');if(!el)return;const m=dataRuntime.sourceMeta;
     if(!dataRuntime.connected||!m||dataRuntime.mode==='share'){el.hidden=true;el.textContent='';return;}
     const when=v=>v?new Date(v).toLocaleString('fr-FR',{dateStyle:'short',timeStyle:'short'}):'',src=m.source||{},esc=dataEsc;
-    const rows=[['Classeur',src.spreadsheet||(dataRuntime.mode==='appsScript'?'non communiqué : mettre à jour Code_Operations.gs (V06.44)':'Google Sheet public')],['Onglet',src.sheet||dataRuntime.sourceTab||'OPERATIONS'],
+    const realign=dataRuntime.realigned;const rows=[...(realign?[['Lignes recalées',`${realign.count} ligne${realign.count>1?'s':''} dont les valeurs de « ${realign.startHeader} » à « ${realign.endHeader} » sont écrites une colonne trop à gauche dans la Sheet (${realign.startLetter} à ${realign.endLetter}) : relues à la bonne place à l’import, en mémoire (rien n’est modifié dans la Sheet).`]]:[]),['Classeur',src.spreadsheet||(dataRuntime.mode==='appsScript'?'non communiqué : mettre à jour Code_Operations.gs (V06.44)':'Google Sheet public')],['Onglet',src.sheet||dataRuntime.sourceTab||'OPERATIONS'],
       ['Lignes lues',m.totalRows!=null?`${Number(m.totalRows).toLocaleString('fr-FR')}${m.headerRow?` (en-têtes ligne ${m.headerRow})`:''} → ${dataRuntime.sourceOperations.length.toLocaleString('fr-FR')} opérations`:''],
       ['Classeur modifié le',when(src.modifiedAt)],['Lu par l’Observatoire le',when(m.readAt)],['Script OPERATIONS',m.version?`version ${m.version}`:'']].filter(r=>r[1]);
     const p=window.NEWOSB_PRIVACY,unc=Array.isArray(m.rows)?dataUncountedReport(m.rows,m.rowNumbers,dataRuntime.sourceOperations,m.emptyRows,c=>p?.enabled?.()&&p.operationCode?p.operationCode(c):c):null;

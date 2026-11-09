@@ -831,16 +831,17 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       } }
     console.log('\nN. Solutions constructives : menuiseries extérieures en bandes + combinaisons (V6.52)');
     { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
-      const EXTRA = ['Menuiseries extérieures matériau', 'Menuiseries extérieures vitrage', 'Menuiseries extérieures occultations']; H.push(...EXTRA);
+      const EXTRA = ['Menuiseries extérieures matériau', 'Menuiseries extérieures vitrage', 'Menuiseries extérieures occultations', 'Planchers hauts structure', 'Planchers hauts type isolant', 'Parois verticales structure', 'Parois verticales type isolant', 'Planchers bas structure', 'Planchers bas type isolant']; H.push(...EXTRA);
+      const ENV = k => [['Béton', 'PUR', 'Béton', 'Laine de verre', 'Béton', 'Flocage'], ['Rampants / combles', 'Laines de roche', 'Brique', 'PSE', 'Vide sanitaire', 'Isolant non précisé'], ['Béton', 'Laine de verre', 'Béton', 'Laine de verre', 'Poutrelles-hourdis', 'PSE']][k % 3];
       const MAT = ['PVC', 'PVC', 'PVC', 'PVC / bois pour fenêtres de toit', 'PVC', 'Bois (fenêtres) / aluminium (Velux)', 'PVC', 'Aluminium', '', 'PVC'];
       const GLA = ['Double vitrage 4/16/4 PE Argon', '10.10.4 Ar', '4/16/4', 'Double vitrage', 'Double vitrage argon', 'Triple vitrage', 'Argon', '4/16/4', '', 'double'];
       const SHA = ['Volets roulants', 'Volet roulant', 'Volets roulants PVC ou aluminium / persiennes acier', 'Persiennes', 'Volets roulants', 'BSO', 'Volets roulants', 'Brise-vue', '', ''];
-      let i = 0; rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); const k = r[0] ? i++ : -1; r.push(...(k >= 0 && k < 10 ? [MAT[k], GLA[k], SHA[k]] : ['', '', ''])); });
+      let i = 0; rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); const k = r[0] ? i++ : -1; r.push(...(k >= 0 && k < 10 ? [MAT[k], GLA[k], SHA[k], ...ENV(k)] : ['', '', '', '', '', '', '', '', ''])); });
       const SHOTS = process.env.SHOT_DIR || require('os').tmpdir();
       for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
         const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height } });
         await page.evaluate(() => document.querySelector('button[data-page="solutions"]').click()); await page.waitForTimeout(500);
-        const info = () => page.evaluate(() => { const c = document.querySelector('.obs-window-card'); return { bands: c ? c.querySelectorAll('.obs-window-band').length : 0, aria: c ? [...c.querySelectorAll('.obs-window-bar')].every(b => b.getAttribute('aria-label')) : false, head: c?.querySelector('.obs-card-head small')?.textContent || '', rows: c ? [...c.querySelectorAll('.obs-window-table tbody tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], firstBold: c ? getComputedStyle(c.querySelector('.obs-window-table tbody tr td')).fontWeight : '', toggle: !!c?.querySelector('.obs-view-toggle'), pie: !!c?.querySelector('svg circle, .obs-pie'), segs: c ? [...c.querySelectorAll('.obs-window-band:first-child .obs-window-seg b')].map(b => b.textContent) : [], minFont: c ? Math.min(...[...c.querySelectorAll('*')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) : 0, scrollX: c ? (() => { const w = c.querySelector('.obs-window-table-wrap'); return w.scrollWidth > w.clientWidth; })() : false }; });
+        const info = () => page.evaluate(() => { const c = document.querySelector('.obs-window-card:not(.obs-envelope-composition)'); return { bands: c ? c.querySelectorAll('.obs-window-band').length : 0, aria: c ? [...c.querySelectorAll('.obs-window-bar')].every(b => b.getAttribute('aria-label')) : false, head: c?.querySelector('.obs-card-head small')?.textContent || '', rows: c ? [...c.querySelectorAll('.obs-window-table tbody tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], firstBold: c ? getComputedStyle(c.querySelector('.obs-window-table tbody tr td')).fontWeight : '', toggle: !!c?.querySelector('.obs-view-toggle'), pie: !!c?.querySelector('svg circle, .obs-pie'), segs: c ? [...c.querySelectorAll('.obs-window-band:first-child .obs-window-seg b')].map(b => b.textContent) : [], minFont: c ? Math.min(...[...c.querySelectorAll('*')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) : 0, scrollX: c ? (() => { const w = c.querySelector('.obs-window-table-wrap'); return w.scrollWidth > w.clientWidth; })() : false }; });
         const a = await info();
         if (vp.tag === 'desktop') {
           check(a.bands === 3 && a.aria && !a.toggle && !a.pie, 'trois bandes alignées (matériau, vitrage, occultation), aria-label, plus de bascule barres / camembert');
@@ -849,16 +850,23 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
           check(a.rows.length >= 3 && /^PVC ?Double vitrage argon ?Volets roulants ?\d+ %/.test(a.rows[0]) && Number(a.firstBold) >= 700, 'combinaison dominante en gras : PVC · Double vitrage argon · Volets roulants — ' + a.rows[0]);
           check(a.minFont >= 9, `textes ≥ 9 px (min ${a.minFont})`);
           const before0 = await page.textContent('.obs-selection-note');
-          await page.click('.obs-window-table tbody tr:first-child'); await page.waitForTimeout(400);
+          await page.click('.obs-window-card:not(.obs-envelope-composition) .obs-window-table tbody tr:first-child'); await page.waitForTimeout(400);
           const f = await page.evaluate(() => ({ note: document.querySelector('.obs-selection-note')?.textContent, rows: document.querySelectorAll('.obs-window-table tbody tr').length, active: !!document.querySelector('.obs-window-table tr.is-active') }));
           check(/^\d+ opérations?/.test(f.note) && f.note !== before0 && f.active, 'clic sur une combinaison : filtre croisé — ' + before0 + ' → ' + f.note);
           await page.click('.obs-window-table tbody tr.is-active'); await page.waitForTimeout(300);
           check(/^\d+ opérations/.test(await page.textContent('.obs-selection-note')) && !(await page.$('.obs-window-table tr.is-active')), 'second clic : filtre retiré');
-          await page.click('.obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
+          const env = await page.evaluate(() => [...document.querySelectorAll('.obs-envelope-composition')].map(c => ({ h: c.querySelector('h2').textContent, bands: c.querySelectorAll('.obs-window-band').length, rows: c.querySelectorAll('tbody tr').length, first: c.querySelector('.obs-window-band .obs-window-seg b')?.textContent, r: c.querySelector('.obs-envelope-metrics-inline b')?.textContent })));
+          check(env.length === 3 && env.every(e => e.bands === 2 && e.rows >= 2) && env[0].first === 'Béton' && /Planchers bas/.test(env[2].h), 'toitures, façades, planchers bas : bandes structure + isolant et combinaisons, comme les menuiseries — ' + env.map(e => `${e.h.split(' :')[0]} (${e.first}, ${e.rows} comb.)`).join(' | '));
+          const n0 = await page.textContent('.obs-selection-note');
+          await page.click('.obs-envelope-composition .obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
+          check((await page.textContent('.obs-selection-note')) !== n0 && await page.$('.obs-envelope-composition .obs-window-seg.is-active'), 'clic sur un isolant de toiture : filtre croisé');
+          await page.click('.obs-envelope-composition .obs-window-seg.is-active'); await page.waitForTimeout(300);
+          await page.click('.obs-window-card:not(.obs-envelope-composition) .obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
           check(await page.evaluate(() => !!document.querySelector('.obs-window-seg.is-active')), 'clic sur un segment : filtre croisé');
           await page.click('.obs-window-seg.is-active'); await page.waitForTimeout(300);
         } else check(a.bands === 3 && a.minFont >= 9 && a.scrollX, `mobile : 3 bandes, textes ≥ 9 px, tableau défilable horizontalement (${a.minFont} px)`);
-        const card = await page.$('.obs-window-card'); if (card) await card.screenshot({ path: path.join(SHOTS, `v652_menuiseries_${vp.tag}.png`) });
+        const card = await page.$('.obs-window-card:not(.obs-envelope-composition)'); if (card) await card.screenshot({ path: path.join(SHOTS, `v652_menuiseries_${vp.tag}.png`) });
+        const envCard = await page.$('.obs-envelope-composition'); if (envCard) await envCard.screenshot({ path: path.join(SHOTS, `v655_toiture_${vp.tag}.png`) });
         check(errors.length === 0, `V6.52 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
         await context.close();
       } }
@@ -971,6 +979,31 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         check(errors.length === 0, `V6.54 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
         await context.close();
       } }
+    console.log('\nQ. Import : lignes collées une colonne trop à gauche recalées ; RCU → autre vecteur signalé (V6.56)');
+    { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
+      const EXTRA = ['Code INSEE', 'Zonage logement social 1/2/3', 'Adresse', 'Nature', 'Année', 'Vecteur chauffage avant travaux', 'Vecteur chauffage après travaux', 'Planchers hauts structure', 'Planchers hauts type isolant', 'Planchers hauts R isolant', 'Ubat projet', 'DPE énergie avant travaux', 'TAG'];
+      H.push(...EXTRA);
+      const VAL = { 'OP-1': ['', '12 rue Exemple', 'Rénovation', '1972', 'RCU', 'PAC air/eau', 'Béton', 'PUR', '6,5', '0,9', 'D', 'biosourcé', ''], 'OP-2': ['33063', '2', '3 rue Test', 'Rénovation', '1965', 'Gaz', 'Gaz', 'Béton', 'Laine de verre', '7', '0,8', 'E', 'bois'] };
+      rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); r.push(...(VAL[r[0]] || EXTRA.map(() => ''))); });
+      const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows] });
+      await page.waitForFunction(() => !window.NEWOSB_REQUIREMENTS?.status?.().loading, null, { timeout: 30000 }).catch(() => {});
+      const op1 = await page.evaluate(() => { const o = window.NEWOSB_ENGINE.getOperations().find(x => x.code === 'OP-1'); return { address: o.address, heatingBefore: o.heatingBefore, heatingAfter: o.heatingAfter, nature: o.nature }; });
+      check(op1.address === '12 rue Exemple' && op1.heatingBefore === 'RCU' && /^PAC/.test(op1.heatingAfter) && /R[ée]novation/.test(op1.nature), 'ligne OP-1 collée une colonne trop à gauche : relue à la bonne place (adresse, nature, vecteurs) — ' + JSON.stringify(op1));
+      const op2 = await page.evaluate(() => { const o = window.NEWOSB_ENGINE.getOperations().find(x => x.code === 'OP-2'); return { address: o.address, insee: o.insee }; });
+      check(op2.address === '3 rue Test' && op2.insee === '33063', 'ligne OP-2 bien alignée : inchangée');
+      await page.evaluate(() => window.NEWOSB_ENGINE.showDataSource?.()); await page.waitForTimeout(300);
+      const info = await page.evaluate(() => document.getElementById('dataSourceInfo')?.textContent || '');
+      check(/Lignes recalées\s*1 ligne/.test(info) && /rien n’est modifié dans la Sheet/.test(info), 'fenêtre Données : « 1 ligne recalée » annoncée');
+      await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+      await page.evaluate(() => document.querySelector('button[data-page="energy"]').click()); await page.waitForTimeout(500);
+      const g = await page.evaluate(() => document.querySelector('.obs-rcu-guard')?.textContent.replace(/\s+/g, ' ') || '');
+      check(/1 passage RCU → autre vecteur/.test(g) && /OP-1 · Chauffage : RCU → PAC/.test(g), 'Énergie : passage RCU → PAC signalé et listé — ' + g.slice(0, 120));
+      await page.evaluate(() => [...document.querySelectorAll('[data-flow-focus="heating"]')].find(b => /RCU/.test(b.textContent))?.click()); await page.waitForTimeout(300);
+      check(await page.evaluate(() => !!document.querySelector('.obs-flow-link.is-degraded')), 'flux chauffage : lien RCU → PAC en rouge');
+      await page.evaluate(() => document.querySelector('button[data-page="quality"]').click()); await page.waitForTimeout(400);
+      check(/RCU avant travaux → « PAC/.test(await page.evaluate(() => document.querySelector('.obs-page').textContent)), 'Qualité & données : contrôle RCU (alerte)');
+      check(errors.length === 0, 'V6.56 : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
+      await context.close(); }
     console.log('\nI. Écran de chargement : chantier de rénovation, une seule barre pour OPERATIONS + RAPPORT (V6.23)');
     { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noConnect: true, delayMs: 900, extraSheets: { RAPPORT } });
       const startLoad = () => page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; window.__load = window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: KEY });

@@ -231,6 +231,51 @@ test('Dictionnaire : règles de regroupement des menuiseries documentées ; plus
   const n = read('newosb.js'); assert(n.includes('function windowCompositionCard') && !n.includes("solutionViewToggle('windows')") && n.includes("key==='windowCombo'"));
 });
 
+test('V6.55 : composition générique (structure × isolant) — familles « Autre » et « non précisé » en fin de bande', () => {
+  const ops = [{ s: 'Béton', i: 'PUR' }, { s: 'Béton', i: 'Laine de verre' }, { s: 'Combles', i: 'Isolant non précisé' }, { s: '', i: '' }];
+  const fam = v => v ? (/non pr/i.test(v) ? 'Isolant non précisé' : v === 'Combles' ? 'Autre structure' : v) : 'Non renseigné';
+  const c = C.familyComposition(ops, [{ value: o => o.s, family: fam }, { value: o => o.i, family: fam }]);
+  assert.strictEqual(c.n, 3); same(c.bands[0].map(x => x.name), ['Béton', 'Autre structure']);
+  same(c.bands[1].map(x => x.name), ['Laine de verre', 'PUR', 'Isolant non précisé']);
+  assert(C.isOtherFamily('Isolant non précisé') && C.isOtherFamily('Autre isolant') && C.isOtherFamily('Non renseigné') && !C.isOtherFamily('Béton'));
+  assert(/Flocage \/ projection/.test(C.dictByKey.envelopeFamilies.method) && /Combles \/ rampants/.test(C.dictByKey.envelopeFamilies.method));
+});
+test('V6.55 : règles isolant / structure (pluriels, flocage, isolant non précisé, combles) ; cartes toiture / façade / plancher bas en bandes', () => {
+  const n = read('newosb.js'), src = n.slice(n.indexOf('function normalizeInsulationFamily'), n.indexOf('function normalizeFloorFamily') > 0 ? n.indexOf('function normalizeFloorFamily') : undefined);
+  const ctx = { normalizedTokens: v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim() }; vm.createContext(ctx);
+  vm.runInContext(n.slice(n.indexOf('  function normalizeInsulationFamily'), n.indexOf('\n  }\n', n.indexOf('  function normalizeStructureFamily')) + 4), ctx);
+  const I = ctx.normalizeInsulationFamily, S = ctx.normalizeStructureFamily;
+  assert.strictEqual(I('Laines de roche'), 'Laines minérales'); assert.strictEqual(I('PUR'), 'Polyuréthane / PIR'); assert.strictEqual(I('Flocage'), 'Flocage / projection');
+  assert.strictEqual(I('Isolation en sous-face (matériau non précisé)'), 'Isolant non précisé'); assert.strictEqual(I('Isolant thermique'), 'Isolant non précisé'); assert.strictEqual(I(''), 'Non renseigné');
+  assert.strictEqual(S('Rampants / plafond sous combles'), 'Combles / rampants'); assert.strictEqual(S('Béton'), 'Béton'); assert.strictEqual(S('Combles bois'), 'Bois / ossature bois');
+  assert(n.includes("envelopeCompositionCard('Toitures / planchers hauts : structure et isolant','roof')") && n.includes("'wallCombo'") && n.includes("'floorCombo'") && !n.includes('function envelopeCard('));
+});
+
+test('V6.56 : lignes collées une colonne trop à gauche recalées à l’import ; les autres lignes et les colonnes ajoutées par le script ne bougent pas', () => {
+  const H = ['Code', 'Mention', 'Code INSEE', 'Zonage logement social 1/2/3', 'Adresse', 'Nature', 'Année', 'Vecteur chauffage avant travaux', 'Planchers hauts structure', 'Planchers hauts type isolant', 'Planchers hauts R isolant', 'Ubat projet', 'Cep max', 'DPE énergie avant travaux', 'TAG', 'Type de programme'];
+  const good = ['A', 'BEE+', '33063', '2', '3 rue Test', 'Rénovation', '1965', 'Gaz', 'Béton', 'Laine de verre', '7', '0,8', '150', 'E', 'bois', 'Logement collectif'];
+  const shifted = ['B', 'BEE+', '', '12 rue Exemple', 'Rénovation', '1972', 'RCU', 'Béton', 'PUR', '6,5', '0,9', '160', 'D', 'biosourcé', '', 'Logement collectif'];
+  const ambiguous = ['C', 'x', '', 'Béton', '', '', '', '', '', '', '', '', '', '', '', 'Logement collectif'];
+  const r = R.realignShiftedRows(H, [good, shifted, ambiguous]);
+  same(r.fixed, [1]); assert.strictEqual(r.rows[0], good); assert.strictEqual(r.rows[2], ambiguous);
+  const o = Object.fromEntries(H.map((h, i) => [h, r.rows[1][i]]));
+  assert.strictEqual(o['Adresse'], '12 rue Exemple'); assert.strictEqual(o['Nature'], 'Rénovation'); assert.strictEqual(o['Vecteur chauffage avant travaux'], 'RCU'); assert.strictEqual(o['Planchers hauts type isolant'], 'PUR');
+  assert.strictEqual(o['Ubat projet'], '0,9'); assert.strictEqual(o['Cep max'], '160'); assert.strictEqual(o['DPE énergie avant travaux'], 'D'); assert.strictEqual(o['TAG'], 'biosourcé'); assert.strictEqual(o['Type de programme'], 'Logement collectif');
+  assert.strictEqual(o['Code INSEE'], ''); assert.strictEqual(r.startHeader, 'Zonage logement social 1/2/3'); assert.strictEqual(r.endHeader, 'TAG');
+  const noRoom = shifted.slice(); noRoom[14] = 'occupé'; assert.strictEqual(R.realignShiftedRows(H, [noRoom]).fixed.length, 0, 'aucune cellule libre après le bloc : ligne laissée telle quelle');
+  const a = read('app.js'); assert(a.includes('DATA_RULES.realignShiftedRows(headers,rows)') && a.includes("'Lignes recalées'"));
+});
+test('V6.56 : RCU avant travaux → autre vecteur après = signalé (Qualité, transitions) ; RCU conservé ou ajouté = normal', () => {
+  const q = op => C.qualityForOperation({ code: 'P', name: 'P', moa: 'M', department: '33', referential: 'R', fields: {}, rawRows: [{}], ...op }).issues.filter(i => /^vector:rcu/.test(i.code));
+  assert.strictEqual(q({ heatingBefore: 'RCU', heatingAfter: 'PAC air/eau' }).length, 1);
+  assert.strictEqual(q({ heatingBefore: 'Réseau de chaleur urbain', heatingAfter: 'Chaudière gaz' })[0].severity, 'warn');
+  assert.strictEqual(q({ ecsBefore: 'RCU + appoint électrique', ecsAfter: 'Électricité' }).length, 1);
+  assert.strictEqual(q({ heatingBefore: 'RCU', heatingAfter: 'RCU (sous-station rénovée)' }).length, 0);
+  assert.strictEqual(q({ heatingBefore: 'Gaz', heatingAfter: 'RCU' }).length, 0); assert.strictEqual(q({ heatingBefore: 'RCU', heatingAfter: '' }).length, 0);
+  assert.strictEqual(q({ heatingBefore: 'Électricité + gaz de réseau', heatingAfter: 'PAC' }).length, 0, '« gaz de réseau » n’est pas un RCU');
+  const n = read('newosb.js'); assert(n.includes('function rcuGuard(ops)') && n.includes("degraded?'is-degraded':''") && /RCU/.test(C.dictByKey.rcuRule.method));
+});
+
 section('4 quater. Croiser les données (V6.53)');
 test('paire par défaut : la plus renseignée parmi les paires pertinentes', () => {
   const ops = [mk('A', { cep: 50, cepMax: 100, ubatBefore: 1, ubatAfter: 0.5 }), mk('B', { ubatBefore: 1.2, ubatAfter: 0.6 }), mk('C', { ubatBefore: 1.4, ubatAfter: 0.7 }), mk('D', { cep: 60 })];

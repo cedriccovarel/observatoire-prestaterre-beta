@@ -1,5 +1,30 @@
 # Historique
 
+## V6.56
+
+**Import : lignes collées une colonne trop à gauche recalées automatiquement**
+- Dans la Sheet OPERATIONS, certaines lignes ont leurs valeurs de « Zonage logement social 1/2/3 » à « TAG » écrites une colonne trop à gauche (sur l’export du 30/09/2026 : les 38 lignes techniques ; adresse dans « Zonage », structure de toiture dans « Mode constructif », gain Cep dans « Cep max », Cep initial dans « Ubat projet », tags dans « DPE GES après travaux final »…). Les colonnes ne pouvant pas être déplacées dans la Sheet, ces lignes sont **relues à la bonne place à l’import**, en mémoire seulement.
+- Détection ligne par ligne, prudente : des colonnes au type non ambigu (classes DPE A–G, vecteurs, adresse, nature, année, structure, isolant, épaisseur, R, Ubat, TIC, Cep max, menuiseries) doivent être nettement plus cohérentes une fois décalées ; sinon la ligne n’est pas touchée. Les colonnes ajoutées par le script (type de programme) ne bougent pas. La cellule écrasée par le collage reste vide (jamais devinée).
+- La fenêtre Données indique le nombre de lignes recalées. Fonctionne aussi pour les liens de partage (même lecture).
+- Effet sur l’export du 30/09/2026 : barres de marge calculables (Cep 26 opérations, marge 29 % ; TIC 20 ; Bbio 8), Ubat 1,64 → 0,81 (−51 %), Cep initial → après 188 → 96 (−49 %), parois et menuiseries lisibles (Béton, laines minérales, PVC…).
+
+**Règle métier : un raccordement RCU ne se dégrade pas**
+- Chauffage et ECS : RCU (réseau de chaleur, chauffage urbain) avant travaux et un autre vecteur sans RCU après → signalé en Qualité & données (alerte), listé sous les transitions énergétiques (clic → fiche) et lien en rouge dans le flux. La donnée n’est pas corrigée. Documenté au Dictionnaire.
+
+**Écran de chargement**
+- Petit reflet clair sur le collier bleu du raccord du compteur d’eau.
+
+## V6.55
+
+**Solutions constructives : toitures, façades et planchers bas lus comme les menuiseries**
+- Les cartes « Toitures / planchers hauts », « Façades / parois verticales » et « Planchers bas » passent au même format que les menuiseries : deux bandes 100 % alignées (Structure ou Type de plancher, Isolant) et le tableau des 5 combinaisons structure × isolant les plus fréquentes ; R moyen et épaisseur moyenne conservés en tête ; « n opérations renseignées sur N » ; clic sur un segment ou une ligne = filtre croisé.
+- Un seul composant pour les quatre cartes (bandes + combinaisons), calcul testé dans newosb-core.js.
+- Regroupements complétés (règles au Dictionnaire) : « laines de roche / de verre » au pluriel, flocage ou projection sans matériau → « Flocage / projection », isolant cité sans matériau → « Isolant non précisé » (gris, jamais deviné), toiture décrite seulement par combles ou rampants → « Combles / rampants ».
+- Constat sur l’export du 30/09/2026 : 38 lignes techniques collées une colonne trop à gauche dans la Sheet (recalées à l’import depuis la V6.56).
+
+**Écran de chargement**
+- Petit joint noir entre le collier bleu et le tuyau du compteur d’eau.
+
 ## V6.54
 
 **Vue d’ensemble : carte des projets géolocalisés et fiche résumé**
