@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.50 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.54 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -647,6 +647,17 @@
     if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     // V6.44 : petite étiquette « m³ » sous le cadran du compteur (même pendant les mouvements réduits).
     ctx.fillStyle = '#5d7480'; ctx.font = '600 3px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('m³', x + 7, y + 12.6); ctx.textAlign = 'start';
+    // V6.54 : petite étiquette blanche « relevé » suspendue par un fil à la vis gauche du boîtier, légèrement inclinée (fixe).
+    ctx.strokeStyle = '#8a9aa2'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(x + 1.8, y + 1.8); ctx.lineTo(x - 1.2, y + 4.2); ctx.stroke();
+    ctx.save(); ctx.translate(x - 2.4, y + 5.6); ctx.rotate(-0.18); ctx.fillStyle = '#ffffff'; rr(ctx, -1.6, -1.4, 3.2, 4.2, 0.4); ctx.fill(); ctx.strokeStyle = '#b9c6cb'; ctx.lineWidth = 0.25; rr(ctx, -1.6, -1.4, 3.2, 4.2, 0.4); ctx.stroke(); ctx.fillStyle = '#c9d4d8'; ctx.fillRect(-1, 0, 2, 0.3); ctx.fillRect(-1, 1, 1.6, 0.3); ctx.restore();
+    // V6.53 : fine flèche bleue « sens d'écoulement » gravée sur le côté droit du boîtier (fixe).
+    ctx.strokeStyle = '#2f7fbf'; ctx.lineWidth = 0.45; ctx.beginPath(); ctx.moveTo(x + 12.6, y + 4.6); ctx.lineTo(x + 12.6, y + 8.6); ctx.moveTo(x + 11.8, y + 7.6); ctx.lineTo(x + 12.6, y + 8.6); ctx.lineTo(x + 13.4, y + 7.6); ctx.stroke();
+    // V6.52 : petite plaque de numéro de série sombre, rivetée en haut du boîtier entre les deux vis (fixe).
+    ctx.fillStyle = '#4a575d'; rr(ctx, x + 4.4, y + 0.9, 5.2, 1.6, 0.3); ctx.fill();
+    ctx.strokeStyle = '#c9d4d8'; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(x + 5.2, y + 1.7); ctx.lineTo(x + 8.8, y + 1.7); ctx.stroke();
+    // V6.51 : vanne d'arrêt sous le compteur, poignée rouge quart de tour : le long du tuyau (ouverte) pendant l'arrosage, en travers (fermée) sinon (sans animation).
+    ctx.fillStyle = '#6b7b82'; ctx.beginPath(); ctx.arc(x + 7, y + 17, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c0392b'; if (watering) ctx.fillRect(x + 5.4, y + 14.8, 0.9, 3.4); else ctx.fillRect(x + 3.4, y + 16.55, 3.6, 0.9);
     // V6.50 : petit plomb de scellé rouge accroché par un fil au collier de raccord (fixe).
     ctx.strokeStyle = '#8a9aa2'; ctx.lineWidth = 0.35; ctx.beginPath(); ctx.moveTo(x + 8.4, y + 13.4); ctx.lineTo(x + 9.6, y + 15.2); ctx.stroke();
     ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(x + 9.8, y + 15.8, 0.75, 0, Math.PI * 2); ctx.fill();

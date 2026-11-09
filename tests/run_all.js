@@ -124,6 +124,183 @@ test('dictionnaire : avancement documenté avec la liste fermée', () => assert(
 test('dictionnaire : années documentées (décision de certification / création)', () => assert(/Date de décision de certification/.test(C.dictByKey.year.method) && /Date de création/.test(C.dictByKey.createdYear.method)));
 test('date illisible listée pour la page Qualité', () => assert.strictEqual(C.unreadableValues({ fields: { createdDate: 'D' }, rawRows: [{ D: 'bientôt' }] }, 'createdDate').length, 1));
 
+section('4 bis. Barre de marge, avant → après, DPE en escalier (V6.51)');
+const same = (a, b) => assert.deepStrictEqual(JSON.parse(JSON.stringify(a)), b);
+const mk = (code, vals) => ({ code, name: code, moa: 'M', department: '33', referential: 'R', fields: Object.fromEntries(Object.keys(vals).map(k => [k, k])), rawRows: [vals] });
+test('ratio opération par opération et médiane des ratios (pas moyenne des valeurs ÷ moyenne des max)', () => {
+  const ops = [mk('A', { cep: 50, cepMax: 100 }), mk('B', { cep: 60, cepMax: 200 }), mk('C', { cep: 90, cepMax: 100 })];
+  const m = C.thresholdMargin(ops, 'cep', 'cepMax');
+  same(m.rows.map(r => r.ratio), [0.5, 0.3, 0.9]);
+  assert.strictEqual(m.medianRatio, 0.5); assert.strictEqual(Math.round(m.margin * 100), 50);
+  assert.strictEqual(m.medianValue, 60); assert.strictEqual(m.medianMax, 100);
+});
+test('moitié centrale (quartiles) à partir de 5 opérations seulement', () => {
+  const ops = [10, 20, 30, 40, 50].map((v, i) => mk('Q' + i, { bbio: v, bbioMax: 100 }));
+  const m = C.thresholdMargin(ops, 'bbio', 'bbioMax');
+  assert.strictEqual(m.n, 5); assert.strictEqual(m.lowSample, false); assert.strictEqual(m.q1, 0.2); assert.strictEqual(m.q3, 0.4); assert.strictEqual(m.medianRatio, 0.3);
+  const few = C.thresholdMargin(ops.slice(0, 4), 'bbio', 'bbioMax');
+  assert.strictEqual(few.lowSample, true); assert.strictEqual(few.q1, null); assert.strictEqual(few.q3, null);
+});
+test('n = 0 : non calculable avec la raison, jamais un faux 0 %', () => {
+  const none = C.thresholdMargin([mk('A', { cep: '' })], 'cep', 'cepMax');
+  assert.strictEqual(none.n, 0); assert.strictEqual(none.margin, null); assert.strictEqual(none.medianRatio, null); assert(/aucune valeur/.test(none.reason));
+  const noMax = C.thresholdMargin([mk('A', { cep: 80 })], 'cep', 'cepMax');
+  assert.strictEqual(noMax.margin, null); assert(/seuil non renseigné/.test(noMax.reason));
+});
+test('dépassement : exclu de la médiane, listé avec son code, et signalé en Qualité (alerte)', () => {
+  const ops = [mk('OK1', { cep: 50, cepMax: 100 }), mk('OK2', { cep: 70, cepMax: 100 }), mk('OVER', { cep: 312, cepMax: 100 })];
+  const m = C.thresholdMargin(ops, 'cep', 'cepMax');
+  assert.strictEqual(m.n, 2); assert.strictEqual(m.medianRatio, 0.6); same(m.over.map(r => r.code), ['OVER']);
+  assert.strictEqual(Math.round(m.underRate), 67);
+  const q = C.qualityForOperation(ops[2]); const i = q.issues.find(x => x.code === 'threshold:cep');
+  assert(i && i.severity === 'warn' && /à contrôler/.test(i.label));
+  assert(C.qualityForOperation(mk('T', { tic: 31, ticRef: 29 })).issues.some(x => x.code === 'threshold:tic'));
+  assert(C.qualityForOperation(mk('N', { cepnr: 90, cepnrMax: 80 })).issues.some(x => x.code === 'threshold:cepnr'));
+});
+test('code technique « PROJET::2 » ramené au code projet pour ouvrir la fiche', () => {
+  const o = mk('P1::2', { cep: 300, cepMax: 100 }); assert.strictEqual(C.thresholdMargin([o], 'cep', 'cepMax').over[0].code, 'P1');
+});
+test('DH sans DH max : seuil par défaut 1 250 °C·h (compté) ; sans DH projet : non calculable', () => {
+  const m = C.thresholdMargin([mk('A', { dh: 500 }), mk('B', { dh: 250, dhMax: 1000 })], 'dh', 'dhMax', { defaultMax: C.DH_DEFAULT_MAX });
+  assert.strictEqual(C.DH_DEFAULT_MAX, 1250); assert.strictEqual(m.n, 2); assert.strictEqual(m.defaulted, 1); same(m.rows.map(r => r.ratio), [0.4, 0.25]);
+  const e = C.thresholdMargin([mk('A', { dhMax: 1250 })], 'dh', 'dhMax', { defaultMax: 1250 }); assert.strictEqual(e.n, 0); assert.strictEqual(e.margin, null);
+  assert(C.qualityForOperation(mk('H', { dh: 1400 })).issues.some(x => x.code === 'threshold:dh' && /par défaut/.test(x.label)));
+});
+test('Ubat : hors plage 0,1–5 écarté de la médiane avant → après et signalé en Qualité', () => {
+  const ops = [mk('U1', { ubatBefore: 1.2, ubatAfter: 0.6 }), mk('U2', { ubatBefore: 1.6, ubatAfter: 0.8 }), mk('U3', { ubatBefore: 312, ubatAfter: 0.5 })];
+  const r = C.beforeAfterMedian(ops, 'ubatBefore', 'ubatAfter', { range: C.UBAT_RANGE });
+  assert.strictEqual(r.n, 2); assert.strictEqual(r.before, 1.4); assert.strictEqual(r.after, 0.7); assert.strictEqual(Math.round(r.change * 100), -50);
+  same(r.outOfRange.map(x => [x.code, x.value]), [['U3', 312]]);
+  assert(C.qualityForOperation(ops[2]).issues.some(x => x.code === 'range:ubatBefore'));
+  assert(!C.qualityForOperation(ops[0]).issues.some(x => /^range:/.test(x.code)));
+});
+test('Cep initial → Cep après travaux : repli sur Cep projet', () => {
+  const r = C.beforeAfterMedian([mk('A', { cepBefore: 300, cep: 100 })], 'cepBefore', 'cepAfter', { afterFallback: 'cep' });
+  assert.strictEqual(r.n, 1); assert.strictEqual(r.after, 100); assert.strictEqual(r.lowSample, true);
+});
+test('DPE en escalier : effectifs avant / après, gain par opération, dégradation listée et signalée', () => {
+  const ops = [mk('E1', { dpeEnergyBefore: 'E', dpeEnergyAfter: 'C' }), mk('E2', { dpeEnergyBefore: 'F', dpeEnergyAfter: 'F' }), mk('E3', { dpeEnergyBefore: 'G', dpeEnergyAfter: 'B' }), mk('E4', { dpeEnergyBefore: 'C', dpeEnergyAfter: 'E' }), mk('E5', { dpeEnergyBefore: 'D' })];
+  const st = C.dpeStaircase(ops, 'dpeEnergyBefore', 'dpeEnergyAfter');
+  assert.strictEqual(st.beforeCount, 5); assert.strictEqual(st.afterCount, 4); assert.strictEqual(st.pairs, 4);
+  same(st.buckets, { worse: 1, '0': 1, '1': 0, '2': 1, '3': 0, '4plus': 1 });
+  same(st.degraded.map(d => [d.code, d.before, d.after]), [['E4', 'C', 'E']]);
+  assert.strictEqual(st.before.E, 1); assert.strictEqual(st.after.C, 1);
+  const q = C.qualityForOperation(ops[3]); assert(q.issues.some(x => x.code === 'dpe:degraded:energy' && x.severity === 'warn'));
+  assert(!C.qualityForOperation(ops[0]).issues.some(x => /^dpe:/.test(x.code)));
+});
+test('dictionnaire : médiane, marge au seuil et gain DPE documentés ; pas de faux contrôle de lisibilité', () => {
+  assert(/moitié centrale/.test(C.dictByKey.median.definition)); assert(/1 − médiane des ratios/.test(C.dictByKey.thresholdMargin.method)); assert(/1 250/.test(C.dictByKey.thresholdMargin.method));
+  assert(/dégrad/.test(C.dictByKey.dpeGain.method)); assert(!C.numericKeys.includes('thresholdMargin'));
+});
+test('rendu : plus de zone rouge fixe ni de moyenne en lecture principale ; filtres de gain DPE reconnus', () => {
+  const n = read('newosb.js');
+  assert(!n.includes('function performanceGauge') && !n.includes('obs-gauge-good') && !n.includes('function metricPairStats'));
+  assert(n.includes('function marginBarRow') && n.includes('function dpeStaircaseCard') && n.includes("dpeStaircaseCard('energy')"));
+  for (const v of ["value==='0'", "value==='2'", "value==='3'", "value==='4plus'", "value==='2plus'"]) assert(n.includes(v), v);
+  for (const c of ['#319834', '#33cc31', '#cbfc34', '#fbfe06', '#fccc2f', '#fc9935', '#fc0205']) assert(n.includes(c), c);
+});
+
+section('4 ter. Menuiseries extérieures : familles et combinaisons (V6.52)');
+test('matériau : PVC / Bois / Aluminium ; plusieurs → Matériaux combinés ; vide → Non renseigné', () => {
+  const f = C.windowMaterialFamily;
+  assert.strictEqual(f('PVC / bois pour fenêtres de toit'), 'Matériaux combinés'); assert.strictEqual(f('Bois (fenêtres) / aluminium (Velux)'), 'Matériaux combinés'); assert.strictEqual(f('Bois + PVC sur autres façades'), 'Matériaux combinés');
+  assert.strictEqual(f('PVC blanc'), 'PVC'); assert.strictEqual(f('Menuiseries alu'), 'Aluminium'); assert.strictEqual(f('Bois'), 'Bois'); assert.strictEqual(f(''), 'Non renseigné'); assert.strictEqual(f('Acier'), 'Autre');
+});
+test('vitrage : triple ; argon ou « Ar » isolé → Double vitrage argon ; sinon Double vitrage', () => {
+  const f = C.glazingFamily;
+  assert.strictEqual(f('Double vitrage 4/16/4 PE Argon'), 'Double vitrage argon'); assert.strictEqual(f('10.10.4 Ar'), 'Double vitrage argon'); assert.strictEqual(f('Triple vitrage'), 'Triple vitrage');
+  assert.strictEqual(f('4/16/4'), 'Double vitrage'); assert.strictEqual(f('Double vitrage arrière'), 'Double vitrage'); assert.strictEqual(f(''), 'Non renseigné');
+});
+test('occultation : roulants, persiennes / battants, stores ; plusieurs → combinées ; inconnu → Autre', () => {
+  const f = C.shadingFamily;
+  assert.strictEqual(f('Volets roulants PVC ou aluminium / persiennes acier'), 'Occultations combinées'); assert.strictEqual(f('Volet roulant électrique'), 'Volets roulants'); assert.strictEqual(f('Volets battants bois'), 'Persiennes / battants');
+  assert.strictEqual(f('BSO'), 'Stores'); assert.strictEqual(f('Store intérieur'), 'Stores'); assert.strictEqual(f('Brise-vue'), 'Autre'); assert.strictEqual(f(''), 'Non renseigné');
+});
+test('composition : base = opérations avec au moins un champ ; combinaisons exactes triées ; jamais de % sur base vide', () => {
+  const w = (m, g, s) => ({ windowMaterial: m, windowGlazing: g, windowShading: s });
+  const ops = [w('PVC', 'Argon', 'Volets roulants'), w('PVC', '4/16/4 Ar', 'roulant'), w('PVC', 'double', 'Volets roulants'), w('Bois / PVC', '', ''), w('', '', '')];
+  const c = C.windowComposition(ops);
+  assert.strictEqual(c.n, 4); assert.strictEqual(c.population, 5);
+  same(c.material.map(x => [x.name, x.count]), [['PVC', 3], ['Matériaux combinés', 1]]);
+  same(c.glazing.map(x => x.name), ['Double vitrage argon', 'Double vitrage', 'Non renseigné']);
+  same(c.combinations[0].parts, ['PVC', 'Double vitrage argon', 'Volets roulants']); assert.strictEqual(c.combinations[0].count, 2); assert.strictEqual(c.combinations[0].share, 50);
+  const e = C.windowComposition([w('', '', '')]); assert.strictEqual(e.n, 0); assert.strictEqual(e.material.length, 0); assert.strictEqual(e.combinations.length, 0);
+});
+test('Dictionnaire : règles de regroupement des menuiseries documentées ; plus de bascule barres / camembert sur la carte', () => {
+  assert(/Matériaux combinés/.test(C.dictByKey.windowFamilies.method) && /« Ar »/.test(C.dictByKey.windowFamilies.method) && /Occultations combinées/.test(C.dictByKey.windowFamilies.method));
+  const n = read('newosb.js'); assert(n.includes('function windowCompositionCard') && !n.includes("solutionViewToggle('windows')") && n.includes("key==='windowCombo'"));
+});
+
+section('4 quater. Croiser les données (V6.53)');
+test('paire par défaut : la plus renseignée parmi les paires pertinentes', () => {
+  const ops = [mk('A', { cep: 50, cepMax: 100, ubatBefore: 1, ubatAfter: 0.5 }), mk('B', { ubatBefore: 1.2, ubatAfter: 0.6 }), mk('C', { ubatBefore: 1.4, ubatAfter: 0.7 }), mk('D', { cep: 60 })];
+  const b = C.bestCrossPair(ops); assert.strictEqual(b.x, 'ubatBefore'); assert.strictEqual(b.y, 'ubatAfter'); assert.strictEqual(b.n, 3);
+  assert.strictEqual(C.bestCrossPair([mk('Z', {})]).n, 0);
+  same(C.crossPairs.map(p => p.join('×')), ['cepMax×cep', 'bbioMax×bbio', 'ticRef×tic', 'ubatBefore×ubatAfter', 'cepBefore×cepAfter', 'surface×dwellings', 'icEnergy×icConstruction']);
+});
+test('effectifs par indicateur ; Cep après travaux se replie sur Cep projet', () => {
+  const ops = [mk('A', { cep: 50, cepBefore: 200 }), mk('B', { cepAfter: 70, cepBefore: 220 }), mk('C', { bbio: 40 })];
+  same(C.crossMetricCounts(ops, ['cep', 'cepAfter', 'cepBefore', 'tic']), { cep: 1, cepAfter: 2, cepBefore: 2, tic: 0 });
+  assert.strictEqual(C.crossPoints(ops, 'cepBefore', 'cepAfter').length, 2);
+});
+test('ratio Y ÷ X par point ; pas de ratio si X = 0 ; paire seuil reconnue dans les deux sens', () => {
+  const p = C.crossPoints([mk('A', { cepMax: 100, cep: 42 }), mk('B', { cepMax: 0, cep: 5 })], 'cepMax', 'cep');
+  assert.strictEqual(p[0].ratio, 0.42); assert.strictEqual(p[1].ratio, null);
+  assert(C.isThresholdPair('cepMax', 'cep') && C.isThresholdPair('cep', 'cepMax') && C.isThresholdPair('ticRef', 'tic') && !C.isThresholdPair('ubatBefore', 'ubatAfter'));
+});
+test('valeurs hors cadre : au-delà du 99e percentile ET aberrantes (Ubat 312) ; un petit échantillon sain n’est jamais rogné', () => {
+  const vals = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 312];
+  const r = C.robustOutliers(vals); assert.strictEqual(r.isOut(312), true); assert.strictEqual(r.isOut(1.7), false); assert.strictEqual(r.hi, 1.7);
+  const ok = C.robustOutliers([10, 12, 13, 15, 18, 20]); assert.strictEqual([10, 12, 13, 15, 18, 20].some(ok.isOut), false);
+  assert.strictEqual(C.robustOutliers([1, 2]).isOut(2), false);
+});
+test('mode anonymisé : le vrai code projet d’une opération technique n’est jamais affiché (listes hors seuil, DPE, nuage)', () => {
+  coreCtx.window.NEWOSB_PRIVACY = { operationCode: v => 'OP-' + String(v).length.toString().padStart(6, '0') };
+  try {
+    const anon = { ...mk('OP-123456::2', { cep: 300, cepMax: 100 }), projectCode: 'P-REEL-42', __newosbAnonymized: true };
+    assert.strictEqual(C.displayCode(anon), 'OP-000009'); assert.strictEqual(C.thresholdMargin([anon], 'cep', 'cepMax').over[0].code, 'OP-000009');
+    assert.strictEqual(C.displayCode({ code: 'P-REEL-42::2', projectCode: 'P-REEL-42' }), 'P-REEL-42');
+  } finally { delete coreCtx.window.NEWOSB_PRIVACY; }
+});
+test('rendu : sélecteurs avec effectifs, vue tableau, export CSV sans nom en mode anonymisé, jalons limités à IC Construction', () => {
+  const n = read('newosb.js');
+  assert(n.includes("'— aucune donnée'") && n.includes('data-cross-view="table"') && n.includes('function crossCsv(pts,anon)') && n.includes("...(anon?[]:['Projet'])"));
+  assert(n.includes("carbon=[X,Y].includes('icConstruction')") && n.includes('y = x · sous la ligne = sous le seuil') && !/localStorage[^;]*cross/.test(n));
+});
+
+section('4 quinquies. Carte des projets de la Vue d’ensemble (V6.54)');
+test('classification : précise (lat / lon valides, virgule acceptée) → commune (INSEE) → non localisée', () => {
+  assert.strictEqual(C.geoClass({ latitude: '44,8378', longitude: '-0,5792' }).kind, 'precise');
+  assert.strictEqual(C.geoClass({ latitude: 44.8, longitude: -0.5, insee: '33063' }).kind, 'precise');
+  assert.strictEqual(C.geoClass({ latitude: 0, longitude: 0, insee: '33063' }).kind, 'commune');
+  assert.strictEqual(C.geoClass({ latitude: '91', longitude: '200', insee: '2A004' }).kind, 'commune');
+  assert.strictEqual(C.geoClass({ insee: 'Julien NOIROT' }).kind, 'none'); assert.strictEqual(C.geoClass({}).kind, 'none');
+});
+test('mode anonymisé : commune si ≥ 5 projets, sinon département ; sans commune : non localisé ; jamais de coordonnées', () => {
+  const ops = [...Array(5)].map((_, i) => ({ code: 'A' + i, city: 'Bordeaux', department: '33', latitude: 44.8, longitude: -0.5 })).concat([{ code: 'B', city: 'Libourne', department: '33' }, { code: 'C', department: '33' }]);
+  const plan = C.geoPlan(ops, { anonymized: true });
+  same(plan.map(p => p.kind), ['commune', 'commune', 'commune', 'commune', 'commune', 'department', 'none']);
+  assert(plan.every(p => p.lat === undefined && p.lon === undefined)); assert.strictEqual(C.GEO_MIN_K, 5);
+  same(C.geoPlan(ops.slice(0, 1)).map(p => p.kind), ['precise']);
+});
+test('regroupement des points qui se chevauchent ; comptage « n sur N »', () => {
+  const cl = C.clusterPoints([{ x: 0, y: 0 }, { x: 3, y: 0 }, { x: 50, y: 50 }], 10);
+  assert.strictEqual(cl.length, 2); assert.strictEqual(cl[0].items.length, 2); assert.strictEqual(cl[0].x, 1.5);
+  const plan = C.geoPlan([{ latitude: 44, longitude: 1 }, { insee: '33063' }, {}]); assert.strictEqual(plan.filter(p => p.kind !== 'none').length, 2);
+});
+test('fiche résumé : tags lus dans la colonne TAG uniquement (aucun tag inventé)', () => {
+  same(C.columnTags({ tags: 'résidence étudiante, bois , Bois', fields: { tags: 'TAG' }, rawRows: [{ TAG: 'crèche' }], nature: 'Neuf', referential: 'BEE' }), ['résidence étudiante', 'bois', 'crèche']);
+  same(C.columnTags({ nature: 'Neuf' }), []);
+});
+test('rendu : carte sous les KPI, lien Explorer, adresse jamais envoyée, rien dans le stockage, fiche « Ouvrir la fiche complète »', () => {
+  const n = read('newosb.js'), a = read('app.js');
+  assert(n.includes('${kpis(ops)}${keywordCard()}${overviewMapCard(ops)}') && n.includes('data-page-link="territories">Explorer'));
+  const block = n.slice(n.indexOf('function overviewMapCard'), n.indexOf('function renderTerritories'));
+  assert(!/localStorage|sessionStorage/.test(block) && /departements\/\$\{encodeURIComponent\(dep\)\}\/communes\?fields=nom,code,centre/.test(block) && !/address\)|adresse=/.test(block.match(/fetchGeoJson\([^)]*\)/g).join(' ')));
+  assert(block.includes('Ouvrir la fiche complète') && block.includes('Adresse et nom masqués'));
+  assert(a.includes('function dataCoordinate(v)') && a.includes('latitude:dataCoordinate('));
+});
+
 section('5. Anonymisation côté navigateur (privacy.js)');
 const store = {};
 const pctx = { console, TextEncoder, Uint8Array, Uint32Array, DataView, crypto: require('crypto').webcrypto,

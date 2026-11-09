@@ -123,6 +123,7 @@
     activeGroupMoa:'',
     crossX:'icConstructionMax',
     crossY:'icConstruction',
+    crossUserSet:false,crossView:'scatter',crossColor:'referential',crossLog:false,crossShowOut:false,crossTablePage:1,
     overviewShowTotal:true,
     overviewYearBasis:'auto',
     qualityIssuePage:1,
@@ -988,6 +989,10 @@
       if(value==='1') return gain===1;
       if(value==='stable') return gain===0;
       if(value==='worse') return gain<0;
+      if(value==='0') return gain===0;
+      if(value==='2') return gain===2;
+      if(value==='3') return gain===3;
+      if(value==='4plus') return gain>=4;
       return false;
     }
     if(f.key.startsWith('norm:')) return norm(normalizedValue(op,f.key.slice(5)))===norm(value);
@@ -1050,33 +1055,6 @@
     if(/beton|dalle|hourdis/.test(s)) add('Dalle / plancher béton');
     if(out.length>1) return 'Mixte';
     return out[0]||'Autre plancher';
-  }
-  function normalizeWindowMaterialFamily(value){
-    const s=normalizedTokens(value);
-    if(!s) return 'Non renseigné';
-    const out=[]; const add=v=>{if(!out.includes(v))out.push(v);};
-    if(/pvc/.test(s)) add('PVC'); if(/bois/.test(s)) add('Bois'); if(/alu|aluminium/.test(s)) add('Aluminium'); if(/acier|metal/.test(s)) add('Acier / métal');
-    if(out.includes('Bois')&&out.includes('Aluminium')&&out.length===2) return 'Mixte bois / alu';
-    if(out.length>1) return 'Mixte'; return out[0]||'Autre matériau';
-  }
-  function normalizeGlazingFamily(value){
-    const s=normalizedTokens(value);
-    if(!s) return 'Non renseigné';
-    if(/triple|3 vitr/.test(s)) return 'Triple vitrage';
-    if(/double|4\s*\/\s*\d+\s*\/\s*4|2 vitr/.test(s)) return 'Double vitrage';
-    if(/simple|1 vitr/.test(s)) return 'Simple vitrage';
-    return 'Autre vitrage';
-  }
-  function normalizeShadingFamily(value){
-    const s=normalizedTokens(value);
-    if(!s) return 'Non renseigné';
-    if(/sans occult|sans fermeture|aucun|absence/.test(s)) return 'Sans occultation';
-    const out=[]; const add=v=>{if(!out.includes(v))out.push(v);};
-    if(/volet roulant/.test(s)) add('Volets roulants');
-    if(/volet battant|persienne/.test(s)) add('Volets battants / persiennes');
-    if(/bso|brise.?soleil/.test(s)) add('BSO / brise-soleil');
-    if(/store/.test(s)) add('Stores');
-    if(out.length>1) return 'Mixte'; return out[0]||'Autre occultation';
   }
   function normalizeEnergyVectorFamily(value){
     const s=normalizedTokens(value);
@@ -1150,7 +1128,10 @@
     if(/pac air.?eau|air\/eau/.test(s)) return 'PAC air / eau réversible';
     return 'Autre refroidissement';
   }
+  // V6.52 : familles menuiseries calculées par newosb-core.js (règles testées et documentées au Dictionnaire).
+  const normalizeWindowMaterialFamily=v=>core.windowMaterialFamily(v), normalizeGlazingFamily=v=>core.glazingFamily(v), normalizeShadingFamily=v=>core.shadingFamily(v);
   function normalizedValue(op,key){
+    if(key==='windowCombo') return [normalizeWindowMaterialFamily(op.windowMaterial),normalizeGlazingFamily(op.windowGlazing),normalizeShadingFamily(op.windowShading)].join(' · ');
     if(key==='structure'||key==='roofStructure'||key==='wallStructure') return normalizeStructureFamily(op[key]);
     if(key==='floorSolution') return normalizeFloorFamily(op.floorStructure);
     if(key==='roofInsulation'||key==='wallInsulation'||key==='floorInsulation') return normalizeInsulationFamily(op[key]);
@@ -1571,7 +1552,7 @@
     const ops=filteredOperations();
     const deps=countBy(ops,o=>departmentName(o.department));
     const moas=countBy(ops,o=>o.moa);
-    return `${pageHead('overview')}${kpis(ops)}${keywordCard()}
+    return `${pageHead('overview')}${kpis(ops)}${keywordCard()}${overviewMapCard(ops)}
       <div class="obs-grid-2">
         <article class="obs-card"><div class="obs-card-head"><div><span>SURFACES</span><h2>Répartition des surfaces par référentiel</h2></div><small>m² cumulés · clique pour filtrer</small></div>${surfaceByReferential(ops)}</article>
         <article class="obs-card"><div class="obs-card-head"><div><span>LOGEMENT</span><h2>Bâtiments et logements par type</h2></div><small>Type de programme calculé</small></div>${housingTypeTotals(ops)}</article>
@@ -1587,6 +1568,109 @@
         <article class="obs-card"><div class="obs-card-head"><div><span>PERFORMANCES</span><h2>Niveaux déclarés</h2></div>${compactViewToggle('performance',state.overviewPerformanceView,['list','bar','treemap'])}</div>${overviewTagWidget(ops,'performance')}</article>
       </div>`;
   }
+
+  // V6.54 : carte de tous les projets géolocalisés de la sélection (Vue d'ensemble) + fiche résumé.
+  // Moteur SVG de Territoires (fond France, projection, couleurs d'avancement) ; seule geo.api.gouv.fr est appelée,
+  // avec un code département (jamais une adresse). Rien n'est écrit dans localStorage / sessionStorage.
+  const OVMAP={w:700,h:500};
+  const ovCommuneLists=new Map();
+  let ovMapModel=null;
+  function ovAnon(){return !!privacy()?.enabled?.();}
+  function overviewMapCard(ops){
+    const anon=ovAnon();
+    const statuses=countBy(ops,o=>o.status||'unknown');
+    return `<article class="obs-card obs-ovmap-card"><div class="obs-card-head"><div><span>CARTE</span><h2>Projets géolocalisés de la sélection</h2></div><div class="obs-card-head-tools"><small data-ovmap-count>Localisation en cours…</small><button class="obs-card-action" data-page-link="territories">Explorer</button></div></div>
+      <div class="obs-ovmap-wrap"><div id="obsOverviewMap" class="obs-ovmap" data-anon="${anon?'1':'0'}"><div class="obs-map-loading">Chargement du fond de carte…</div></div>
+      <div class="obs-ovmap-zoom" role="group" aria-label="Zoom de la carte"><button type="button" data-ovmap-zoom="in" aria-label="Zoomer">+</button><button type="button" data-ovmap-zoom="out" aria-label="Dézoomer">−</button><button type="button" data-ovmap-zoom="reset" aria-label="Recentrer la carte">⤢</button></div>
+      <aside class="obs-ovmap-panel" data-ovmap-panel hidden role="dialog" aria-label="Fiche résumé du projet"></aside></div>
+      <div class="obs-ovmap-legend">${statuses.map(x=>`<button type="button" class="${activeCross('status',x.name)?'is-active':''}" ${crossAttrs('status',x.name,`Avancement : ${STATUS_LABELS[x.name]||x.name}`)}><i style="background:${STATUS_COLORS[x.name]||'#9AA8A2'}"></i>${esc(STATUS_LABELS[x.name]||x.name)} <small>${fmt(x.value)}</small></button>`).join('')}<span class="obs-ovmap-key"><i class="precise"></i>position précise</span><span class="obs-ovmap-key"><i class="approx"></i>position approximative (${anon?'commune ou département':'commune'})</span></div>
+      <p class="obs-ovmap-note" data-ovmap-note></p></article>`;
+  }
+  function ovDepFromInsee(insee){const s=String(insee||'').toUpperCase();return /^97/.test(s)?s.slice(0,3):s.slice(0,2);}
+  function ovCommunes(dep){
+    if(!ovCommuneLists.has(dep))ovCommuneLists.set(dep,fetchGeoJson(`https://geo.api.gouv.fr/departements/${encodeURIComponent(dep)}/communes?fields=nom,code,centre&format=json`).then(list=>{const byCode=new Map(),byName=new Map();(list||[]).forEach(c=>{const xy=c?.centre?.coordinates;if(!Array.isArray(xy))return;const v={lon:Number(xy[0]),lat:Number(xy[1]),name:c.nom};byCode.set(String(c.code).toUpperCase(),v);const k=norm(c.nom);if(!byName.has(k))byName.set(k,v);});return {byCode,byName};}).catch(err=>{console.warn('NEWOSB communes du département',dep,err);ovCommuneLists.delete(dep);return null;}));
+    return ovCommuneLists.get(dep);
+  }
+  async function ovLimit(items,n,fn){const out=[];let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const k=i++;out[k]=await fn(items[k]);}}));return out;}
+  async function hydrateOverviewMap(token){
+    const host=document.getElementById('obsOverviewMap'); if(!host||!engine.getDepartmentGeoJSON)return;
+    const alive=()=>token===state.renderToken&&host.isConnected, anon=host.dataset.anon==='1', card=host.closest('.obs-ovmap-card');
+    const projects=filteredOperations(), plan=core.geoPlan(projects,{anonymized:anon});
+    try{
+      const geo=await engine.getDepartmentGeoJSON(); if(!alive())return;
+      const features=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f))), byDep=new Map(features.map(f=>[featureCode(f),f]));
+      const project=projector(features,{x:16,y:12,width:OVMAP.w-32,height:OVMAP.h-24});
+      const deps=uniq(plan.filter(p=>p.kind==='commune').map(p=>p.insee?ovDepFromInsee(p.insee):p.department).filter(d=>metroDepartment(d)));
+      const lists=new Map(); await ovLimit(deps,6,async d=>lists.set(d,await ovCommunes(d))); if(!alive())return;
+      const points=[],missing=[];
+      plan.forEach(p=>{
+        let lonlat=null,approx=true,where='';
+        if(p.kind==='precise'){lonlat=[p.lon,p.lat];approx=false;}
+        else if(p.kind==='commune'){const dep=p.insee?ovDepFromInsee(p.insee):p.department,l=lists.get(dep),c=p.insee?l?.byCode.get(p.insee):l?.byName.get(norm(p.city));if(c){lonlat=[c.lon,c.lat];where='commune';}}
+        if(lonlat){const [x,y]=project(lonlat[0],lonlat[1]);if(x>=0&&x<=OVMAP.w&&y>=0&&y<=OVMAP.h){points.push({op:p.op,x,y,approx,where:where||'précise'});return;}}
+        if(p.kind==='department'&&byDep.get(p.department)){const [x,y]=groupCenter([byDep.get(p.department)],project);points.push({op:p.op,x,y,approx:true,where:'département'});return;}
+        missing.push({op:p.op,reason:p.kind==='none'?'ni coordonnées ni code INSEE':p.kind==='commune'?'commune introuvable ou hors métropole':'hors métropole'});
+      });
+      ovMapModel={points,missing,anon,total:projects.length};
+      const base=features.map(f=>`<path d="${geometryPath(f.geometry,project)}" class="obs-ovmap-dep"><title>${esc(departmentName(featureCode(f)))}</title></path>`).join('');
+      host.innerHTML=`<svg class="obs-ovmap-svg" viewBox="0 0 ${OVMAP.w} ${OVMAP.h}" role="img" aria-label="${attr(`Carte de France : ${points.length} projets géolocalisés sur ${projects.length}`)}"><g>${base}</g><g data-ovmap-points></g></svg>`;
+      ovApplyView(host);ovDrawPoints(host);ovBindPan(host);
+      const precise=points.filter(p=>!p.approx).length,n=points.length;
+      const countEl=card?.querySelector('[data-ovmap-count]');if(countEl)countEl.innerHTML=`${fmt(n)} projet${n>1?'s':''} géolocalisé${n>1?'s':''} sur ${fmt(projects.length)}${n&&n<MIN_SAMPLE?` · <b class="obs-low-sample">⚠ échantillon faible</b>`:''}`;
+      const note=card?.querySelector('[data-ovmap-note]');if(note)note.innerHTML=`${fmt(precise)} position${precise>1?'s':''} précise${precise>1?'s':''} · ${fmt(n-precise)} position${n-precise>1?'s':''} approximative${n-precise>1?'s':''} (${anon?'commune, ou département quand la commune compte moins de 5 projets':'commune'})${missing.length?` · <button type="button" class="obs-link-btn" data-ovmap-missing>${fmt(missing.length)} projet${missing.length>1?'s':''} non localisé${missing.length>1?'s':''} (voir la liste)</button>`:''}${anon?' · mode anonymisé : aucune adresse ni coordonnée exacte':''}`;
+      if(state.ovMapOpenCode){const hit=[...points,...missing].find(p=>String(p.op.code)===state.ovMapOpenCode);if(hit)ovPanel(ovSummaryHtml(hit.op),state.ovMapOpenCode,false);else state.ovMapOpenCode='';}
+    }catch(err){console.warn('NEWOSB carte Vue d’ensemble',err);if(alive())host.innerHTML='<div class="obs-empty">Fond de carte indisponible.</div>';}
+  }
+  function ovView(){return state.ovMapView||{x:0,y:0,w:OVMAP.w,h:OVMAP.h};}
+  function ovApplyView(host){const v=ovView();host.querySelector('svg')?.setAttribute('viewBox',`${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${v.h.toFixed(1)}`);}
+  function ovZoom(host,factor,cx,cy){const v=ovView(),w=Math.max(OVMAP.w/24,Math.min(OVMAP.w,v.w/factor)),h=w*OVMAP.h/OVMAP.w;cx??=v.x+v.w/2;cy??=v.y+v.h/2;state.ovMapView={x:Math.max(-OVMAP.w*.2,Math.min(OVMAP.w*1.2-w,cx-w/2)),y:Math.max(-OVMAP.h*.2,Math.min(OVMAP.h*1.2-h,cy-h/2)),w,h};ovApplyView(host);ovDrawPoints(host);}
+  function ovDrawPoints(host){
+    const layer=host.querySelector('[data-ovmap-points]');if(!layer||!ovMapModel)return;
+    const k=ovView().w/OVMAP.w, r=6.5*k, clusters=core.clusterPoints(ovMapModel.points,r*2.1);
+    host._clusters=clusters;
+    layer.innerHTML=clusters.map((c,i)=>{
+      if(c.items.length===1){const p=c.items[0],code=String(p.op.code||'');return `<circle class="obs-ovmap-pt ${p.approx?'is-approx':''}" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${STATUS_COLORS[p.op.status]||'#9AA8A2'}" style="stroke-width:${(1.6*k).toFixed(2)}px" data-ovmap-op="${attr(code)}" tabindex="0" role="button" aria-label="${attr(`Projet ${code}${ovMapModel.anon?'':` · ${p.op.name||''}`} · ${STATUS_LABELS[p.op.status]||''}${p.approx?' · position approximative':''}`)}"><title>${esc(code)}${ovMapModel.anon?'':` · ${esc(p.op.name||'')}`}${p.approx?` · position approximative (${esc(p.where)})`:''}</title></circle>`;}
+      const n=c.items.length,rr=(8+Math.min(10,Math.sqrt(n)*1.6))*k;
+      return `<g class="obs-ovmap-cluster" data-ovmap-cluster="${i}" tabindex="0" role="button" aria-label="${attr(`${n} projets regroupés : cliquer pour zoomer ou lister`)}"><circle cx="${c.x.toFixed(2)}" cy="${c.y.toFixed(2)}" r="${rr.toFixed(2)}" style="stroke-width:${(2*k).toFixed(2)}px"></circle><text x="${c.x.toFixed(2)}" y="${(c.y+3.6*k).toFixed(2)}" text-anchor="middle" style="font-size:${(10.5*k).toFixed(2)}px">${fmt(n)}</text></g>`;
+    }).join('');
+  }
+  function ovBindPan(host){
+    const svg=host.querySelector('svg');if(!svg||svg._ovBound)return;svg._ovBound=true;
+    const toMap=(e)=>{const b=svg.getBoundingClientRect(),v=ovView();return [v.x+(e.clientX-b.left)/b.width*v.w,v.y+(e.clientY-b.top)/b.height*v.h];};
+    svg.addEventListener('wheel',e=>{e.preventDefault();const [x,y]=toMap(e);ovZoom(host,e.deltaY<0?1.35:1/1.35,x,y);},{passive:false});
+    let drag=null;
+    svg.addEventListener('pointerdown',e=>{if(e.target.closest('[data-ovmap-op],[data-ovmap-cluster]'))return;drag={x:e.clientX,y:e.clientY,v:{...ovView()},moved:false};});
+    svg.addEventListener('pointermove',e=>{if(!drag)return;const b=svg.getBoundingClientRect(),dx=(e.clientX-drag.x)/b.width*drag.v.w,dy=(e.clientY-drag.y)/b.height*drag.v.h;if(Math.abs(dx)+Math.abs(dy)<1&&!drag.moved)return;drag.moved=true;state.ovMapView={...drag.v,x:drag.v.x-dx,y:drag.v.y-dy};ovApplyView(host);});
+    const end=()=>{if(drag?.moved)ovDrawPoints(host);drag=null;};svg.addEventListener('pointerup',end);svg.addEventListener('pointerleave',end);
+  }
+  // La fiche ouverte est retenue en mémoire (jamais stockée) et rouverte si la page est redessinée.
+  function ovPanel(html,code='',refocus=true){const panel=document.querySelector('[data-ovmap-panel]');if(!panel)return;panel.innerHTML=`<button type="button" class="obs-ovmap-close" data-ovmap-close aria-label="Fermer">×</button>${html}`;panel.hidden=false;state.ovMapOpenCode=code;if(refocus)panel.querySelector('[data-ovmap-close]')?.focus({preventScroll:true});}
+  function ovClosePanel(){state.ovMapOpenCode='';const panel=document.querySelector('[data-ovmap-panel]');if(panel&&!panel.hidden){panel.hidden=true;panel.innerHTML='';}}
+  // Fiche résumé : adresse (masquée si anonymisé), avancement exact, mentions et performances, tags de la colonne TAG.
+  function ovSummaryHtml(op){
+    const p=ovMapModel?.points.find(x=>String(x.op.code)===String(op.code)), anon=!!ovMapModel?.anon, code=String(op.code||'');
+    const addr=[op.address,[op.postalCode,op.city].filter(Boolean).join(' ')].filter(x=>String(x||'').trim()).join(', ');
+    const mentions=cachedOperationTags(op,'mention'), perfs=cachedOperationTags(op,'performance'), tags=core.columnTags(op);
+    const chips=list=>list.map(x=>`<span class="obs-ovmap-chip">${esc(x)}</span>`).join('');
+    return `<header><span>${esc(code)}</span><h3>${anon?`Projet ${esc(code)}`:esc(op.name||code)}</h3>${anon?'<p class="obs-ovmap-masked">Adresse et nom masqués (mode anonymisé ou lien de partage).</p>':`<p>${addr?esc(addr):'Adresse non renseignée'}</p>`}${p?.approx?`<p class="obs-ovmap-approx">Position approximative (${esc(p.where)})</p>`:''}</header>
+      <dl><dt>Avancement</dt><dd><i class="obs-ovmap-dot" style="background:${STATUS_COLORS[op.status]||'#9AA8A2'}"></i>${esc(op.rawStatus||STATUS_LABELS[op.status]||'Non renseigné')}</dd>
+      ${mentions.length?`<dt>Mentions / labels</dt><dd>${chips(mentions)}</dd>`:''}${perfs.length?`<dt>Performances</dt><dd>${chips(perfs)}</dd>`:''}${tags.length?`<dt>Tags</dt><dd>${chips(tags)}</dd>`:''}</dl>
+      <button type="button" class="obs-btn obs-btn-primary obs-ovmap-open" data-op-code="${attr(code)}">Ouvrir la fiche complète</button>`;
+  }
+  function ovListHtml(title,items){return `<header><h3>${esc(title)}</h3></header><ul class="obs-ovmap-list">${items.map(({op,reason})=>`<li><button type="button" class="obs-link-btn" data-ovmap-op="${attr(op.code||'')}">${esc(op.code||'—')}${ovMapModel?.anon?'':` · ${esc(op.name||'')}`}</button>${reason?`<small>${esc(reason)}</small>`:''}</li>`).join('')}</ul>`;}
+  function ovHandleClick(e){
+    const host=document.getElementById('obsOverviewMap'); if(!host)return false;
+    if(e.target.closest('[data-ovmap-close]')){ovClosePanel();return true;}
+    const z=e.target.closest('[data-ovmap-zoom]');if(z){const k=z.dataset.ovmapZoom;if(k==='reset'){state.ovMapView=null;ovApplyView(host);ovDrawPoints(host);}else ovZoom(host,k==='in'?1.6:1/1.6);return true;}
+    if(e.target.closest('[data-ovmap-missing]')){ovPanel(ovListHtml(`${fmt(ovMapModel?.missing.length||0)} projets non localisés`,ovMapModel?.missing||[]));return true;}
+    const c=e.target.closest('[data-ovmap-cluster]');if(c&&host._clusters){const cl=host._clusters[Number(c.dataset.ovmapCluster)],xs=cl.items.map(p=>p.x),ys=cl.items.map(p=>p.y),spread=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
+      if(spread>0.5&&ovView().w>OVMAP.w/24+1)ovZoom(host,Math.min(4,Math.max(1.8,ovView().w/(spread*4||1))),cl.x,cl.y);else ovPanel(ovListHtml(`${fmt(cl.items.length)} projets au même endroit`,cl.items.map(p=>({op:p.op,reason:STATUS_LABELS[p.op.status]||''}))));return true;}
+    const pt=e.target.closest('[data-ovmap-op]');if(pt){const op=(ovMapModel?.points.find(p=>String(p.op.code)===pt.dataset.ovmapOp)||ovMapModel?.missing.find(p=>String(p.op.code)===pt.dataset.ovmapOp))?.op;if(op)ovPanel(ovSummaryHtml(op),String(op.code));return true;}
+    if(e.target.closest('.obs-ovmap-open'))ovClosePanel();
+    return false;
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){const panel=document.querySelector('[data-ovmap-panel]');if(panel&&!panel.hidden){ovClosePanel();e.stopPropagation();}}else if((e.key==='Enter'||e.key===' ')&&e.target.closest?.('[data-ovmap-op],[data-ovmap-cluster]')){e.preventDefault();ovHandleClick(e);}},true);
+  document.addEventListener('pointerdown',e=>{const panel=document.querySelector('[data-ovmap-panel]');if(panel&&!panel.hidden&&!panel.contains(e.target)&&!e.target.closest?.('[data-ovmap-op],[data-ovmap-cluster],[data-ovmap-missing]'))ovClosePanel();},true);
 
   function renderTerritories(){
     const ops=filteredOperations();
@@ -1912,11 +1996,30 @@
     return `<article class="obs-kpi obs-solution-rgauge"><i class="obs-solution-r-icon">${icon}</i><span>${esc(label)}</span><strong>${value===null?'—':fmt(value,1)}</strong><small>m²·K/W · ${fmt(metric.count)} / ${fmt(metric.population)} opérations · couverture ${fmt(metric.coverage,1)} %${lowSample(metric.count)}</small><div class="obs-solution-r-track"><i style="width:${pos}%"></i><b style="left:${ref}%"></b></div><div class="obs-solution-r-scale"><em>0</em><em>Réf. ${fmt(reference,1)}</em><em>${fmt(max,0)}</em></div></article>`;
   }
 
+  // V6.52 : menuiseries extérieures — trois bandes 100 % alignées + combinaisons dominantes (ton sobre, sans pictogramme).
+  const WINDOW_GREENS=['#06402b','#2f6f5b','#4a9a80','#8cc5ad','#b9dccb'], WINDOW_GREY='#cfd6d3';
+  function windowBand(title,key,items,n){
+    const crossKey=`norm:${key}`, others=[];let gi=0;
+    const segs=items.map(x=>{const grey=['Non renseigné','Autre'].includes(x.name), color=grey?WINDOW_GREY:WINDOW_GREENS[Math.min(gi++,WINDOW_GREENS.length-1)], light=grey||WINDOW_GREENS.indexOf(color)>=3, share=x.share, roomy=share>=14;
+      if(!roomy)others.push(x);
+      return `<button type="button" class="obs-window-seg ${light?'is-light':''} ${activeCross(crossKey,x.name)?'is-active':''}" style="flex:${x.count} 1 0;background:${color}" ${crossAttrs(crossKey,x.name,`${title} : ${x.name}`)} title="${attr(`${x.name} : ${fmt(share,0)} % · ${x.count} op.`)}" aria-label="${attr(`${title} ${x.name} : ${fmt(share,0)} %, ${x.count} opération${x.count>1?'s':''}`)}">${roomy?`<b>${esc(x.name)}</b><small>${fmt(share,0)} % · ${fmt(x.count)} op.</small>`:''}</button>`;}).join('');
+    return `<div class="obs-window-band"><div class="obs-window-band-name">${esc(title.toUpperCase())}</div><div><div class="obs-window-bar" role="group" aria-label="${attr(`${title} : répartition sur ${n} opérations renseignées`)}">${segs}</div>${others.length?`<div class="obs-window-others">Autres : ${others.map(x=>`<button type="button" class="obs-link-btn" ${crossAttrs(crossKey,x.name,`${title} : ${x.name}`)}>${esc(x.name)} ${fmt(x.share,0)} % (${fmt(x.count)})</button>`).join(' · ')}</div>`:''}</div></div>`;
+  }
+  function windowCompositionCard(){
+    const universe=k=>filteredTechnicalOperations({ignoreCrossKey:`norm:${k}`});
+    const all=core.windowComposition(filteredTechnicalOperations()), n=all.n, N=all.population;
+    const head=`<div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>Menuiseries extérieures : composition et combinaisons dominantes</h2></div><small>${fmt(n)} opération${n>1?'s':''} renseignée${n>1?'s':''} sur ${fmt(N)}${lowSample(n)}</small></div>`;
+    if(!n)return `<article class="obs-card obs-windows-wide obs-window-card">${head}<div class="obs-empty">Aucune opération ne renseigne le matériau, le vitrage ou l’occultation des menuiseries.</div></article>`;
+    const bands=[['Matériau','windowMaterial','material'],['Vitrage','windowGlazing','glazing'],['Occultation','windowShading','shading']].map(([t,k,f])=>{const c=core.windowComposition(universe(k));return windowBand(t,k,c[f],c.n);}).join('');
+    const cu=core.windowComposition(universe('windowCombo')), top=cu.combinations.slice(0,5), peak=Math.max(1,...top.map(x=>x.count));
+    const rows=top.map((c,i)=>{const label=c.parts.join(' · ');return `<tr class="${i===0?'is-first':''} ${activeCross('norm:windowCombo',label)?'is-active':''}" ${crossAttrs('norm:windowCombo',label,`Menuiseries : ${label}`)} tabindex="0"><td>${esc(c.parts[0])}</td><td>${esc(c.parts[1])}</td><td>${esc(c.parts[2])}</td><td><span class="obs-window-share"><i style="width:${(100*c.count/peak).toFixed(1)}%"></i></span><b>${fmt(c.share,0)} %</b> <small>(${fmt(c.count)})</small></td></tr>`;}).join('');
+    return `<article class="obs-card obs-windows-wide obs-window-card">${head}<div class="obs-window-bands">${bands}</div>
+      <div class="obs-subsection-title">Combinaisons les plus fréquentes</div><div class="obs-table-wrap obs-window-table-wrap"><table class="obs-table obs-window-table"><thead><tr><th>Matériau</th><th>Vitrage</th><th>Occultation</th><th>Part des opérations</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="obs-margin-foot">Part = opérations ayant EXACTEMENT cette combinaison, sur les ${fmt(cu.n)} opérations ayant au moins un champ menuiserie. Textes libres regroupés en familles (règles au Dictionnaire). Clic sur un segment ou une ligne : filtre croisé.</p></article>`;
+  }
   function renderSolutions(){
     const ops=filteredTechnicalOperations();
     const roofR=averageRaw(ops,'roofR'), wallR=averageRaw(ops,'wallR'), floorR=averageRaw(ops,'floorR');
-    const windowsView=solutionCardView('windows');
-    const winMat=normalizedDistribution('windowMaterial'), winGlass=normalizedDistribution('windowGlazing'), winShade=normalizedDistribution('windowShading');
     return `${pageHead('solutions',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}<div class="obs-grid-kpi obs-grid-kpi-technical">
       ${solutionRGauge('Toiture · R moyen',roofR,'⌂',12,3)}
       ${solutionRGauge('Façade · R moyen',wallR,'▦',10,3)}
@@ -1929,9 +2032,7 @@
       <div>${envelopeCard('Toitures / planchers hauts','roof','roofInsulation','Famille d’isolant','roofR','roofThickness','roofStructure')}</div>
       <div>${envelopeCard('Façades / parois verticales','walls','wallInsulation','Famille d’isolant','wallR','wallThickness','wallStructure')}</div>
       <div>${envelopeCard('Planchers bas','floors','floorInsulation','Famille d’isolant','floorR','floorThickness','floorSolution')}</div>
-      <article class="obs-card obs-envelope-card obs-windows-wide"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>Menuiseries extérieures</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle('windows')}</div></div>
-        <div class="obs-window-distributions"><section><div class="obs-subsection-title">Matériau</div>${distributionVisual(winMat.items,{view:windowsView,key:winMat.crossKey,maxItems:8,labelPrefix:'Menuiseries'})}</section><section><div class="obs-subsection-title">Vitrage</div>${distributionVisual(winGlass.items,{view:windowsView,key:winGlass.crossKey,maxItems:8,labelPrefix:'Vitrage'})}</section><section><div class="obs-subsection-title">Occultations</div>${distributionVisual(winShade.items,{view:windowsView,key:winShade.crossKey,maxItems:8,labelPrefix:'Occultations'})}</section></div>
-      </article>
+      ${windowCompositionCard()}
     </div>
     <div class="obs-section-title"><div><span>02</span><h2>Systèmes techniques</h2></div><p>Chauffage, ECS, ventilation et refroidissement sont ramenés à des familles homogènes ; chaque encart peut basculer entre barres et camembert.</p></div>
     <div class="obs-systems-grid">
@@ -1941,25 +2042,53 @@
     </div>`;
   }
 
-  function metricPairStats(ops,valueKey,maxKey){
-    const rows=ops.map(o=>[rawNumber(o,valueKey),rawNumber(o,maxKey)]).filter(([v,m])=>v!==null&&m!==null&&m>0);
-    const avg=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:null;
-    const values=rows.map(r=>r[0]), maxes=rows.map(r=>r[1]), margins=rows.map(([v,m])=>m-v), gains=rows.map(([v,m])=>(m-v)/m*100);
-    const under=rows.filter(([v,m])=>v<=m).length;
-    return {count:rows.length,population:ops.length,valueAvg:avg(values),maxAvg:avg(maxes),marginAvg:avg(margins),gainAvg:avg(gains),under,rate:pct(under,rows.length)};
-  }
 
-  function performanceGauge(stats,label,options={}){
-    if(!stats.count) return '<div class="obs-empty">Aucune paire valeur / maximum exploitable.</div>';
-    const ratio=stats.maxAvg?Math.max(0,Math.min(1.35,stats.valueAvg/stats.maxAvg)):0;
-    const marker=Math.min(100,ratio*100), digits=Number.isInteger(options.digits)?options.digits:1, unit=options.unit?` ${options.unit}`:'';
-    const left=options.leftLabel||'0', right=options.referenceLabel||`${label} max moyen`;
-    return `<div class="obs-performance-gauge"><div class="obs-gauge-scale"><span>${esc(left)}</span><span>${esc(right)} · ${fmt(stats.maxAvg,digits)}${esc(unit)}</span></div><div class="obs-gauge-track"><i class="obs-gauge-good"></i><b style="left:${marker}%"></b></div><div class="obs-gauge-project"><span>${esc(label)} projet moyen</span><strong>${fmt(stats.valueAvg,digits)}${esc(unit)}</strong><small>Marge moyenne ${stats.marginAvg>=0?'+':''}${fmt(stats.marginAvg,digits)}${esc(unit)} · ${fmt(stats.rate,1)} % sous la référence · couverture ${fmt(pct(stats.count,stats.population),1)} % (${fmt(stats.count)}/${fmt(stats.population)})${lowSample(stats.count)}</small></div></div>`;
+  // V6.51 : barre de marge. Le seuil est une butée (trait noir) ; le point = médiane des ratios valeur ÷ seuil.
+  function marginCodes(rows,limit=8){const codes=uniq(rows.map(r=>r.code).filter(Boolean));return `${codes.slice(0,limit).map(c=>`<button type="button" class="obs-margin-code" data-op-code="${attr(c)}">${esc(c)}</button>`).join('')}${codes.length>limit?`<em>+${fmt(codes.length-limit)} autre${codes.length-limit>1?'s':''}</em>`:''}`;}
+  function marginBarRow(st,{label,unit='',digits=1}){
+    const n=st.n, low=st.lowSample, u=unit?` ${unit}`:'';
+    const nText=`${fmt(n)} opération${n>1?'s':''} comparable${n>1?'s':''}`;
+    const overHtml=st.over.length?`<div class="obs-margin-over" role="note"><b>⚠ ${fmt(st.over.length)} hors seuil : à contrôler</b><span>${marginCodes(st.over)}</span></div>`:'';
+    const dfltNote=st.defaulted?`<small class="obs-margin-default">seuil par défaut : ${fmt(core.DH_DEFAULT_MAX)}${esc(u)} (${fmt(st.defaulted)} op.)</small>`:'';
+    if(!n){
+      const why=st.reason||'aucune donnée';
+      return `<div class="obs-margin-row is-empty"><div class="obs-margin-name"><b>${esc(label)}</b><small>0 opération comparable</small></div><div class="obs-margin-track" role="img" aria-label="${attr(`${label} : non calculable, ${why}`)}"><span class="obs-margin-na">Non calculable</span><i class="obs-margin-limit" aria-hidden="true"></i></div><div class="obs-margin-read"><strong>—</strong><small>${esc(why)}</small>${st.valueKey==='dh'&&!st.withValue?`<small class="obs-margin-default">seuil par défaut : ${fmt(core.DH_DEFAULT_MAX)}${esc(u)}</small>`:''}${overHtml}</div></div>`;
+    }
+    const pos=r=>Math.max(0,Math.min(100,100*r));
+    const med=pos(st.medianRatio), marginPct=Math.round(100*st.margin);
+    const iqr=st.q1!==null?`<span class="obs-margin-iqr" style="left:${pos(st.q1).toFixed(1)}%;width:${Math.max(.6,pos(st.q3)-pos(st.q1)).toFixed(1)}%" aria-hidden="true"></span>`:'';
+    const aria=`${label} : médiane ${fmt(st.medianValue,digits)}${u}, soit ${fmt(100*st.medianRatio,0)} % du seuil, marge ${marginPct} %, ${nText}${low?', échantillon faible':''}${st.over.length?`, ${st.over.length} hors seuil à contrôler`:''}`;
+    return `<div class="obs-margin-row ${low?'is-low':''}"><div class="obs-margin-name"><b>${esc(label)}</b><small>${nText}${low?` · <span class="obs-margin-lowtag">⚠ échantillon faible (${fmt(n)})</span>`:''}</small></div>
+      <div class="obs-margin-track" role="img" aria-label="${attr(aria)}">${iqr}<span class="obs-margin-arrow" style="left:${med.toFixed(1)}%" aria-hidden="true"></span><span class="obs-margin-dot" style="left:${med.toFixed(1)}%" aria-hidden="true"><b>${fmt(st.medianValue,digits)}</b></span><i class="obs-margin-limit" aria-hidden="true"></i></div>
+      <div class="obs-margin-read"><strong>marge ${marginPct} %</strong><small>seuil médian ${fmt(st.medianMax,digits)}${esc(u)}</small><small class="obs-margin-mean">moyenne ${fmt(st.meanValue,digits)}${esc(u)}, tirée par les extrêmes</small>${dfltNote}${overHtml}</div></div>`;
   }
-  function beforeAfterGauge(before,after,label,unit='',digits=2){
-    if(before.avg===null||after.avg===null)return '<div class="obs-empty">Valeurs avant / après insuffisantes.</div>';
-    const max=Math.max(before.avg,after.avg,0.0001), gain=before.avg?((before.avg-after.avg)/before.avg*100):null;
-    return `<div class="obs-before-after"><div><span>Avant travaux</span><b>${fmt(before.avg,digits)}${unit?` ${esc(unit)}`:''}</b><i><em style="width:${Math.max(3,100*before.avg/max).toFixed(1)}%"></em></i></div><div><span>Projet / après travaux</span><b>${fmt(after.avg,digits)}${unit?` ${esc(unit)}`:''}</b><i><em style="width:${Math.max(3,100*after.avg/max).toFixed(1)}%"></em></i></div><small>${gain===null?'':`Évolution moyenne : ${gain>=0?'−':'+'}${fmt(Math.abs(gain),1)} %`}</small></div>`;
+  function marginBarCard(rows,{kicker,title}){
+    return `<article class="obs-card obs-margin-card"><div class="obs-card-head"><div><span>${esc(kicker)}</span><h2>${esc(title)}</h2></div><small>Le seuil est une butée : plus le point est loin du trait noir, plus la marge est grande</small></div>
+      <div class="obs-margin-scale" aria-hidden="true"><span></span><div><em>0</em><em>50 % du seuil</em><em>SEUIL</em></div><span></span></div>
+      <div class="obs-margin-list">${rows.map(([st,opt])=>marginBarRow(st,opt)).join('')}</div>
+      <div class="obs-margin-legend"><span><i class="dot"></i>médiane (valeur affichée au-dessus)</span><span><i class="iqr"></i>moitié centrale (dès 5 opérations)</span><span><i class="arrow">⟷</i>marge restante jusqu’au seuil</span><span><i class="ring"></i>moins de 5 opérations</span></div>
+      <p class="obs-margin-foot">Médiane des ratios valeur ÷ seuil, opération par opération, sur les seules opérations ayant la valeur ET son seuil. Les valeurs au-dessus de leur seuil sont écartées et signalées en Qualité & données.</p></article>`;
+  }
+  function beforeAfterMedianBlock(st,{unit='',digits=2,rangeNote=''}){
+    const u=unit?` ${unit}`:'';
+    const out=st.outOfRange.length?`<div class="obs-margin-over" role="note"><b>⚠ ${fmt(st.outOfRange.length)} valeur${st.outOfRange.length>1?'s':''} hors plage ${esc(rangeNote)} écartée${st.outOfRange.length>1?'s':''}</b><span>${marginCodes(st.outOfRange)}</span></div>`:'';
+    if(!st.n)return `<div class="obs-ba-median is-empty"><div class="obs-ba-values"><span class="obs-margin-na">Non calculable</span></div><small>Aucune opération n’a la valeur avant ET après travaux.</small>${out}</div>`;
+    const pctChange=st.change===null?null:100*st.change;
+    return `<div class="obs-ba-median" role="img" aria-label="${attr(`Médiane avant ${fmt(st.before,digits)}${u}, médiane après ${fmt(st.after,digits)}${u}${pctChange===null?'':`, écart ${pctChange<=0?'−':'+'}${fmt(Math.abs(pctChange),0)} %`}, ${st.n} opérations`)}"><div class="obs-ba-values"><div><span>Médiane avant</span><b>${fmt(st.before,digits)}</b></div><i aria-hidden="true">→</i><div><span>Médiane après</span><b>${fmt(st.after,digits)}</b></div>${pctChange===null?'':`<strong class="${pctChange<=0?'is-down':'is-up'}">${pctChange<=0?'−':'+'}${fmt(Math.abs(pctChange),0)} %</strong>`}</div><small>${esc(unit)} · ${fmt(st.n)} opération${st.n>1?'s':''} avec les deux valeurs${st.lowSample?` · <span class="obs-margin-lowtag">⚠ échantillon faible (${fmt(st.n)})</span>`:''}</small>${out}</div>`;
+  }
+  // V6.51 : DPE en escalier (avant à gauche, après à droite, 1 carré = 1 opération) + histogramme du gain.
+  const DPE_OFFICIAL={A:'#319834',B:'#33cc31',C:'#cbfc34',D:'#fbfe06',E:'#fccc2f',F:'#fc9935',G:'#fc0205'};
+  function dpeStaircaseCard(type){
+    const beforeKey=type==='energy'?'dpeEnergyBefore':'dpeGesBefore', afterKey=type==='energy'?'dpeEnergyAfter':'dpeGesAfter', gainKey=`dpeGain:${type}`, label=type==='energy'?'DPE énergie':'DPE GES';
+    const ops=applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKeys:[beforeKey,afterKey,gainKey]})), st=core.dpeStaircase(ops,beforeKey,afterKey);
+    const letters='ABCDEFG'.split(''), maxCount=Math.max(1,...letters.flatMap(l=>[st.before[l],st.after[l]])), per=Math.max(1,Math.ceil(maxCount/12));
+    const squares=(n,l)=>Array.from({length:Math.ceil(n/per)},()=>`<i style="background:${DPE_OFFICIAL[l]}"></i>`).join('');
+    const side=(l,key,n,dir)=>`<button type="button" class="obs-stair-side ${dir} ${activeCross(key,l)?'is-active':''}" ${n?crossAttrs(key,l,`${label} ${dir==='before'?'avant':'après'} : ${l}`):'disabled'} aria-label="${attr(`${label} ${dir==='before'?'avant':'après'} travaux, classe ${l} : ${n} opération${n>1?'s':''}`)}">${dir==='before'?`<b>${n?fmt(n):''}</b><span>${squares(n,l)}</span>`:`<span>${squares(n,l)}</span><b>${n?fmt(n):''}</b>`}</button>`;
+    const stair=(st.beforeCount||st.afterCount)?`<div class="obs-stair"><div class="obs-stair-head"><span>AVANT TRAVAUX</span><span></span><span>APRÈS TRAVAUX</span></div>${letters.map(l=>`<div class="obs-stair-row">${side(l,beforeKey,st.before[l],'before')}<span class="obs-stair-letter dpe-off-${l.toLowerCase()}">${l}</span>${side(l,afterKey,st.after[l],'after')}</div>`).join('')}<div class="obs-stair-better" aria-hidden="true"><i>▲</i><em></em><span>meilleur</span></div><p class="obs-stair-note">1 carré ${per>1?`≈ ${fmt(per)} opérations`:'= 1 opération'} · avant : ${fmt(st.beforeCount)} op.${st.medianBefore?` (médiane ${st.medianBefore})`:''} · après : ${fmt(st.afterCount)} op.${st.medianAfter?` (médiane ${st.medianAfter})`:''}</p></div>`:'<div class="obs-empty">Aucune classe DPE renseignée.</div>';
+    const buckets=[['worse','dégradation (à corriger)'],['0','0'],['1','+1'],['2','+2'],['3','+3'],['4plus','+4 ou +']], peak=Math.max(1,...buckets.map(([k])=>st.buckets[k]));
+    const hist=st.pairs?`<div class="obs-gain-hist" role="group" aria-label="${attr(`Gain de classes ${label} par opération`)}">${buckets.map(([k,name])=>{const n=st.buckets[k];return `<button type="button" class="obs-gain-bin ${k==='worse'?'is-worse':''} ${k==='0'?'is-zero':''} ${activeCross(gainKey,k)?'is-active':''}" ${n?crossAttrs(gainKey,k,`${label} : gain ${name}`):'disabled'} aria-label="${attr(`${name} : ${n} opération${n>1?'s':''}`)}"><span class="obs-gain-bar"><b>${fmt(n)}</b><i style="height:${n?Math.max(3,82*n/peak).toFixed(1):0}%"></i></span><span class="obs-gain-label">${k==='worse'?'⚠ ':''}${esc(name)}</span></button>`;}).join('')}</div><p class="obs-stair-note">${fmt(st.pairs)} opération${st.pairs>1?'s':''} avec la classe avant ET après · ex. E → C = +2</p>`:'<div class="obs-empty">Aucune opération n’a la classe avant ET après travaux.</div>';
+    const degraded=st.degraded.length?`<div class="obs-dpe-guard is-alert" role="note"><b>⚠ ${fmt(st.degraded.length)} dégradation${st.degraded.length>1?'s':''} : étiquette à corriger</b><span>Une étiquette ne peut pas se dégrader avec des travaux. Cas listés ici et en Qualité & données ; la donnée n’est pas modifiée par l’Observatoire.</span><span>${uniq(st.degraded.map(d=>d.code)).slice(0,12).map(c=>{const d=st.degraded.find(x=>x.code===c);return `<button type="button" class="obs-margin-code" data-op-code="${attr(c)}">${esc(c)} · ${d.before} → ${d.after}</button>`;}).join('')}</span></div>`:(st.pairs?'<p class="obs-dpe-guard">✓ Aucune dégradation d’étiquette entre avant et après travaux.</p>':'');
+    return `<article class="obs-card obs-stair-card"><div class="obs-card-head"><div><span>${esc(label.toUpperCase())}</span><h2>Classes avant / après travaux</h2></div><small>Couleurs officielles · clique sur une classe ou un gain pour filtrer</small></div><div class="obs-stair-grid"><section>${stair}</section><section><div class="obs-subsection-title">Gain de classes par opération</div>${hist}${degraded}</section></div></article>`;
   }
 
   function metricAverageBars(ops,defs){
@@ -1974,31 +2103,27 @@
   function metricAverageVisual(ops,defs,cardKey){const rows=metricAverageItems(ops,defs);if(!rows.length)return '<div class="obs-empty">Aucune donnée de décomposition CEP renseignée.</div>';const view=state.energyCepViews?.[cardKey]||'pie',colorFn=cardKey==='vector'?vectorColor:null;if(view==='pie')return pieDistribution(rows,{maxItems:10,colorFn});const max=Math.max(1,...rows.map(x=>x.value));return `<div class="obs-bars obs-metric-bars">${rows.map(x=>`<div class="obs-bar-row obs-metric-row"><span title="${attr(x.name)}">${esc(x.name)}</span><span class="obs-bar-track"><i class="obs-bar-fill" style="width:${Math.max(2,100*x.value/max).toFixed(1)}%;${colorFn?`background:${colorFn(x.name)}`:''}"></i></span><strong>${fmt(x.value,1)}</strong><small>${fmt(x.count)} op.</small></div>`).join('')}</div>`;}
 
   function renderEnergy(){
-    const ops=filteredTechnicalOperations();
-    const cepStats=metricPairStats(ops,'cep','cepMax'), cepnrStats=metricPairStats(ops,'cepnr','cepnrMax'), bbioStats=metricPairStats(ops,'bbio','bbioMax');
-    const dhStats=metricPairStats(ops,'dh','dhMax'), ticStats=metricPairStats(ops,'tic','ticRef');
-    const ubBefore=averageRaw(ops,'ubatBefore'), ubAfter=averageRaw(ops,'ubatAfter');
+    const ops=filteredTechnicalOperations(), M=(v,m,o)=>core.thresholdMargin(ops,v,m,o);
+    const cepStats=M('cep','cepMax'), cepnrStats=M('cepnr','cepnrMax'), bbioStats=M('bbio','bbioMax');
+    const dhStats=M('dh','dhMax',{defaultMax:core.DH_DEFAULT_MAX}), ticStats=M('tic','ticRef');
+    const ubat=core.beforeAfterMedian(ops,'ubatBefore','ubatAfter',{range:core.UBAT_RANGE}), cepBA=core.beforeAfterMedian(ops,'cepBefore','cepAfter',{afterFallback:'cep'});
+    const n=cepStats.n, compared=n+cepStats.over.length;
     return `${pageHead('energy',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
-      {label:'Cep projet moyen',value:cepStats.valueAvg===null?'—':fmt(cepStats.valueAvg,1),note:`${fmt(cepStats.count)} / ${fmt(ops.length)} opérations · couverture ${fmt(pct(cepStats.count,ops.length),1)} %`,sample:cepStats.count,metric:'cep'},
-      {label:'Cep max moyen',value:cepStats.maxAvg===null?'—':fmt(cepStats.maxAvg,1),note:`référence maximale moyenne · couverture ${fmt(pct(cepStats.count,ops.length),1)} %`,metric:'cepMax'},
-      {label:'Marge au Cep max',value:cepStats.marginAvg===null?'—':`${cepStats.marginAvg>=0?'+':''}${fmt(cepStats.marginAvg,1)}`,note:'Cep max − Cep projet'},
-      {label:'Sous le Cep max',value:cepStats.count?`${fmt(cepStats.rate,1)} %`:'—',note:`${fmt(cepStats.under)} / ${fmt(cepStats.count)} opérations comparables`}
+      {label:'Cep projet médian',value:cepStats.medianValue===null?'—':fmt(cepStats.medianValue,1),note:n?`${fmt(n)} / ${fmt(ops.length)} opérations comparables · moyenne ${fmt(cepStats.meanValue,1)}, tirée par les extrêmes`:`Non calculable : ${cepStats.reason}`,sample:n,metric:'cep'},
+      {label:'Cep max médian',value:cepStats.medianMax===null?'—':fmt(cepStats.medianMax,1),note:'seuil médian des opérations comparables',metric:'cepMax'},
+      {label:'Marge au Cep max',value:cepStats.margin===null?'—':`${Math.round(100*cepStats.margin)} %`,note:'1 − médiane des ratios Cep ÷ Cep max'},
+      {label:'Sous le Cep max',value:compared?`${fmt(cepStats.underRate,1)} %`:'—',note:`${fmt(n)} / ${fmt(compared)} opérations avec Cep et Cep max${cepStats.over.length?` · ⚠ ${fmt(cepStats.over.length)} hors seuil`:''}`}
     ])}
-    <article class="obs-card obs-cep-card"><div class="obs-card-head"><div><span>CEP PROJET / CEP MAX</span><h2>Position de la consommation conventionnelle</h2></div><small>Plus le curseur reste à gauche du seuil, meilleure est la marge</small></div>${performanceGauge(cepStats,'Cep',{unit:'kWhEP/m².an',leftLabel:'0 / BEPOS',referenceLabel:'Cep max moyen'})}</article>
+    ${marginBarCard([[cepStats,{label:'Cep',unit:'kWhEP/m².an'}],[cepnrStats,{label:'Cep,nr',unit:'kWhEP/m².an'}],[bbioStats,{label:'Bbio',unit:'points'}],[ticStats,{label:'TIC',unit:'°C'}],[dhStats,{label:'Confort d’été (DH)',unit:'°C·h',digits:0}]],{kicker:'MARGE AU SEUIL',title:'De combien les opérations restent-elles sous leur seuil ?'})}
     <div class="obs-section-title"><div><span>01</span><h2>Transitions énergétiques</h2></div><p>Les vecteurs sont regroupés en catégories comparables : Gaz, Électricité, PAC, CET, RCU, Bois / biomasse, etc.</p></div>
     <div class="obs-grid-2">
       <article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>CHAUFFAGE</span><h2>Vecteurs avant → après travaux</h2></div><small>Clique d’abord sur un vecteur à gauche</small></div>${transitionFlow(filteredOperations({ignoreCrossKey:'transition:heatingBefore:heatingAfter'}),'heatingBefore','heatingAfter','Chauffage','heating')}</article>
       <article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>ECS</span><h2>Vecteurs avant → après travaux</h2></div><small>Clique d’abord sur un vecteur à gauche</small></div>${transitionFlow(filteredOperations({ignoreCrossKey:'transition:ecsBefore:ecsAfter'}),'ecsBefore','ecsAfter','ECS','ecs')}</article>
     </div>
-    <div class="obs-section-title"><div><span>02</span><h2>Performance énergétique</h2></div><p>Lecture simple : valeur projet moyenne comparée à la valeur maximale ou de référence moyenne.</p></div>
-    <div class="obs-grid-3 obs-performance-compare-grid">
-      <article class="obs-card"><div class="obs-card-head"><div><span>CEP,NR</span><h2>Projet vs Cep,nr max</h2></div><small>${cepnrStats.count?`${fmt(cepnrStats.rate,1)} % sous le max`:'données insuffisantes'}</small></div>${performanceGauge(cepnrStats,'Cep,nr',{unit:'kWhEP/m².an',referenceLabel:'Cep,nr max moyen'})}</article>
-      <article class="obs-card"><div class="obs-card-head"><div><span>BBIO</span><h2>Projet vs Bbio max</h2></div><small>${bbioStats.count?`${fmt(bbioStats.rate,1)} % sous le max`:'données insuffisantes'}</small></div>${performanceGauge(bbioStats,'Bbio',{unit:'points',referenceLabel:'Bbio max moyen'})}</article>
-      <article class="obs-card"><div class="obs-card-head"><div><span>CONFORT D’ÉTÉ</span><h2>DH projet vs DH max</h2></div><small>${dhStats.count?`${fmt(dhStats.rate,1)} % sous le DH max`:'données insuffisantes'}</small></div>${performanceGauge(dhStats,'DH',{unit:'°C·h',digits:0,referenceLabel:'DH max moyen'})}</article>
-    </div>
-    <div class="obs-grid-2">
-      <article class="obs-card"><div class="obs-card-head"><div><span>TIC</span><h2>TIC projet vs TIC de référence</h2></div><small>Utilisé lorsque le référentiel renseigne TIC/TIC ref</small></div>${performanceGauge(ticStats,'TIC',{unit:'°C',digits:1,referenceLabel:'TIC ref moyenne'})}</article>
-      <article class="obs-card"><div class="obs-card-head"><div><span>UBAT</span><h2>Transmission thermique avant / projet</h2></div><small>Une valeur plus basse traduit une enveloppe plus performante</small></div>${beforeAfterGauge(ubBefore,ubAfter,'Ubat','W/m²·K',2)}</article>
+    <div class="obs-section-title"><div><span>02</span><h2>Avant → après travaux</h2></div><p>Médianes sur les opérations ayant la valeur avant ET après ; une valeur plus basse traduit un bâtiment plus performant.</p></div>
+    <div class="obs-grid-2 obs-grid-even">
+      <article class="obs-card"><div class="obs-card-head"><div><span>UBAT</span><h2>Transmission thermique avant / projet</h2></div><small>W/m²·K · plage plausible ${fmt(core.UBAT_RANGE[0],1)}–${fmt(core.UBAT_RANGE[1])}</small></div>${beforeAfterMedianBlock(ubat,{unit:'W/m²·K',digits:2,rangeNote:`${fmt(core.UBAT_RANGE[0],1)}–${fmt(core.UBAT_RANGE[1])} W/m².K`})}</article>
+      <article class="obs-card"><div class="obs-card-head"><div><span>CEP</span><h2>Cep initial → Cep après travaux</h2></div><small>kWhEP/m².an</small></div>${beforeAfterMedianBlock(cepBA,{unit:'kWhEP/m².an',digits:1})}</article>
     </div>
     <div class="obs-section-title"><div><span>03</span><h2>D’où vient le Cep ?</h2></div><p>Décomposition moyenne des usages et vecteurs lorsqu’ils sont renseignés dans la source.</p></div>
     <div class="obs-grid-2">
@@ -2041,32 +2166,31 @@
   const MIN_SAMPLE=5;
   function lowSample(n){n=Number(n)||0;return n>0&&n<MIN_SAMPLE?` · <b class="obs-low-sample" title="Moins de ${MIN_SAMPLE} valeurs : moyenne peu représentative">⚠ échantillon faible (n = ${fmt(n)})</b>`:'';}
   function averageRaw(ops,key){const vals=ops.map(o=>rawNumber(o,key)).filter(v=>v!==null);return {avg:vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null,count:vals.length,population:ops.length,coverage:ops.length?100*vals.length/ops.length:0};}
-  function averageDpe(ops,key){const vals=ops.map(o=>dpeLetter(o,key)).filter(Boolean).map(l=>'ABCDEFG'.indexOf(l)+1);if(!vals.length)return {avg:null,count:0,label:'—'};const avg=vals.reduce((a,b)=>a+b,0)/vals.length;return {avg,count:vals.length,label:'ABCDEFG'[Math.max(0,Math.min(6,Math.round(avg)-1))]};}
+  // V6.51 : classe médiane (et non plus moyenne arrondie) ; gain = médiane des gains des opérations ayant avant ET après.
+  function averageDpe(ops,key){const vals=ops.map(o=>dpeLetter(o,key)).filter(Boolean).map(l=>'ABCDEFG'.indexOf(l)+1).sort((a,b)=>a-b);if(!vals.length)return {avg:null,count:0,label:'—'};const med=vals[Math.floor((vals.length-1)/2)];return {avg:med,count:vals.length,label:'ABCDEFG'[med-1]};}
+  function medianDpeGain(ops,b,a){const g=ops.map(o=>core.dpeGain(o,b,a)).filter(Boolean).map(x=>x.gain);return g.length?core.quantile(g.sort((x,y)=>x-y),.5):null;}
 
-  function dpeVisualSummary(db,da,gb,ga){
-    const gainEnergy=(db.avg!==null&&da.avg!==null)?db.avg-da.avg:null, gainGes=(gb.avg!==null&&ga.avg!==null)?gb.avg-ga.avg:null;
+  function dpeVisualSummary(db,da,gb,ga,ops=[]){
+    const gainEnergy=medianDpeGain(ops,'dpeEnergyBefore','dpeEnergyAfter'), gainGes=medianDpeGain(ops,'dpeGesBefore','dpeGesAfter');
     const badge=(letter,kind)=>`<b class="obs-dpe-chevron dpe-${String(letter||'').toLowerCase()} ${kind}">${esc(letter||'—')}</b>`;
-    return `<article class="obs-card obs-dpe-hero"><div class="obs-card-head"><div><span>AVANT / APRÈS</span><h2>DPE énergie & GES</h2></div><small>Classes moyennes de la sélection filtrée</small></div><div class="obs-dpe-hero-grid"><section><i class="obs-dpe-hero-icon">ϟ</i><div><span>Classe énergie</span><div class="obs-dpe-route"><small>Avant</small>${badge(db.label,'before')}<em>→</em>${badge(da.label,'after')}<small>Après</small></div><strong>${gainEnergy===null?'Gain non calculable':`Gain ≈ ${fmt(gainEnergy,1)} classe${Math.abs(gainEnergy)>1?'s':''}`}</strong></div></section><section><i class="obs-dpe-hero-icon purple">◒</i><div><span>Classe GES</span><div class="obs-dpe-route"><small>Avant</small>${badge(gb.label,'before')}<em>→</em>${badge(ga.label,'after')}<small>Après</small></div><strong>${gainGes===null?'Gain non calculable':`Gain ≈ ${fmt(gainGes,1)} classe${Math.abs(gainGes)>1?'s':''}`}</strong></div></section></div></article>`;
+    return `<article class="obs-card obs-dpe-hero"><div class="obs-card-head"><div><span>AVANT / APRÈS</span><h2>DPE énergie & GES</h2></div><small>Classes médianes de la sélection filtrée · gain médian par opération</small></div><div class="obs-dpe-hero-grid"><section><i class="obs-dpe-hero-icon">ϟ</i><div><span>Classe énergie</span><div class="obs-dpe-route"><small>Avant</small>${badge(db.label,'before')}<em>→</em>${badge(da.label,'after')}<small>Après</small></div><strong>${gainEnergy===null?'Gain non calculable':`Gain médian ${gainEnergy>0?'+':''}${fmt(gainEnergy,1)} classe${Math.abs(gainEnergy)>1?'s':''}`}</strong></div></section><section><i class="obs-dpe-hero-icon purple">◒</i><div><span>Classe GES</span><div class="obs-dpe-route"><small>Avant</small>${badge(gb.label,'before')}<em>→</em>${badge(ga.label,'after')}<small>Après</small></div><strong>${gainGes===null?'Gain non calculable':`Gain médian ${gainGes>0?'+':''}${fmt(gainGes,1)} classe${Math.abs(gainGes)>1?'s':''}`}</strong></div></section></div></article>`;
   }
 
   function renderCarbon(){
-    const ops=filteredTechnicalOperations(), transitionOps=applyMatrixSelection(ops), ice=averageRaw(ops,'icEnergy'), icc=averageRaw(ops,'icConstruction'), db=averageDpe(transitionOps,'dpeEnergyBefore'), da=averageDpe(transitionOps,'dpeEnergyAfter'), gb=averageDpe(transitionOps,'dpeGesBefore'), ga=averageDpe(transitionOps,'dpeGesAfter');
-    const iceStats=metricPairStats(ops,'icEnergy','icEnergyMax'), iccStats=metricPairStats(ops,'icConstruction','icConstructionMax');
+    const ops=filteredTechnicalOperations(), transitionOps=applyMatrixSelection(ops), ice=core.stats(ops,'icEnergy'), icc=core.stats(ops,'icConstruction'), db=averageDpe(transitionOps,'dpeEnergyBefore'), da=averageDpe(transitionOps,'dpeEnergyAfter'), gb=averageDpe(transitionOps,'dpeGesBefore'), ga=averageDpe(transitionOps,'dpeGesAfter');
+    const iceStats=core.thresholdMargin(ops,'icEnergy','icEnergyMax'), iccStats=core.thresholdMargin(ops,'icConstruction','icConstructionMax');
+    const underKpi=(st,l)=>{const c=st.n+st.over.length;return {label:`${l} sous seuil`,value:c?`${fmt(st.underRate,1)} %`:'—',note:`${fmt(st.n)} / ${fmt(c)} comparables${st.margin!==null?` · marge médiane ${Math.round(100*st.margin)} %`:''}`};};
     return `${pageHead('carbon',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
-      {label:'IC Énergie projet moyen',value:ice.avg===null?'—':fmt(ice.avg,1),note:`${fmt(ice.count)} opérations renseignées`,sample:ice.count},
-      {label:'IC Énergie sous seuil',value:iceStats.count?`${fmt(iceStats.rate,1)} %`:'—',note:`${fmt(iceStats.under)} / ${fmt(iceStats.count)} comparables`,crossKey:'threshold:icEnergy',crossValue:'under',crossLabel:'IC Énergie sous seuil'},
-      {label:'IC Construction projet moyen',value:icc.avg===null?'—':fmt(icc.avg,1),note:`${fmt(icc.count)} opérations renseignées`,sample:icc.count},
-      {label:'IC Construction sous seuil',value:iccStats.count?`${fmt(iccStats.rate,1)} %`:'—',note:`${fmt(iccStats.under)} / ${fmt(iccStats.count)} comparables`,crossKey:'threshold:icConstruction',crossValue:'under',crossLabel:'IC Construction sous seuil'}
+      {label:'IC Énergie projet médian',value:ice.median===null?'—':fmt(ice.median,1),note:ice.n?`${fmt(ice.n)} opérations renseignées · moyenne ${fmt(ice.mean,1)}, tirée par les extrêmes`:'aucune valeur renseignée',sample:ice.n},
+      {...underKpi(iceStats,'IC Énergie'),crossKey:'threshold:icEnergy',crossValue:'under',crossLabel:'IC Énergie sous seuil'},
+      {label:'IC Construction projet médian',value:icc.median===null?'—':fmt(icc.median,1),note:icc.n?`${fmt(icc.n)} opérations renseignées · moyenne ${fmt(icc.mean,1)}, tirée par les extrêmes`:'aucune valeur renseignée',sample:icc.n},
+      {...underKpi(iccStats,'IC Construction'),crossKey:'threshold:icConstruction',crossValue:'under',crossLabel:'IC Construction sous seuil'}
     ])}
-    ${dpeVisualSummary(db,da,gb,ga)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
-    <div class="obs-section-title"><div><span>01</span><h2>Position des émissions carbone par rapport aux maximums</h2></div><p>Le curseur représente la valeur projet moyenne ; la borne droite représente le maximum moyen renseigné.</p></div>
-    <div class="obs-grid-2">
-      <article class="obs-card obs-carbon-gauge"><div class="obs-card-head"><div><span>IC ÉNERGIE</span><h2>Projet vs IC Énergie max</h2></div><small>${iceStats.count?`${fmt(iceStats.rate,1)} % sous le seuil`:'maximum non renseigné'}</small></div>${performanceGauge(iceStats,'IC Énergie',{unit:'kgCO₂e/m²',referenceLabel:'IC Énergie max moyen'})}</article>
-      <article class="obs-card obs-carbon-gauge"><div class="obs-card-head"><div><span>IC CONSTRUCTION</span><h2>Projet vs IC Construction max</h2></div><small>${iccStats.count?`${fmt(iccStats.rate,1)} % sous le seuil`:'maximum non renseigné'}</small></div>${performanceGauge(iccStats,'IC Construction',{unit:'kgCO₂e/m²',referenceLabel:'IC Construction max moyen'})}</article>
-    </div>
-    <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Lecture des classes énergie et GES avant et après travaux.</p></div>
-    <div class="obs-grid-2"><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE ÉNERGIE</span><h2>Classes avant → après travaux</h2></div><small>${db.label} → ${da.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeEnergyBefore:dpeEnergyAfter'})),'dpeEnergyBefore','dpeEnergyAfter','DPE énergie','dpeEnergy')}</article><article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>DPE GES</span><h2>Classes avant → après travaux</h2></div><small>${gb.label} → ${ga.label} en moyenne · clique sur une classe à gauche</small></div>${transitionFlow(applyMatrixSelection(filteredTechnicalOperations({ignoreCrossKey:'transition:dpeGesBefore:dpeGesAfter'})),'dpeGesBefore','dpeGesAfter','DPE GES','dpeGes')}</article></div>
-    <div class="obs-grid-2"><article class="obs-card"><div class="obs-card-head"><div><span>GAIN DPE</span><h2>Évolution énergie</h2></div></div>${dpeGainBars(applyMatrixSelection(filteredOperations({ignoreCrossKey:'dpeGain:energy'})),'energy')}</article><article class="obs-card"><div class="obs-card-head"><div><span>GAIN GES</span><h2>Évolution GES</h2></div></div>${dpeGainBars(applyMatrixSelection(filteredOperations({ignoreCrossKey:'dpeGain:ges'})),'ges')}</article></div>`;
+    ${dpeVisualSummary(db,da,gb,ga,transitionOps)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
+    <div class="obs-section-title"><div><span>01</span><h2>Marge des émissions carbone sous les maximums</h2></div><p>Le point est la médiane des ratios valeur ÷ seuil ; le trait noir est le seuil.</p></div>
+    ${marginBarCard([[iceStats,{label:'IC Énergie',unit:'kgCO₂e/m²'}],[iccStats,{label:'IC Construction',unit:'kgCO₂e/m²'}]],{kicker:'MARGE AU SEUIL',title:'IC Énergie et IC Construction'})}
+    <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Une étiquette ne peut pas se dégrader avec des travaux : toute dégradation est affichée en rouge et signalée en Qualité & données.</p></div>
+    ${dpeStaircaseCard('energy')}${dpeStaircaseCard('ges')}`;
   }
 
   function numericHistogram(ops,key,label,bins=6){
@@ -2080,18 +2204,7 @@
     return `<div class="obs-histogram">${ranges.map((r,i)=>{const value=`${r.lo}\u0001${r.hi}`,active=activeCross(`range:${key}`,value);return `<button class="obs-hist-bin ${active?'is-active':''}" ${crossAttrs(`range:${key}`,value,`${label} : ${fmt(r.lo,1)} – ${fmt(r.hi,1)}`)}><span class="obs-hist-count">${fmt(r.count)}</span><i style="height:${Math.max(6,100*r.count/peak)}%"></i><small>${fmt(r.lo,0)}${i===ranges.length-1?`–${fmt(r.hi,0)}`:''}</small></button>`}).join('')}</div>`;
   }
 
-  function dpeCompare(ops,beforeKey,afterKey,label){
-    const letters='ABCDEFG'.split(''), counts=(key)=>Object.fromEntries(letters.map(l=>[l,ops.filter(o=>dpeLetter(o,key)===l).length]));
-    const b=counts(beforeKey),a=counts(afterKey),max=Math.max(1,...letters.flatMap(l=>[b[l],a[l]]));
-    return `<div class="obs-dpe-compare">${letters.map(l=>`<div class="obs-dpe-row"><b class="obs-dpe-letter dpe-${l.toLowerCase()}">${l}</b><button class="obs-dpe-bar ${activeCross(beforeKey,l)?'is-active':''}" ${crossAttrs(beforeKey,l,`${label} avant : ${l}`)}><span>Avant</span><i style="width:${100*b[l]/max}%"></i><strong>${fmt(b[l])}</strong></button><button class="obs-dpe-bar after ${activeCross(afterKey,l)?'is-active':''}" ${crossAttrs(afterKey,l,`${label} après : ${l}`)}><span>Après</span><i style="width:${100*a[l]/max}%"></i><strong>${fmt(a[l])}</strong></button></div>`).join('')}</div>`;
-  }
 
-  function dpeGainBars(ops,type){
-    const beforeKey=type==='energy'?'dpeEnergyBefore':'dpeGesBefore', afterKey=type==='energy'?'dpeEnergyAfter':'dpeGesAfter', key=`dpeGain:${type}`;
-    const groups=[['2plus','Gain ≥ 2 classes'],['1','Gain de 1 classe'],['stable','Stable'],['worse','Dégradation']].map(([value,name])=>({value,name,count:ops.filter(o=>matchesCross(o,{key,value})).length}));
-    const max=Math.max(1,...groups.map(g=>g.count));
-    return `<div class="obs-bars">${groups.map(g=>`<button class="obs-bar-row ${activeCross(key,g.value)?'is-active':''}" ${crossAttrs(key,g.value,`${type==='energy'?'DPE énergie':'DPE GES'} : ${g.name}`)}><span>${esc(g.name)}</span><span class="obs-bar-track"><i class="obs-bar-fill" style="width:${Math.max(2,100*g.count/max)}%"></i></span><strong>${fmt(g.count)}</strong></button>`).join('')}</div>`;
-  }
 
   function renderOperations(){
     const ops=filteredOperations(), groupMode=state.operationsEntityView==='groups';
@@ -2116,20 +2229,72 @@
     return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th>Référentiel</th><th>Avancement</th><th>Logements</th></tr></thead><tbody>${model.items.map(o=>`<tr data-op-code="${attr(o.code)}"><td><strong>${esc(o.code)}</strong></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td>${esc(o.referential)}</td><td><span class="obs-pill ${o.status==='cancelled'?'red':(o.status==='incomplete'?'warn':'')}">${esc(o.rawStatus||STATUS_LABELS[o.status]||o.status)}</span></td><td>${fmt(o.dwellings)}</td></tr>`).join('')}</tbody></table>${paginationHtml('operations',model)}</div>`;
   }
 
-  const CROSS_METRICS=['dwellings','buildings','bbio','bbioMax','cep','cepMax','dh','dhMax','ubatBefore','ubatAfter','roofR','wallR','floorR','icEnergy','icEnergyMax','icConstruction','icConstructionMax'];
-  function crossMetricOptions(selected){return CROSS_METRICS.filter(k=>core?.dictByKey?.[k]).map(k=>`<option value="${attr(k)}" ${selected===k?'selected':''}>${esc(core.dictByKey[k].label)}</option>`).join('');}
-  function scatterPlot(ops){
-    const pts=ops.map(op=>({op,x:rawNumber(op,state.crossX),y:rawNumber(op,state.crossY),band:core?.carbonBand?.(op)})).filter(p=>p.x!==null&&p.y!==null);
-    if(!pts.length)return '<div class="obs-empty">Aucune opération ne possède simultanément les deux indicateurs sélectionnés.</div>';
-    const W=940,H=520,pad={l:72,r:30,t:30,b:64};let minX=Math.min(...pts.map(p=>p.x)),maxX=Math.max(...pts.map(p=>p.x)),minY=Math.min(...pts.map(p=>p.y)),maxY=Math.max(...pts.map(p=>p.y));if(minX===maxX){minX-=1;maxX+=1}if(minY===maxY){minY-=1;maxY+=1};const dx=(maxX-minX)*.06,dy=(maxY-minY)*.08;minX-=dx;maxX+=dx;minY-=dy;maxY+=dy;const sx=v=>pad.l+(v-minX)/(maxX-minX)*(W-pad.l-pad.r),sy=v=>H-pad.b-(v-minY)/(maxY-minY)*(H-pad.t-pad.b);
-    const xDef=core.dictByKey[state.crossX],yDef=core.dictByKey[state.crossY];let grid='';for(let i=0;i<=5;i++){const gx=pad.l+i*(W-pad.l-pad.r)/5,gy=pad.t+i*(H-pad.t-pad.b)/5;const xv=minX+i*(maxX-minX)/5,yv=maxY-i*(maxY-minY)/5;grid+=`<line x1="${gx}" y1="${pad.t}" x2="${gx}" y2="${H-pad.b}"/><text x="${gx}" y="${H-34}" text-anchor="middle">${fmt(xv,1)}</text><line x1="${pad.l}" y1="${gy}" x2="${W-pad.r}" y2="${gy}"/><text x="${pad.l-10}" y="${gy+4}" text-anchor="end">${fmt(yv,1)}</text>`;}
-    return `<div class="obs-scatter-wrap"><svg class="obs-scatter" viewBox="0 0 ${W} ${H}" role="img" aria-label="Nuage de points ${attr(xDef?.label||state.crossX)} et ${attr(yDef?.label||state.crossY)}"><g class="obs-scatter-grid">${grid}</g><text class="obs-scatter-axis" x="${W/2}" y="${H-7}" text-anchor="middle">${esc(xDef?.label||state.crossX)}${xDef?.unit?` · ${esc(xDef.unit)}`:''}</text><text class="obs-scatter-axis" transform="translate(18 ${H/2}) rotate(-90)" text-anchor="middle">${esc(yDef?.label||state.crossY)}${yDef?.unit?` · ${esc(yDef.unit)}`:''}</text><g>${pts.map(p=>`<circle class="obs-scatter-point" data-scatter-op="${attr(p.op.code)}" data-scatter-project="${attr(p.op.projectCode||p.op.code)}" cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="7" fill="${p.band?.color||'#9AA8A2'}"><title>${esc(p.op.name)} · ${esc(xDef?.label||state.crossX)} ${fmt(p.x,2)} · ${esc(yDef?.label||state.crossY)} ${fmt(p.y,2)} · ${esc(p.band?.label||'')}</title></circle>`).join('')}</g></svg></div>`;
+  // V6.53 : Croiser les données — axes par défaut intelligents, effectifs, échelle robuste, couleurs, vue tableau.
+  const CROSS_METRICS=['surface','dwellings','buildings','cep','cepMax','cepnr','cepnrMax','bbio','bbioMax','tic','ticRef','dh','dhMax','cepBefore','cepAfter','ubatBefore','ubatAfter','roofR','wallR','floorR','icEnergy','icEnergyMax','icConstruction','icConstructionMax'];
+  const CROSS_PALETTE=['#06402b','#2c6e9b','#d49a32','#8e5ea2','#4b9881','#c94c4c','#6f9cb9','#b4a24a'];
+  const crossLabel=k=>core.dictByKey[k]?.label||k, crossUnit=k=>core.dictByKey[k]?.unit||'';
+  function crossMetricOptions(selected,counts){
+    return CROSS_METRICS.filter(k=>core.dictByKey[k]).sort((a,b)=>(counts[b]||0)-(counts[a]||0)).map(k=>{const n=counts[k]||0;return `<option value="${attr(k)}" ${selected===k?'selected':''} ${n||selected===k?'':'disabled'}>${esc(crossLabel(k))} ${n?`(${fmt(n)})`:'— aucune donnée'}</option>`;}).join('');
   }
+  function crossColorModel(pts){
+    const mode=state.crossColor, carbonAxis=[state.crossX,state.crossY].includes('icConstruction');
+    if(mode==='carbon'&&carbonAxis){const bands=[['current-2028','Niveau courant → seuil 2028','#C94C4C'],['2028-2031','2028 → 2031','#2C6E9B'],['2031','Niveau 2031 atteint / dépassé','#168456']];return {get:p=>{const b=core.carbonBand(p.op);return {key:b.key,color:b.color};},legend:bands.map(([k,l,c])=>({key:k,label:l,color:c,count:pts.filter(p=>core.carbonBand(p.op).key===k).length}))};}
+    const value=mode==='status'?(p=>p.op.status||'unknown'):mode==='mention'?(p=>cachedOperationTags(p.op,'mention')[0]||'Sans mention'):(p=>p.op.referential||'Non précisé');
+    const label=mode==='status'?(v=>STATUS_LABELS[v]||v):(v=>v);
+    const counts=new Map();pts.forEach(p=>{const v=value(p);counts.set(v,(counts.get(v)||0)+1);});
+    const ranked=[...counts].sort((a,b)=>b[1]-a[1]), top=ranked.slice(0,mode==='status'?12:7), colors=new Map(top.map(([v],i)=>[v,mode==='status'?(STATUS_COLORS[v]||'#9AA8A2'):CROSS_PALETTE[i]]));
+    const crossKey=mode==='status'?'status':mode==='mention'?'mention':'referential';
+    const legend=top.map(([v,n])=>({key:v,label:label(v),color:colors.get(v),count:n,...(['Sans mention','Non précisé'].includes(v)?{}:{crossKey,crossValue:v})}));
+    const rest=ranked.slice(top.length).reduce((t,[,n])=>t+n,0);if(rest)legend.push({key:'__other',label:'Autres',color:'#9AA8A2',count:rest});
+    return {get:p=>({key:value(p),color:colors.get(value(p))||'#9AA8A2'}),legend};
+  }
+  function crossScatterSvg(vis,{threshold,carbon,t2028,t2031,colors,anon}){
+    const X=state.crossX,Y=state.crossY,W=940,H=520,pad={l:76,r:30,t:24,b:64};
+    const logOk=state.crossLog&&vis.every(p=>p.x>0&&p.y>0), tf=v=>logOk?Math.log10(v):v, inv=v=>logOk?10**v:v;
+    let xs=vis.map(p=>tf(p.x)),ys=vis.map(p=>tf(p.y));let minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+    if(threshold&&!logOk){minX=minY=Math.min(minX,minY,0);maxX=maxY=Math.max(maxX,maxY);}
+    if(carbon){[t2028,t2031].forEach(t=>{if(Y==='icConstruction'){minY=Math.min(minY,tf(t));maxY=Math.max(maxY,tf(t));}if(X==='icConstruction'){minX=Math.min(minX,tf(t));maxX=Math.max(maxX,tf(t));}});}
+    if(minX===maxX){minX-=1;maxX+=1}if(minY===maxY){minY-=1;maxY+=1}const dx=(maxX-minX)*.05,dy=(maxY-minY)*.06,zx=!logOk&&minX>=0,zy=!logOk&&minY>=0;minX-=dx;maxX+=dx;minY-=dy;maxY+=dy;if(zx)minX=Math.max(minX,0);if(zy)minY=Math.max(minY,0);
+    const sx=v=>pad.l+(tf(v)-minX)/(maxX-minX)*(W-pad.l-pad.r),sy=v=>H-pad.b-(tf(v)-minY)/(maxY-minY)*(H-pad.t-pad.b);
+    let grid='';for(let i=0;i<=5;i++){const gx=pad.l+i*(W-pad.l-pad.r)/5,gy=pad.t+i*(H-pad.t-pad.b)/5;grid+=`<line x1="${gx}" y1="${pad.t}" x2="${gx}" y2="${H-pad.b}"/><text x="${gx}" y="${H-38}" text-anchor="middle">${fmt(inv(minX+i*(maxX-minX)/5),1)}</text><line x1="${pad.l}" y1="${gy}" x2="${W-pad.r}" y2="${gy}"/><text x="${pad.l-10}" y="${gy+4}" text-anchor="end">${fmt(inv(maxY-i*(maxY-minY)/5),1)}</text>`;}
+    let ref='';
+    if(threshold){const lo=inv(Math.max(minX,minY)),hi=inv(Math.min(maxX,maxY));ref=`<line class="obs-scatter-ref" x1="${sx(lo).toFixed(1)}" y1="${sy(lo).toFixed(1)}" x2="${sx(hi).toFixed(1)}" y2="${sy(hi).toFixed(1)}"/><text class="obs-scatter-ref-label" x="${(sx(hi)-6).toFixed(1)}" y="${(sy(hi)+14).toFixed(1)}" text-anchor="end">y = x · sous la ligne = sous le seuil</text>`;}
+    else if(vis.length){const mx=core.quantile(vis.map(p=>p.x).sort((a,b)=>a-b),.5),my=core.quantile(vis.map(p=>p.y).sort((a,b)=>a-b),.5);ref=`<line class="obs-scatter-median" x1="${sx(mx).toFixed(1)}" y1="${pad.t}" x2="${sx(mx).toFixed(1)}" y2="${H-pad.b}"/><line class="obs-scatter-median" x1="${pad.l}" y1="${sy(my).toFixed(1)}" x2="${W-pad.r}" y2="${sy(my).toFixed(1)}"/><text class="obs-scatter-ref-label" x="${(sx(mx)+5).toFixed(1)}" y="${pad.t+12}">médiane ${fmt(mx,1)}</text><text class="obs-scatter-ref-label" x="${W-pad.r-4}" y="${(sy(my)-5).toFixed(1)}" text-anchor="end">médiane ${fmt(my,1)}</text>`;}
+    if(carbon)[[t2028,'2028'],[t2031,'2031']].forEach(([t,l])=>{if(Y==='icConstruction')ref+=`<line class="obs-scatter-milestone" x1="${pad.l}" y1="${sy(t).toFixed(1)}" x2="${W-pad.r}" y2="${sy(t).toFixed(1)}"/><text class="obs-scatter-ref-label" x="${pad.l+6}" y="${(sy(t)-5).toFixed(1)}">Jalon ${l} · ${fmt(t,0)}</text>`;if(X==='icConstruction')ref+=`<line class="obs-scatter-milestone" x1="${sx(t).toFixed(1)}" y1="${pad.t}" x2="${sx(t).toFixed(1)}" y2="${H-pad.b}"/><text class="obs-scatter-ref-label" x="${(sx(t)+5).toFixed(1)}" y="${H-pad.b-6}">Jalon ${l}</text>`;});
+    const tip=p=>[`${core.displayCode(p.op)}`,anon?'':p.op.name,`${crossLabel(X)} ${fmt(p.x,2)}`,`${crossLabel(Y)} ${fmt(p.y,2)}`,p.ratio===null?'':`ratio Y ÷ X ${fmt(p.ratio,2)}`].filter(Boolean).join(' · ');
+    return `<svg class="obs-scatter" viewBox="0 0 ${W} ${H}" role="img" aria-label="${attr(`Nuage de points : ${crossLabel(X)} en abscisse, ${crossLabel(Y)} en ordonnée, ${vis.length} opérations${logOk?', échelle logarithmique':''}`)}"><g class="obs-scatter-grid">${grid}</g>${ref}<text class="obs-scatter-axis" x="${W/2}" y="${H-10}" text-anchor="middle">${esc(crossLabel(X))}${crossUnit(X)?` · ${esc(crossUnit(X))}`:''}${logOk?' · échelle log':''}</text><text class="obs-scatter-axis" transform="translate(18 ${H/2}) rotate(-90)" text-anchor="middle">${esc(crossLabel(Y))}${crossUnit(Y)?` · ${esc(crossUnit(Y))}`:''}</text><g>${vis.map(p=>`<circle class="obs-scatter-point" data-scatter-op="${attr(p.op.code)}"  cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="6.5" fill="${colors.get(p).color}"><title>${esc(tip(p))}</title></circle>`).join('')}</g></svg>`;
+  }
+  function crossTableRows(pts){return [...pts].sort((a,b)=>(b.ratio??-Infinity)-(a.ratio??-Infinity)||b.y-a.y);}
+  function crossTable(pts,anon){
+    const model=paged(crossTableRows(pts),state.crossTablePage,15);state.crossTablePage=model.page;
+    return `<div class="obs-table-wrap"><table class="obs-table obs-cross-table"><thead><tr><th>Code</th>${anon?'':'<th>Projet</th>'}<th>${esc(crossLabel(state.crossX))}</th><th>${esc(crossLabel(state.crossY))}</th><th>Ratio Y ÷ X</th><th>Avancement</th></tr></thead><tbody>${model.items.map(p=>`<tr data-scatter-op="${attr(p.op.code)}" tabindex="0"><td><strong>${esc(core.displayCode(p.op))}</strong></td>${anon?'':`<td>${esc(p.op.name||'')}</td>`}<td>${fmt(p.x,2)}</td><td>${fmt(p.y,2)}</td><td>${p.ratio===null?'—':fmt(p.ratio,2)}</td><td>${esc(STATUS_LABELS[p.op.status]||p.op.rawStatus||'—')}</td></tr>`).join('')}</tbody></table>${paginationHtml('cross',model)}</div>`;
+  }
+  function crossCsv(pts,anon){
+    const cell=v=>`"${String(v??'').replace(/"/g,'""')}"`, num=v=>v===null||v===undefined?'':String(Math.round(v*1000)/1000).replace('.',',');
+    const header=['Code',...(anon?[]:['Projet']),crossLabel(state.crossX),crossLabel(state.crossY),'Ratio Y ÷ X','Avancement'];
+    return [header,...crossTableRows(pts).map(p=>[core.displayCode(p.op),...(anon?[]:[p.op.name||'']),num(p.x),num(p.y),num(p.ratio),STATUS_LABELS[p.op.status]||p.op.rawStatus||''])].map(r=>r.map(cell).join(';')).join('\n');
+  }
+  let crossLastPoints=[];
   function renderCrossData(){
-    const ops=filteredTechnicalOperations(), t2028=core?.carbonThresholds?.(ops.find(o=>rawNumber(o,'icConstruction')!==null)||{})?.y2028??589.63,t2031=core?.carbonThresholds?.(ops.find(o=>rawNumber(o,'icConstruction')!==null)||{})?.y2031??498.16;
-    return `${pageHead('crossdata',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}<article class="obs-card"><div class="obs-card-head"><div><span>NUAGE DE POINTS</span><h2>Croisement libre de deux indicateurs</h2></div><div class="obs-cross-selectors"><label>Axe X<select data-cross-metric="x">${crossMetricOptions(state.crossX)}</select></label><label>Axe Y<select data-cross-metric="y">${crossMetricOptions(state.crossY)}</select></label></div></div><div class="obs-carbon-band-legend"><span><i style="background:#C94C4C"></i>Niveau courant → seuil 2028</span><span><i style="background:#2C6E9B"></i>2028 → 2031</span><span><i style="background:#168456"></i>Niveau 2031 atteint / dépassé</span><small>Seuils détectés automatiquement : 2028 ${fmt(t2028,2)} · 2031 ${fmt(t2031,2)} kgCO₂e/m². La performance carbone est meilleure quand l’IC Construction diminue.</small></div>${scatterPlot(ops)}<div class="obs-scatter-help">Clique sur un point pour ouvrir à droite la fiche de l’opération technique correspondante.</div></article>`;
+    const ops=filteredTechnicalOperations(), anon=!!privacy()?.enabled?.();
+    const counts=core.crossMetricCounts(ops,CROSS_METRICS), best=core.bestCrossPair(ops);
+    if(!state.crossUserSet&&best){state.crossX=best.x;state.crossY=best.y;}
+    const X=state.crossX,Y=state.crossY,pts=core.crossPoints(ops,X,Y),n=pts.length,threshold=core.isThresholdPair(X,Y),carbon=[X,Y].includes('icConstruction');
+    if(!carbon&&state.crossColor==='carbon')state.crossColor='referential';
+    const firstIc=ops.find(o=>rawNumber(o,'icConstruction')!==null)||{}, th=core.carbonThresholds(firstIc), t2028=th?.y2028??589.63, t2031=th?.y2031??498.16;
+    const ox=core.robustOutliers(pts.map(p=>p.x)), oy=core.robustOutliers(pts.map(p=>p.y)), out=pts.filter(p=>ox.isOut(p.x)||oy.isOut(p.y)), vis=state.crossShowOut?pts:pts.filter(p=>!out.includes(p));
+    crossLastPoints=pts;
+    const colors=crossColorModel(vis), colorMap={get:p=>colors.get(p)};
+    const toolbar=`<div class="obs-cross-toolbar"><div class="obs-view-toggle obs-cross-view" role="group" aria-label="Affichage"><button type="button" class="${state.crossView!=='table'?'is-active':''}" data-cross-view="scatter">Nuage</button><button type="button" class="${state.crossView==='table'?'is-active':''}" data-cross-view="table">Tableau</button></div>
+      ${state.crossView==='table'?`<button type="button" class="obs-card-action" data-cross-export ${n?'':'disabled'}>Exporter CSV</button>`:`<label>Couleur<select data-cross-color>${[['referential','par référentiel'],['status','par avancement'],['mention','par mention'],...(carbon?[['carbon','par jalon carbone']]:[])].map(([v,l])=>`<option value="${v}" ${state.crossColor===v?'selected':''}>${l}</option>`).join('')}</select></label><label class="obs-cross-check"><input type="checkbox" data-cross-log ${state.crossLog?'checked':''} ${pts.length&&pts.every(p=>p.x>0&&p.y>0)?'':'disabled'}> Échelle log</label>`}</div>`;
+    const sample=n===0?`<div class="obs-empty obs-cross-help"><b>Aucune opération ne possède à la fois « ${esc(crossLabel(X))} » et « ${esc(crossLabel(Y))} ».</b>${best&&best.n?`<button type="button" class="obs-card-action" data-cross-pair="${attr(best.x)}|${attr(best.y)}">Afficher ${esc(crossLabel(best.x))} × ${esc(crossLabel(best.y))} (${fmt(best.n)} opérations)</button>`:'<span>Aucune paire d’indicateurs n’est renseignée dans la sélection.</span>'}</div>`:'';
+    const outNote=out.length?`<div class="obs-cross-out"><button type="button" class="obs-link-btn" data-cross-outliers>⚠ ${fmt(out.length)} valeur${out.length>1?'s':''} hors cadre ${state.crossShowOut?'(affichée'+(out.length>1?'s':'')+' : recadrer)':'(au-delà du 99e percentile) : afficher'}</button><span>${uniq(out.map(p=>core.displayCode(p.op))).slice(0,10).map(c=>`<button type="button" class="obs-margin-code" data-op-code="${attr(c)}">${esc(c)}</button>`).join('')}</span></div>`:'';
+    const legend=n&&state.crossView!=='table'?`<div class="obs-cross-legend">${colors.legend.map(l=>l.crossKey?`<button type="button" class="${activeCross(l.crossKey,l.crossValue)?'is-active':''}" ${crossAttrs(l.crossKey,l.crossValue,`${state.crossColor==='status'?'Avancement':state.crossColor==='mention'?'Mention':'Référentiel'} : ${l.label}`)}><i style="background:${l.color}"></i>${esc(l.label)} <small>${fmt(l.count)}</small></button>`:`<span><i style="background:${l.color}"></i>${esc(l.label)} <small>${fmt(l.count)}</small></span>`).join('')}</div>`:'';
+    const body=!n?sample:state.crossView==='table'?crossTable(pts,anon):`${legend}<div class="obs-scatter-wrap">${crossScatterSvg(vis,{threshold,carbon,t2028,t2031,colors:colorMap,anon})}</div>`;
+    return `${pageHead('crossdata',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}<article class="obs-card obs-cross-card"><div class="obs-card-head"><div><span>NUAGE DE POINTS</span><h2>Croisement de deux indicateurs</h2></div><div class="obs-cross-selectors"><label>Axe X<select data-cross-metric="x" aria-label="Indicateur de l’axe X">${crossMetricOptions(X,counts)}</select></label><label>Axe Y<select data-cross-metric="y" aria-label="Indicateur de l’axe Y">${crossMetricOptions(Y,counts)}</select></label></div></div>
+      ${toolbar}<p class="obs-cross-count"><b>${fmt(n)}</b> opération${n>1?'s':''} avec les deux indicateurs${n>0&&n<5?` · <b class="obs-low-sample">⚠ échantillon faible</b>`:''}${!state.crossUserSet&&best?' · paire choisie automatiquement (la plus renseignée)':''}${threshold?' · les points sous la ligne y = x sont sous leur seuil':''}</p>${outNote}${body}
+      <div class="obs-scatter-help">${carbon?`Jalons carbone : 2028 ${fmt(t2028,2)} · 2031 ${fmt(t2031,2)} kgCO₂e/m² (seuils détectés automatiquement). `:''}Survol d’un point : code, X, Y et ratio. Clic : fiche de l’opération technique.</div></article>`;
   }
-
   function renderDictionary(){
     return `${pageHead('dictionary')}<article class="obs-card"><div class="obs-card-head"><div><span>RÉFÉRENTIEL DES DONNÉES</span><h2>Définitions, calculs et règles de lecture</h2></div><small>${fmt((core?.dictionary||[]).length)} variables documentées</small></div><div class="obs-dictionary-help"><b>Comment lire ce dictionnaire ?</b><span>Chaque ligne précise ce que mesure la donnée, son unité, sa source et la règle appliquée par l’Observatoire Prestaterre. Les données calculées ou normalisées sont explicitement distinguées des données sources.</span></div>${dictionaryTable()}</article>`;
   }
@@ -2261,6 +2426,7 @@
     applyLayout();
     restoreUiScroll(scrollSnapshot);
     if(state.page==='territories') hydrateTerritoryMap(token);
+    if(state.page==='overview') hydrateOverviewMap(token);
     if(requirementsMode) window.NEWOSB_REQUIREMENTS?.afterRender?.();
   }
 
@@ -3326,6 +3492,10 @@
     const entityToggle=e.target.closest('[data-operations-entity-toggle]');if(entityToggle){state.operationsEntityView=entityToggle.checked?'groups':'operations';state.operationsPage=1;renderPage();return;}
     const groupCard=e.target.closest('[data-moa-group-card]');if(groupCard){openMoaGroupDrawer(groupCard.dataset.moaGroupCard);return;}const techOp=e.target.closest('[data-tech-op-code]');if(techOp){openTechnicalOperation(techOp.dataset.techOpCode);return;}
     const scatter=e.target.closest('[data-scatter-op]');if(scatter){openTechnicalOperation(scatter.dataset.scatterOp);return;}
+    const cv=e.target.closest('[data-cross-view]');if(cv){state.crossView=cv.dataset.crossView;renderPage();return;}
+    const cp=e.target.closest('[data-cross-pair]');if(cp){const [x,y]=cp.dataset.crossPair.split('|');state.crossX=x;state.crossY=y;state.crossUserSet=true;state.crossShowOut=false;renderPage();return;}
+    if(e.target.closest('[data-cross-outliers]')){state.crossShowOut=!state.crossShowOut;renderPage();return;}
+    if(e.target.closest('[data-cross-export]')){const anon=!!privacy()?.enabled?.(),blob=new Blob(['\ufeff'+crossCsv(crossLastPoints,anon)],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`Observatoire_Prestaterre_croisement_${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);return;}
     if(SHARE && e.target.closest('[data-share-popup]')){SHARE.start(true);return;}
     if(SHARE && e.target.closest('[data-open-generator],[data-open-source],[data-add-presentation]')) return;
     const addPres=e.target.closest('[data-add-presentation]'); if(addPres){ addCurrentCardToPresentation(addPres).catch(err=>{console.error(err);alert('Ajout à la présentation impossible : '+(err?.message||err));}); return; }
@@ -3363,8 +3533,9 @@
     const backRegion=e.target.closest('[data-map-back-region]'); if(backRegion){closeMapPopover();state.crossFilters=state.crossFilters.filter(f=>f.key!=='department');state.mapFocusRegion=state.mapFocusRegion||regionName(state.mapFocusDepartment);state.mapFocusDepartment='';state.mapFocusPending=true;state.mapOperationGrouping='department';renderPage();return;}
     const pastille=e.target.closest('[data-map-pastille]'); if(pastille){openMapPastille(pastille);return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
-    const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
+    const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='cross')state.crossTablePage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
     const viewToggle=e.target.closest('[data-overview-view][data-view]'); if(viewToggle){const kind=viewToggle.dataset.overviewView,view=viewToggle.dataset.view;if(kind==='mention'){state.overviewMentionView=view;state.overviewMentionPage=1;}else if(kind==='performance'){state.overviewPerformanceView=view;state.overviewPerformancePage=1;}renderPage();return;}
+    if(state.page==='overview'&&e.target.closest?.('#obsOverviewMap,.obs-ovmap-wrap,[data-ovmap-missing]')&&ovHandleClick(e))return;
     const cross=e.target.closest('[data-cross-key][data-cross-value]'); if(cross){const decodedValue=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossValue):cross.dataset.crossValue, decodedLabel=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossLabel||''):cross.dataset.crossLabel;const fixed=crossKeyValueFix(cross.dataset.crossKey,decodedValue,decodedLabel);if(fixed.value){if(state.page==='territories'&&fixed.key==='department'){closeMapPopover();if(state.mapFocusDepartment===fixed.value){state.mapFocusDepartment='';state.mapFocusPending=true;if(!activeCross('department',fixed.value)){renderPage();return;}}else{state.mapFocusDepartment=fixed.value;state.mapFocusRegion=state.mapFocusRegion||regionName(fixed.value);state.mapFocusPending=true;state.territorySummaryPage=1;state.territoryPage=1;if(activeCross('department',fixed.value)){renderPage();return;}}}if(state.page==='territories'&&fixed.key==='region'){closeMapPopover();if(activeCross('region',fixed.value)){resetTerritoryMapFocus();state.mapOperationGrouping='region';}else{focusTerritoryRegion(fixed.value);state.mapFocusDepartment='';state.mapOperationGrouping='department';state.mapLayers.departments=true;state.mapLayers.regions=true;state.territorySummaryPage=1;state.territoryPage=1;}}setCrossFilter(fixed.key,fixed.value,fixed.label);}return;}
     const remove=e.target.closest('[data-remove-cross]'); if(remove){const i=Number(remove.dataset.removeCross);if(Number.isInteger(i)&&state.crossFilters[i]){if(state.crossFilters[i].key==='region'){resetTerritoryMapFocus();state.mapOperationGrouping='region';}if(state.crossFilters[i].key==='department'&&state.mapFocusDepartment){state.mapFocusDepartment='';state.mapFocusPending=true;}state.crossFilters.splice(i,1);renderPage();}return;}
     if(e.target.closest('[data-clear-cross]')){state.crossFilters=[];resetTerritoryMapFocus();state.mapOperationGrouping='region';renderPage();return;}
@@ -3384,7 +3555,7 @@
     if(e.target.closest('[data-export-current]')){exportCurrentCsv();return;}
   });
 
-  pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;renderPage();return;}
+  pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;state.crossUserSet=true;state.crossShowOut=false;state.crossTablePage=1;renderPage();return;}const cc=e.target.closest?.('[data-cross-color]');if(cc){state.crossColor=cc.value;renderPage();return;}const cl=e.target.closest?.('[data-cross-log]');if(cl){state.crossLog=cl.checked;renderPage();return;}
     const performanceCheck=e.target.closest?.('[data-performance-matrix-check]');if(performanceCheck){const kind=performanceCheck.dataset.performanceMatrixCheck,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances',vals=matrixSelectionValues(kind).slice(),value=performanceCheck.value,idx=vals.findIndex(v=>norm(v)===norm(value));if(performanceCheck.checked&&idx<0)vals.push(value);if(!performanceCheck.checked&&idx>=0)vals.splice(idx,1);state[key]=vals;state.performanceMatrixPage=1;renderPage();return;}
     const lmd=e.target.closest?.('[data-label-merge-derog]');if(lmd){state.labelMergeDerogation=lmd.checked;try{localStorage.setItem(LABEL_MERGE_KEY,lmd.checked?'1':'0');}catch{}preserveUiScroll(()=>renderPage());return;}
     const tunnelExcluded=e.target.closest?.('[data-tunnel-excluded-toggle]');if(tunnelExcluded){state.tunnelShowExcluded=Boolean(tunnelExcluded.checked);renderPage();return;}
@@ -3403,7 +3574,7 @@
   pageEl.addEventListener('dragleave',e=>{const t=e.target.closest?.('[data-pres-drop-item]');if(t&&!t.contains(e.relatedTarget))t.classList.remove('is-drop-target');});
   pageEl.addEventListener('drop',e=>{const t=e.target.closest?.('[data-pres-drop-item]');if(!presDrag||!t)return;e.preventDefault();const d=presDrag;presDrag=null;placeSlideItem(d.slide,d.cap,t.dataset.presDropItem);});
   pageEl.addEventListener('dragend',()=>{presDrag=null;pageEl.querySelectorAll('.is-dragging,.is-drop-target').forEach(x=>x.classList.remove('is-dragging','is-drop-target'));});
-  pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
+  pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;if(e.target.matches?.('tr[data-cross-key],tr[data-scatter-op]')){e.preventDefault();e.target.click();return;}const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
 
   pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField&&presField.type==='checkbox')return; if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const capTitle=e.target.closest?.('[data-pres-capture-title]'); if(capTitle){const c=presentationCapture(capTitle.dataset.presCaptureTitle);if(c){c.title=(capTitle.textContent||'').trim()||c.title;savePresentationState();}return;} const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 

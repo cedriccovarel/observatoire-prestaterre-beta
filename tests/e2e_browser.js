@@ -610,10 +610,12 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const geo = n => JSON.stringify({ type: 'FeatureCollection', features: DEPS.map(d => sq(d[0], d[1], d[2], d[3], d[4], d[5], n)) });
       const COMMUNES = { type: 'FeatureCollection', features: [sq('33063', 'Bordeaux', -0.7, 44.8, -0.5, 44.95, 3), sq('33522', 'Talence', -0.65, 44.75, -0.5, 44.8, 3)] };
       const centre = { '33000': ['33063', 'Bordeaux', -0.6, 44.87], '33400': ['33522', 'Talence', -0.58, 44.77] };
-      const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin });
       const json = body => ({ contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body });
-      await context.route(/githubusercontent|jsdelivr|etalab/, r => { const u = r.request().url(); if (/departements-version-simplifiee/.test(u)) return r.fulfill(json(geo(2))); if (/\/departements\.geojson$/.test(u)) return r.fulfill(json(geo(40))); return r.abort(); });
-      await context.route(/geo\.api\.gouv\.fr/, r => { const u = new URL(r.request().url()); if (/departements\/33\/communes/.test(u.pathname)) return r.fulfill(json(JSON.stringify(COMMUNES))); const c = centre[u.searchParams.get('codePostal')]; if (c) return r.fulfill(json(JSON.stringify([{ code: c[0], nom: c[1], codeDepartement: '33', centre: { type: 'Point', coordinates: [c[2], c[3]] } }]))); return r.fulfill(json('[]')); });
+      // V6.54 : la Vue d'ensemble charge le fond de carte dès l'ouverture : les géométries de test sont donc routées avant le chargement.
+      const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { beforeGoto: async ctx => {
+      await ctx.route(/githubusercontent|jsdelivr|etalab/, r => { const u = r.request().url(); if (/departements-version-simplifiee/.test(u)) return r.fulfill(json(geo(2))); if (/\/departements\.geojson$/.test(u)) return r.fulfill(json(geo(40))); return r.abort(); });
+      await ctx.route(/geo\.api\.gouv\.fr/, r => { const u = new URL(r.request().url()); if (/departements\/33\/communes/.test(u.pathname)) return r.fulfill(json(JSON.stringify(COMMUNES))); const c = centre[u.searchParams.get('codePostal')]; if (c) return r.fulfill(json(JSON.stringify([{ code: c[0], nom: c[1], codeDepartement: '33', centre: { type: 'Point', coordinates: [c[2], c[3]] } }]))); return r.fulfill(json('[]')); });
+      } });
       // Le chargement des exigences en arrière-plan rafraîchit la page : on attend qu'il soit terminé.
       await page.waitForFunction(() => !window.NEWOSB_REQUIREMENTS?.status?.().loading, null, { timeout: 30000 }).catch(() => {});
       await page.click('#obsNav [data-page="territories"]');
@@ -767,6 +769,208 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(cleared.length === 1 && cleared[0][0] === '' && cleared[0][1] === undefined && !/Complément TotalRecoll actif/.test(await page.textContent('#dataSourceInfo')), '« Retirer le complément » : retour au Sheet seul');
       check(errors.length === 0, 'complément TotalRecoll : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
+    console.log('\nM. Énergie & transition / Carbone & DPE : barre de marge, avant → après, DPE en escalier (V6.51)');
+    { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
+      const EXTRA = ['Cep,nr', 'Cep,nr max', 'Bbio max', 'DH', 'DH max', 'Ubat initial', 'Ubat projet', 'Cep initial', 'IC énergie', 'IC énergie max', 'IC construction', 'IC construction max', 'DPE énergie avant travaux', 'DPE énergie après travaux final', 'DPE GES avant travaux', 'DPE GES après travaux final'];
+      H.push(...EXTRA); const ix = h => H.indexOf(h);
+      const DB = 'EEFGDEFECD', DA = 'CDDCCCEDED', GB = 'FFGGEFGFDE', GA = 'CDDCCDECDD';
+      let i = 0;
+      rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); r.push(...EXTRA.map(() => '')); const code = r[0]; if (!code) return; const k = i++; if (k > 9) return;
+        const set = (h, v) => { r[ix(h)] = v; };
+        set('Cep projet', code === 'OP-3' ? 312 : 50 + k * 4); set('Cep max', 100); set('Bbio', 40 + k * 3); set('Bbio max', 80);
+        if (k < 3) { set('Cep,nr', 40 + k * 5); set('Cep,nr max', 90); }
+        if (k < 4) set('DH', 400 + k * 100);
+        set('Ubat initial', code === 'OP-2' ? 312 : (1.2 + k * 0.1).toFixed(2).replace('.', ',')); set('Ubat projet', (0.5 + k * 0.05).toFixed(2).replace('.', ','));
+        set('Cep initial', 180 + k * 10); set('IC énergie', 100 + k * 10); set('IC énergie max', 560); set('IC construction', 500 + k * 20); set('IC construction max', 740);
+        set('DPE énergie avant travaux', DB[k]); set('DPE énergie après travaux final', DA[k]); set('DPE GES avant travaux', GB[k]); set('DPE GES après travaux final', GA[k]); });
+      const SHOTS = process.env.SHOT_DIR || require('os').tmpdir();
+      for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
+        const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height } });
+        await page.evaluate(() => window.NEWOSB_ENGINE.showObservatoire?.()); await page.waitForTimeout(300);
+        await page.evaluate(() => document.querySelector('button[data-page="energy"]').click()); await page.waitForTimeout(500);
+        const en = await page.evaluate(() => { const rows = [...document.querySelectorAll('.obs-margin-row')]; const row = name => rows.find(r => r.querySelector('.obs-margin-name b')?.textContent === name);
+          return { n: rows.length, gauge: !!document.querySelector('.obs-gauge-good,.obs-performance-gauge'), cep: row('Cep')?.textContent || '', cepnr: row('Cep,nr')?.className || '', tic: row('TIC')?.textContent || '', dh: row('Confort d’été (DH)')?.textContent || '', aria: [...document.querySelectorAll('.obs-margin-track')].every(t => t.getAttribute('aria-label')), ubat: document.querySelector('.obs-ba-median')?.textContent || '', kpi: document.querySelector('.obs-grid-kpi')?.textContent || '',
+            minFont: Math.min(...[...document.querySelectorAll('.obs-margin-card *, .obs-ba-median *')].filter(e => e.childNodes.length && [...e.childNodes].some(c => c.nodeType === 3 && c.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) }; });
+        if (vp.tag === 'desktop') {
+          check(en.n === 5 && !en.gauge, `Énergie : 5 barres de marge (Cep, Cep,nr, Bbio, TIC, DH), plus de jauge à zone rouge (obtenu ${en.n})`);
+          check(/marge \d+ %/.test(en.cep) && /seuil médian 100/.test(en.cep) && /\d+ opérations comparables/.test(en.cep) && /1 hors seuil : à contrôler/.test(en.cep) && /OP-3/.test(en.cep), 'Cep : médiane, marge, seuil médian, OP-3 (312 > 100) écarté et listé — ' + en.cep.replace(/\s+/g, ' ').slice(0, 160));
+          check(/is-low/.test(en.cepnr), 'Cep,nr (3 opérations) : point en anneau, échantillon faible');
+          check(/Non calculable/.test(en.tic) && !/0 %/.test(en.tic), 'TIC sans données : « Non calculable », jamais 0 %');
+          check(/seuil par défaut : 1\s?250/.test(en.dh), 'DH sans DH max : seuil par défaut 1 250 °C·h indiqué');
+          check(en.aria, 'aria-label sur chaque barre');
+          check(en.minFont >= 9, `textes des nouvelles cartes ≥ 9 px (min ${en.minFont} px)`);
+          check(/Médiane avant/.test(en.ubat) && /hors plage/.test(en.ubat) && /OP-2/.test(en.ubat), 'Ubat : médiane avant → après, Ubat 312 (OP-2) écarté et listé');
+          check(/médian/.test(en.kpi) && /tirée par les extrêmes/.test(en.kpi), 'KPI en tête : médiane en lecture principale, moyenne en secondaire');
+        } else check(en.n === 5 && en.minFont >= 9, `mobile : 5 barres, textes ≥ 9 px (${en.minFont} px)`);
+        const card = await page.$('.obs-margin-card'); if (card) await card.screenshot({ path: path.join(SHOTS, `v651_marge_${vp.tag}.png`) });
+        const ba = await page.$('.obs-ba-median'); if (ba) await (await ba.evaluateHandle(e => e.closest('.obs-grid-2'))).asElement().screenshot({ path: path.join(SHOTS, `v651_avant_apres_${vp.tag}.png`) });
+        if (vp.tag === 'desktop') {
+          await page.click('.obs-margin-over .obs-margin-code[data-op-code="OP-3"]'); await page.waitForTimeout(300);
+          check(await page.evaluate(() => document.querySelector('.obs-project-window')?.classList.contains('is-open')), 'clic sur le code hors seuil : la fiche projet s’ouvre');
+          await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+          await page.evaluate(() => document.querySelector('button[data-page="quality"]').click()); await page.waitForTimeout(400);
+          const ql = await page.evaluate(() => document.querySelector('.obs-page')?.textContent || '');
+          check(/Cep au-dessus de son seuil/.test(ql) || /Alerte/.test(ql), 'Qualité : dépassement de seuil remonté en alerte');
+        }
+        await page.evaluate(() => document.querySelector('button[data-page="carbon"]').click()); await page.waitForTimeout(500);
+        const cb = await page.evaluate(() => ({ margins: document.querySelectorAll('.obs-margin-row').length, stairs: document.querySelectorAll('.obs-stair-card').length, flow: !!document.querySelector('.obs-flow-dpe'), worse: document.querySelector('.obs-stair-card .obs-gain-bin.is-worse b')?.textContent, guard: document.querySelector('.obs-stair-card .obs-dpe-guard')?.textContent || '', colorA: getComputedStyle(document.querySelector('.dpe-off-a')).backgroundColor, squares: document.querySelectorAll('.obs-stair-card:first-of-type .obs-stair-side.before span i').length }));
+        if (vp.tag === 'desktop') {
+          check(cb.margins === 2 && cb.stairs === 2 && !cb.flow, `Carbone : 2 barres IC et 2 DPE en escalier, plus de flux DPE (${cb.margins}/${cb.stairs})`);
+          check(cb.worse === '1' && /OP-9/.test(cb.guard) && /C → E/.test(cb.guard), 'DPE énergie : dégradation C → E (OP-9) comptée en rouge et listée — ' + cb.guard.slice(0, 120));
+          check(cb.colorA === 'rgb(49, 152, 52)', 'classe A à la couleur officielle #319834');
+          const before = await page.evaluate(() => document.querySelectorAll('.obs-stair-card .obs-stair-side.after.is-active').length);
+          await page.click('.obs-stair-card .obs-stair-side.before[aria-label*="classe E"]'); await page.waitForTimeout(400);
+          const after = await page.evaluate(() => ({ chip: [...document.querySelectorAll('[data-cross-remove],.obs-cross-chip,.obs-cross-chips *')].map(e => e.textContent).join(' '), active: document.querySelectorAll('.obs-stair-card .obs-stair-side.before.is-active').length, kpi: document.querySelector('.obs-selection-note')?.textContent }));
+          check(before === 0 && after.active === 1 && /DPE énergie avant : E/.test(after.chip), 'clic sur la classe E avant : filtre croisé posé — ' + after.kpi);
+          await page.click('.obs-stair-card .obs-stair-side.before[aria-label*="classe E"]'); await page.waitForTimeout(300);
+        }
+        const st = await page.$('.obs-stair-card'); if (st) await st.screenshot({ path: path.join(SHOTS, `v651_dpe_escalier_${vp.tag}.png`) });
+        const cm = await page.$('.obs-margin-card'); if (cm) await cm.screenshot({ path: path.join(SHOTS, `v651_marge_carbone_${vp.tag}.png`) });
+        check(errors.length === 0, `V6.51 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
+        await context.close();
+      } }
+    console.log('\nN. Solutions constructives : menuiseries extérieures en bandes + combinaisons (V6.52)');
+    { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
+      const EXTRA = ['Menuiseries extérieures matériau', 'Menuiseries extérieures vitrage', 'Menuiseries extérieures occultations']; H.push(...EXTRA);
+      const MAT = ['PVC', 'PVC', 'PVC', 'PVC / bois pour fenêtres de toit', 'PVC', 'Bois (fenêtres) / aluminium (Velux)', 'PVC', 'Aluminium', '', 'PVC'];
+      const GLA = ['Double vitrage 4/16/4 PE Argon', '10.10.4 Ar', '4/16/4', 'Double vitrage', 'Double vitrage argon', 'Triple vitrage', 'Argon', '4/16/4', '', 'double'];
+      const SHA = ['Volets roulants', 'Volet roulant', 'Volets roulants PVC ou aluminium / persiennes acier', 'Persiennes', 'Volets roulants', 'BSO', 'Volets roulants', 'Brise-vue', '', ''];
+      let i = 0; rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); const k = r[0] ? i++ : -1; r.push(...(k >= 0 && k < 10 ? [MAT[k], GLA[k], SHA[k]] : ['', '', ''])); });
+      const SHOTS = process.env.SHOT_DIR || require('os').tmpdir();
+      for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
+        const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height } });
+        await page.evaluate(() => document.querySelector('button[data-page="solutions"]').click()); await page.waitForTimeout(500);
+        const info = () => page.evaluate(() => { const c = document.querySelector('.obs-window-card'); return { bands: c ? c.querySelectorAll('.obs-window-band').length : 0, aria: c ? [...c.querySelectorAll('.obs-window-bar')].every(b => b.getAttribute('aria-label')) : false, head: c?.querySelector('.obs-card-head small')?.textContent || '', rows: c ? [...c.querySelectorAll('.obs-window-table tbody tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], firstBold: c ? getComputedStyle(c.querySelector('.obs-window-table tbody tr td')).fontWeight : '', toggle: !!c?.querySelector('.obs-view-toggle'), pie: !!c?.querySelector('svg circle, .obs-pie'), segs: c ? [...c.querySelectorAll('.obs-window-band:first-child .obs-window-seg b')].map(b => b.textContent) : [], minFont: c ? Math.min(...[...c.querySelectorAll('*')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) : 0, scrollX: c ? (() => { const w = c.querySelector('.obs-window-table-wrap'); return w.scrollWidth > w.clientWidth; })() : false }; });
+        const a = await info();
+        if (vp.tag === 'desktop') {
+          check(a.bands === 3 && a.aria && !a.toggle && !a.pie, 'trois bandes alignées (matériau, vitrage, occultation), aria-label, plus de bascule barres / camembert');
+          check(/^\d+ opérations? renseignées? sur \d+/.test(a.head.trim()), 'base affichée : « n opérations renseignées sur N » — ' + a.head);
+          check(a.segs[0] === 'PVC', 'bande Matériau : PVC en premier (plus gros segment) — ' + a.segs.join(' | '));
+          check(a.rows.length >= 3 && /^PVC ?Double vitrage argon ?Volets roulants ?\d+ %/.test(a.rows[0]) && Number(a.firstBold) >= 700, 'combinaison dominante en gras : PVC · Double vitrage argon · Volets roulants — ' + a.rows[0]);
+          check(a.minFont >= 9, `textes ≥ 9 px (min ${a.minFont})`);
+          const before0 = await page.textContent('.obs-selection-note');
+          await page.click('.obs-window-table tbody tr:first-child'); await page.waitForTimeout(400);
+          const f = await page.evaluate(() => ({ note: document.querySelector('.obs-selection-note')?.textContent, rows: document.querySelectorAll('.obs-window-table tbody tr').length, active: !!document.querySelector('.obs-window-table tr.is-active') }));
+          check(/^\d+ opérations?/.test(f.note) && f.note !== before0 && f.active, 'clic sur une combinaison : filtre croisé — ' + before0 + ' → ' + f.note);
+          await page.click('.obs-window-table tbody tr.is-active'); await page.waitForTimeout(300);
+          check(/^\d+ opérations/.test(await page.textContent('.obs-selection-note')) && !(await page.$('.obs-window-table tr.is-active')), 'second clic : filtre retiré');
+          await page.click('.obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
+          check(await page.evaluate(() => !!document.querySelector('.obs-window-seg.is-active')), 'clic sur un segment : filtre croisé');
+          await page.click('.obs-window-seg.is-active'); await page.waitForTimeout(300);
+        } else check(a.bands === 3 && a.minFont >= 9 && a.scrollX, `mobile : 3 bandes, textes ≥ 9 px, tableau défilable horizontalement (${a.minFont} px)`);
+        const card = await page.$('.obs-window-card'); if (card) await card.screenshot({ path: path.join(SHOTS, `v652_menuiseries_${vp.tag}.png`) });
+        check(errors.length === 0, `V6.52 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
+        await context.close();
+      } }
+    console.log('\nO. Croiser les données : axes par défaut, effectifs, hors cadre, clic → fiche, tableau, CSV (V6.53)');
+    { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
+      H.push('Ubat initial', 'Ubat projet');
+      let i = 0; rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); const k = r[0] ? i++ : -1; r[H.indexOf('Cep projet')] = ''; r[H.indexOf('Cep max')] = ''; r.push(...(k >= 0 && k < 9 ? [k === 4 ? 312 : (0.9 + k * 0.1).toFixed(2).replace('.', ','), (0.5 + k * 0.04).toFixed(2).replace('.', ',')] : ['', ''])); });
+      const SHOTS = process.env.SHOT_DIR || require('os').tmpdir();
+      for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
+        const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height } });
+        await page.evaluate(() => document.querySelector('button[data-page="crossdata"]').click()); await page.waitForTimeout(500);
+        const st = () => page.evaluate(() => ({ x: document.querySelector('[data-cross-metric="x"]').value, y: document.querySelector('[data-cross-metric="y"]').value, pts: document.querySelectorAll('.obs-scatter-point').length, count: document.querySelector('.obs-cross-count')?.textContent || '', out: document.querySelector('.obs-cross-out')?.textContent || '', empty: !!document.querySelector('.obs-cross-help'), median: document.querySelectorAll('.obs-scatter-median').length, ref: !!document.querySelector('.obs-scatter-ref'), milestone: document.querySelectorAll('.obs-scatter-milestone').length, opts: [...document.querySelectorAll('[data-cross-metric="x"] option')].map(o => ({ v: o.value, t: o.textContent, d: o.disabled })) }));
+        const a0 = await st();
+        if (vp.tag === 'desktop') {
+          check(a0.x === 'surface' && a0.y === 'dwellings' && /paire choisie automatiquement/.test(a0.count), `axes par défaut : paire la plus renseignée (surface × logements), plus IC Construction max × IC Construction (${a0.x} × ${a0.y})`);
+          check(/\(\d+\)$/.test(a0.opts[0].t) && a0.opts.some(o => o.d && /aucune donnée/.test(o.t)) && !a0.opts.find(o => o.v === 'ubatBefore').d, 'options avec effectif « (n) », triées, indicateurs vides désactivés « aucune donnée »');
+          await page.selectOption('[data-cross-metric="x"]', 'ubatBefore'); await page.waitForTimeout(300);
+          await page.selectOption('[data-cross-metric="y"]', 'ubatAfter'); await page.waitForTimeout(300);
+          const a = await st();
+          check(/1 valeur hors cadre/.test(a.out) && a.pts === a.count.match(/\d+/)[0] - 1, `Ubat 312 hors cadre (${a.pts} points affichés) : « 1 valeur hors cadre »`);
+          check(a.median === 2 && !a.ref, 'paire sans seuil : médianes de chaque axe en pointillés');
+          await page.click('[data-cross-outliers]'); await page.waitForTimeout(300);
+          check((await st()).pts === a.pts + 1, 'clic sur « hors cadre » : la valeur est affichée');
+          await page.click('[data-cross-outliers]'); await page.waitForTimeout(200);
+          await page.selectOption('[data-cross-metric="x"]', 'bbio'); await page.waitForTimeout(300);
+          const b = await st(); check(!/automatiquement/.test(b.count) && b.x === 'bbio', 'choix utilisateur mémorisé (plus de choix automatique)');
+          await page.selectOption('[data-cross-metric="y"]', 'icConstruction'); await page.waitForTimeout(300);
+          const c = await st(); check(c.empty && await page.$('[data-cross-pair]'), '0 point : message d’aide avec bouton vers la meilleure paire');
+          await page.click('[data-cross-pair]'); await page.waitForTimeout(300);
+          check((await st()).x === 'surface', 'bouton d’aide : bascule sur la meilleure paire');
+          await page.evaluate(() => document.querySelector('.obs-scatter-point').dispatchEvent(new MouseEvent('click', { bubbles: true }))); await page.waitForTimeout(400);
+          check(await page.evaluate(() => document.querySelector('.obs-project-window')?.classList.contains('is-open')), 'clic sur un point : fiche ouverte');
+          await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+          await page.click('[data-cross-view="table"]'); await page.waitForTimeout(300);
+          const t = await page.evaluate(() => ({ rows: document.querySelectorAll('.obs-cross-table tbody tr').length, head: document.querySelector('.obs-cross-table thead')?.textContent }));
+          check(t.rows >= 5 && /Ratio/.test(t.head) && /Projet/.test(t.head), `vue Tableau : ${t.rows} lignes (code, projet, X, Y, ratio, avancement)`);
+          await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(true)); await page.waitForTimeout(400);
+          await page.evaluate(() => document.querySelector('button[data-page="crossdata"]').click()); await page.waitForTimeout(300);
+          const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-cross-export]')]);
+          const csv = fs.readFileSync(await dl.path(), 'utf8');
+          const names = await page.evaluate(() => window.NEWOSB_ENGINE.getOperations().map(o => o.name).filter(Boolean));
+          check(/^\ufeff?"Code";"Surface";"Logements";"Ratio Y ÷ X";"Avancement"/.test(csv) && !/"OP-\d{1,5}"/.test(csv) && !names.some(n => csv.includes(n)), 'export CSV en mode anonymisé : codes pseudonymisés (OP-xxxxxx), aucun nom');
+          await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(false)); await page.click('[data-cross-view="scatter"]'); await page.waitForTimeout(300);
+        } else check(a0.pts > 0, `mobile : nuage affiché (${a0.pts} points)`);
+        const card = await page.$('.obs-cross-card'); if (card) await card.screenshot({ path: path.join(SHOTS, `v653_croiser_${vp.tag}.png`) });
+        check(errors.length === 0, `V6.53 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
+        await context.close();
+      } }
+    console.log('\nP. Vue d’ensemble : carte des projets géolocalisés + fiche résumé (V6.54)');
+    { const H = MATRIX[1].slice(), rows = MATRIX.slice(3).map(r => r.slice());
+      const EXTRA = ['Latitude', 'Longitude', 'Code INSEE', 'Ville', 'Adresse', 'TAG']; H.push(...EXTRA);
+      const GEO = { 'OP-1': ['44,9150', '-0,2430', '', 'Libourne', '12 rue Exemple', 'résidence étudiante, bois'], 'OP-2': ['', '', '33063', 'Bordeaux', '3 allée Test', ''], 'OP-3': ['', '', '64102', 'Bayonne', '', ''], 'OP-5': ['45,7600', '4,8400', '', 'Lyon', '', ''], 'OP-6': ['', '', '99999', '', '', ''] };
+      rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); r.push(...(GEO[r[0]] || ['', '', '', '', '', ''])); });
+      const COMMUNES = { '33': [{ nom: 'Bordeaux', code: '33063', centre: { type: 'Point', coordinates: [-0.5874, 44.8572] } }], '64': [{ nom: 'Bayonne', code: '64102', centre: { type: 'Point', coordinates: [-1.4626, 43.4844] } }] };
+      const SHOTS = process.env.SHOT_DIR || require('os').tmpdir();
+      for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
+        const geoReqs = [];
+        const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height }, beforeGoto: ctx => ctx.route('https://geo.api.gouv.fr/**', route => { const u = route.request().url(); geoReqs.push(u); const m = u.match(/departements\/(\w+)\/communes/); return route.fulfill({ contentType: 'application/json', body: JSON.stringify(m ? (COMMUNES[m[1]] || []) : []) }); }) });
+        await page.waitForFunction(() => !window.NEWOSB_REQUIREMENTS?.status?.().loading, null, { timeout: 30000 }).catch(() => {});
+        await page.evaluate(() => document.querySelector('button[data-page="overview"]').click());
+        const ready = () => page.waitForFunction(() => /sur \d/.test(document.querySelector('[data-ovmap-count]')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
+        await ready();
+        const info = () => page.evaluate(() => ({ count: document.querySelector('[data-ovmap-count]')?.textContent || '', note: document.querySelector('[data-ovmap-note]')?.textContent || '', pts: document.querySelectorAll('.obs-ovmap-pt').length, approx: document.querySelectorAll('.obs-ovmap-pt.is-approx').length, clusters: document.querySelectorAll('.obs-ovmap-cluster').length, html: document.querySelector('.obs-ovmap-card')?.innerHTML || '' }));
+        const a = await info();
+        if (vp.tag === 'desktop') {
+          check(/^4 projets géolocalisés sur \d+/.test(a.count) && /échantillon faible/.test(a.count), 'comptage : « 4 projets géolocalisés sur N » (2 précis, 2 au centre de la commune) + échantillon faible — ' + a.count);
+          check(/2 positions précises · 2 positions approximatives/.test(a.note) && /non localisés \(voir la liste\)/.test(a.note), 'classification précise / approximative / non localisée — ' + a.note);
+          check(a.clusters === 1 && a.pts === 2, `Bordeaux : point précis et centre de commune regroupés en une pastille (${a.clusters} pastille, ${a.pts} points)`);
+          check(geoReqs.length > 0 && geoReqs.every(u => /\/departements\/\w+\/communes\?fields=nom,code,centre/.test(u)) && !geoReqs.some(u => /rue|all%C3%A9e|allée|Exemple/i.test(decodeURIComponent(u))), `geo.api.gouv.fr interrogé par code département seulement, jamais avec une adresse (${geoReqs.length} requêtes)`);
+          await page.click('.obs-ovmap-cluster'); await page.waitForTimeout(300);
+          const z = await info(); check(z.pts === 4 && z.clusters === 0, 'clic sur une pastille groupée : zoom, les points se séparent');
+          await page.click('[data-ovmap-zoom="reset"]'); await page.waitForTimeout(200);
+          await page.click('[data-ovmap-missing]'); await page.waitForTimeout(200);
+          check(/projets non localisés/.test(await page.textContent('[data-ovmap-panel]')), 'liste des projets non localisés');
+          await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+          check(await page.evaluate(() => document.querySelector('[data-ovmap-panel]').hidden), 'Échap ferme le panneau');
+          const before = a.count;
+          await page.click('.obs-ovmap-legend button:first-child'); await page.waitForTimeout(500); await ready();
+          const f = await info(); check(f.count !== before, `filtre (légende avancement) : carte mise à jour (${before} → ${f.count})`);
+          await page.click('.obs-ovmap-legend button.is-active'); await page.waitForTimeout(500); await ready();
+          await page.click('[data-ovmap-zoom="in"]'); await page.click('[data-ovmap-zoom="in"]'); await page.waitForTimeout(200);
+          await page.evaluate(() => { const p = [...document.querySelectorAll('.obs-ovmap-pt')].find(e => e.dataset.ovmapOp === 'OP-1'); (p || document.querySelector('.obs-ovmap-cluster')).dispatchEvent(new MouseEvent('click', { bubbles: true })); }); await page.waitForTimeout(250);
+          if (!(await page.evaluate(() => /Les Jardins|OP-1/.test(document.querySelector('[data-ovmap-panel]')?.textContent || '')))) { await page.evaluate(() => document.querySelector('[data-ovmap-panel] [data-ovmap-op="OP-1"]')?.click()); await page.waitForTimeout(200); }
+          const panel = await page.textContent('[data-ovmap-panel]');
+          check(/Les Jardins/.test(panel) && /12 rue Exemple/.test(panel) && /Avancement/.test(panel) && /résidence étudiante/.test(panel) && /bois/.test(panel), 'fiche résumé : nom, adresse, avancement exact, tags de la colonne TAG — ' + panel.replace(/\s+/g, ' ').slice(0, 160));
+          await page.screenshot({ path: path.join(SHOTS, 'v654_carte_fiche_desktop.png') });
+          await page.click('.obs-ovmap-open'); await page.waitForTimeout(400);
+          check(await page.evaluate(() => document.querySelector('.obs-project-window')?.classList.contains('is-open')), '« Ouvrir la fiche complète » : fiche projet ouverte');
+          await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+          check(await page.evaluate(() => { try { return !Object.keys(localStorage).some(k => /ovmap|overview.?map/i.test(k)) && sessionStorage.length <= 1; } catch { return false; } }), 'aucune donnée de carte écrite dans localStorage / sessionStorage');
+          await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(true)); await page.waitForTimeout(500);
+          await page.evaluate(() => document.querySelector('button[data-page="overview"]').click()); await ready(); await page.waitForTimeout(300);
+          const an = await info();
+          check(!/12 rue Exemple|3 allée Test|Les Jardins|Le Parc|"OP-1"|33063/.test(an.html) && /sur \d/.test(an.count), 'mode anonymisé : ni adresse, ni nom, ni code réel, ni INSEE dans la carte — ' + an.count);
+          await page.evaluate(() => (document.querySelector('.obs-ovmap-pt') || document.querySelector('.obs-ovmap-cluster'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }))); await page.waitForTimeout(250);
+          await page.evaluate(() => document.querySelector('[data-ovmap-panel] [data-ovmap-op]')?.click()); await page.waitForTimeout(200);
+          const ap = await page.evaluate(() => document.querySelector('[data-ovmap-panel]')?.textContent || '');
+          check(/Adresse et nom masqués/.test(ap) && !/12 rue Exemple|Les Jardins/.test(ap), 'mode anonymisé : la fiche indique que l’adresse est masquée');
+          await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(false));
+        } else {
+          check(/4 projets géolocalisés/.test(a.count) && await page.evaluate(() => document.querySelector('.obs-ovmap').getBoundingClientRect().height <= 320), 'mobile : carte de hauteur réduite');
+          await page.evaluate(() => document.querySelector('.obs-ovmap-cluster')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))); await page.waitForTimeout(250);
+          await page.evaluate(() => document.querySelector('.obs-ovmap-pt')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))); await page.waitForTimeout(250);
+          await page.waitForTimeout(1500); // la fiche reste ouverte si la page est redessinée entre-temps
+          const pos = await page.evaluate(() => { const p = document.querySelector('[data-ovmap-panel]'); return p.hidden ? null : getComputedStyle(p).position + ' ' + Math.round(p.getBoundingClientRect().bottom); });
+          check(pos && /^fixed/.test(pos), 'mobile : fiche résumé en bas de l’écran, toujours ouverte après un rafraîchissement — ' + pos);
+          await page.screenshot({ path: path.join(SHOTS, 'v654_carte_fiche_mobile.png') });
+        }
+        const card = await page.$('.obs-ovmap-card'); if (card) await card.screenshot({ path: path.join(SHOTS, `v654_carte_${vp.tag}.png`) });
+        check(errors.length === 0, `V6.54 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
+        await context.close();
+      } }
     console.log('\nI. Écran de chargement : chantier de rénovation, une seule barre pour OPERATIONS + RAPPORT (V6.23)');
     { const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { noConnect: true, delayMs: 900, extraSheets: { RAPPORT } });
       const startLoad = () => page.evaluate(({ url, key }) => { document.getElementById('dataMode').value = 'appsScript'; document.getElementById('dataUrl').value = url; document.getElementById('dataKey').value = key; window.__load = window.NEWOSB_ENGINE.connect(); }, { url: EXEC, key: KEY });

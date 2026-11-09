@@ -20,6 +20,10 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.54 | Petite étiquette blanche « relevé » suspendue par un fil à la vis gauche du compteur d'eau. |
+| V6.53 | Fine flèche bleue « sens d'écoulement » sur le côté droit du boîtier du compteur d'eau. |
+| V6.52 | Petite plaque de numéro de série sombre en haut du boîtier du compteur d'eau, entre les deux vis. |
+| V6.51 | Vanne d'arrêt sous le compteur d'eau : poignée rouge le long du tuyau (ouverte) pendant l'arrosage, en travers (fermée) sinon. |
 | V6.50 | Petit plomb de scellé rouge accroché par un fil au raccord du compteur d'eau. |
 | V6.49 | Petit moyeu sombre au pivot de l'aiguille du compteur d'eau. |
 | V6.48 | Quatre repères de graduation autour du cadran du compteur d'eau. |
@@ -64,3 +68,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   V6.50 : bouche-trous = vides ; CP / INSEE / lat / lon / année illisibles du Sheet corrigés (comptés à part) ; bâtiments en plus
   = lignes ajoutées marquées `__recollExtra` (non énumérable), exclues du contrôle ligne à ligne de l'avancement ;
   `dataRecollGains` affiche les opérations renseignées avant → après par champ.
+- V6.51–V6.54 : calculs testables dans `newosb-core.js` (barre de marge, DPE en escalier, menuiseries, Croiser les données,
+  carte de la Vue d'ensemble). En mode anonymisé, afficher les codes avec `core.displayCode(op)` (le `projectCode` d'une
+  opération technique n'est pas pseudonymisé par privacy.js). Scénarios e2e M, N, O, P.

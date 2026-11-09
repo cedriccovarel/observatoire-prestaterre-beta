@@ -1,5 +1,64 @@
 # Historique
 
+## V6.54
+
+**Vue d’ensemble : carte des projets géolocalisés et fiche résumé**
+- Nouvelle carte pleine largeur sous les chiffres clés (et sous les résultats de recherche quand une recherche est active), avec un lien « Explorer » vers Territoires. Fond France et projection de la page Territoires ; aucune nouvelle bibliothèque ; seul service appelé : geo.api.gouv.fr, **par code département** (liste des communes), jamais avec une adresse.
+- Un point par projet, couleur = avancement, légende cliquable (filtre croisé) ; la carte suit les filtres globaux. Points qui se chevauchent regroupés en pastille avec le nombre (clic = zoom, ou liste si les projets sont au même endroit). Zoom (+ / − / recentrer, molette) et déplacement à la souris ; sur mobile, carte moins haute et fiche en bas de l’écran.
+- « Géolocalisé » : position précise (latitude / longitude valides) ; sinon position approximative au centre de la commune (code INSEE), pastille en pointillés ; sinon non localisé, avec la liste. Toujours « n projets géolocalisés sur N », et « échantillon faible » sous 5.
+- **Fiche résumé** au clic (Échap ou clic à côté pour fermer) : nom et code, adresse, avancement exact, mentions / labels et performances, **tags de la dernière colonne de la Sheet (« TAG »)** — uniquement ceux-là, ligne masquée s’il n’y en a pas — et « Ouvrir la fiche complète ».
+- **Confidentialité** : en mode anonymisé et dans les liens de partage anonymisés, ni adresse, ni nom, ni coordonnée exacte (le script les retire déjà) ; le projet est placé au centre de sa commune si elle compte au moins 5 projets de la sélection, sinon au centre du département ; code pseudonymisé ; la fiche indique que l’adresse est masquée. Rien n’est écrit dans localStorage / sessionStorage.
+- Correctif : une latitude / longitude écrite avec une virgule (« 44,8378 ») était ignorée ; elle est maintenant lue.
+- Constat sur l’export du 30/09/2026 (Sheet seul) : 0 projet géolocalisable — colonnes « Code INSEE » et « Ville » vides, pas de colonnes latitude / longitude, « Code postal » contenant des noms de personnes. Les positions viendront du complément TotalRecoll (latitude / longitude / INSEE) ou d’un remplissage de ces colonnes.
+
+**Écran de chargement**
+- Petite étiquette blanche « relevé » suspendue par un fil à la vis gauche du compteur d’eau.
+
+## V6.53
+
+**Croiser les données : onglet rendu utilisable**
+- Diagnostic sur l’export du 30/09/2026 : la paire par défaut (IC Construction max × IC Construction) n’avait qu’**une** opération comparable ; l’écran était donc vide ou presque.
+- **Axes par défaut intelligents** : au chargement, la paire qui a le plus d’opérations comparables parmi Cep × Cep max, Bbio × Bbio max, TIC × TIC ref, Ubat avant × Ubat projet, Cep initial × Cep après travaux, surface × logements, IC Énergie × IC Construction. Le choix de l’utilisateur est gardé pendant la session (en mémoire, rien dans le stockage du navigateur).
+- **Sélecteurs** : chaque indicateur affiche son effectif « (n) », liste triée par effectif, indicateur vide désactivé « aucune donnée ». Moins de 5 points : « ⚠ échantillon faible » ; 0 point : message d’aide avec un bouton vers la meilleure paire disponible.
+- **Lecture du nuage** : ligne y = x quand un axe est le seuil de l’autre (sous la ligne = sous le seuil), sinon médiane de chaque axe en pointillés ; couleur par référentiel, avancement ou mention (légende cliquable = filtre croisé) ; valeurs aberrantes hors cadre (au-delà du 99e percentile ET de Q3 + 3 × écart interquartile, pour ne jamais rogner un petit échantillon sain) avec « n valeurs hors cadre » cliquable ; échelle log en option ; survol : code, nom (hors mode anonymisé), X, Y, ratio ; clic : fiche (inchangé).
+- **Vue Tableau** : code, projet, X, Y, ratio, avancement, paginé ; **export CSV** de la vue (mode anonymisé : codes pseudonymisés, ni nom ni montant).
+- Jalons carbone 2028 / 2031 conservés, affichés seulement quand un axe est IC Construction (option de couleur « par jalon carbone »).
+- Correctif de confidentialité : en mode anonymisé, le vrai code projet d’une opération technique n’apparaît plus (listes « hors seuil » et dégradations DPE de la V6.51, nuage, tableau, CSV).
+
+**Écran de chargement**
+- Fine flèche bleue « sens d’écoulement » sur le côté droit du boîtier du compteur d’eau.
+
+## V6.52
+
+**Solutions constructives : menuiseries extérieures**
+- La carte « Menuiseries extérieures » (3 petits graphiques) est remplacée par **trois bandes 100 % alignées** (Matériau, Vitrage, Occultation), du plus gros segment au plus petit, dans les verts de l’Observatoire (« Non renseigné » et « Autre » en gris), avec nom, % et nombre d’opérations dans le segment quand la place le permet, sinon une ligne « Autres : … » sous la bande. Plus de bascule barres / camembert sur cette carte ; ton sobre, sans pictogramme.
+- Tableau **« Combinaisons les plus fréquentes »** (top 5, première ligne en gras) : % = opérations ayant EXACTEMENT cette combinaison, sur les opérations ayant au moins un champ menuiserie.
+- Base affichée : « n opérations renseignées sur N », mention d’échantillon faible ; jamais de pourcentage sur une base vide.
+- Regroupements des textes libres revus (règles au Dictionnaire, testées sur des exemples réels) : Matériau PVC / Bois / Aluminium / Matériaux combinés ; Vitrage Triple / Double argon (« argon » ou « Ar » isolé) / Double ; Occultation Volets roulants / Persiennes – battants / Stores / Occultations combinées / Autre.
+- Clic sur un segment ou une ligne du tableau = filtre croisé (réinitialisable, clavier Entrée sur une ligne). Tableau défilable horizontalement sur mobile ; aria-label sur chaque bande.
+
+**Écran de chargement**
+- Petite plaque de numéro de série sombre en haut du boîtier du compteur d’eau, entre les deux vis.
+
+## V6.51
+
+**Énergie & transition, Carbone & DPE : lecture en médiane et barre de marge**
+- Les anciennes jauges (zone rouge et trait fixes à 74 % de la barre, sans lien avec le seuil ; curseur sur la *moyenne*) sont remplacées par une **barre de marge** pour Cep, Cep,nr, Bbio, TIC, DH, IC Énergie et IC Construction :
+  - le seuil est une **butée** (trait noir, « SEUIL ») ; plus de zone rouge ;
+  - ratio valeur ÷ seuil **opération par opération**, sur les seules opérations ayant la valeur ET son seuil ; le point est la **médiane des ratios**, la valeur médiane est écrite au-dessus ; moitié centrale (1er–3e quartile) à partir de 5 opérations ; « marge x % » = 1 − médiane des ratios, et « seuil médian » ;
+  - moins de 5 opérations : point en anneau orange et « ⚠ échantillon faible (n) » ; aucune opération : barre grise « Non calculable » avec la raison (jamais un faux 0 %) ;
+  - une valeur **au-dessus de son seuil** est écartée de la médiane, listée (« ⚠ n hors seuil : à contrôler », clic sur le code → fiche) et signalée en Qualité & données (alerte) ;
+  - DH sans DH max : seuil par défaut 1 250 °C·h, indiqué sous la barre ;
+  - aria-label sur chaque barre ; l’information n’est jamais portée par la seule couleur.
+- KPI en tête : lecture principale en **médiane** ; la moyenne reste en information secondaire (« tirée par les extrêmes »).
+- **Ubat** et **Cep initial → Cep après travaux** : médiane avant → médiane après (−x %), n ; Ubat hors plage 0,1–5 W/m².K écarté et signalé en Qualité.
+- **DPE en escalier** (énergie et GES) à la place des flux et des barres de gain : classes A→G aux couleurs officielles, carrés « avant » à gauche et « après » à droite (1 carré = 1 opération, regroupés au-delà de 12 par ligne), histogramme du gain de classes par opération avec une colonne rouge « dégradation (à corriger) ». Toute dégradation est listée (clic → fiche) et signalée en Qualité ; la donnée n’est pas corrigée par l’Observatoire. Clic sur une classe ou un gain = filtre croisé, comme avant.
+- Qualité & données : nouveaux contrôles Cep,nr / TIC au-dessus du seuil, DH au-dessus du seuil par défaut, Ubat hors plage, DPE dégradé.
+- Dictionnaire : médiane, marge au seuil, avant → après, gain de classes DPE ; Cep,nr, TIC, Cep initial / après travaux.
+
+**Écran de chargement**
+- Vanne d’arrêt sous le compteur d’eau : poignée rouge ouverte pendant l’arrosage, fermée sinon.
+
 ## V6.50
 
 - **Complément TotalRecoll plus utile** (analyse sur le Sheet réel : seules ~150 opérations recevaient des données, et une seule ligne par opération) :

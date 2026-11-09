@@ -69,6 +69,7 @@
     {key:'status',label:'Avancement',unit:'',source:'OPERATIONS',type:'normalized',definition:'Étape de l’évaluation (liste fermée) : Proposition commerciale en cours, Non démarrée, Dossier incomplet, Dossier complet, Analyse planifiée, Analyse réalisée, Visite réalisée, Évaluation conforme.',method:"Colonne Opération: Évaluation: Statut (BC) en priorité. Si BC est vide pour une ligne, la colonne « État du dossier » (AV) est utilisée : elle porte l’avancement des lignes historiques sans code interne (même liste de valeurs ; aucune ligne n’a les deux). Une valeur BC renseignée mais non reconnue n’est pas remplacée : elle est signalée en Qualité. Une alerte s’affiche si moins de 80 % des valeurs non vides de BC sont reconnues. Lecture tolérante : majuscules, accents, espaces, ponctuation, pluriels, numérotation, compléments et fautes de frappe légères. « Proposition commerciale en cours » = ligne sans code interne ET sans avancement en BC ni en État du dossier. Projet à plusieurs lignes : étape la moins avancée ; opération détaillée : statut exact de sa ligne. Sans avancement exploitable : « Non renseigné », listé en Qualité & données."},
     {key:'affairStage',label:'Statut commercial',unit:'',source:'OPERATIONS',type:'source',definition:'Statut du contrat / de l’opération utilisé pour identifier les sorties définitives.',method:'Colonne Statut ; utilisée notamment pour exclure perdu / abandonné / annulé des statistiques actives.'},
     {key:'dwellings',label:'Logements',unit:'logements',source:'OPERATIONS',type:'source',definition:'Nombre de logements associé à l’opération.',method:'Valeur numérique source.'},
+    {key:'surface',label:'Surface',unit:'m²',source:'OPERATIONS',type:'source',definition:'Surface totale de l’opération.',method:'Colonne Total surface (alias Surface).'},
     {key:'buildings',label:'Bâtiments',unit:'bâtiments',source:'OPERATIONS',type:'source',definition:'Nombre de bâtiments associé à l’opération.',method:'Valeur numérique source.'},
     {key:'bbio',label:'Bbio projet',unit:'points',source:'OPERATIONS / RSET',type:'source',definition:'Besoin bioclimatique du projet.',method:'Valeur source identifiée par le mapping.'},
     {key:'bbioMax',label:'Bbio max',unit:'points',source:'OPERATIONS / RSET',type:'source',definition:'Seuil Bbio maximal applicable.',method:'Valeur source.'},
@@ -90,11 +91,22 @@
     {key:'dpeEnergyBefore',label:'DPE énergie avant',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe énergie avant travaux.',method:'Classe A à G issue de la source.'},
     {key:'dpeEnergyAfter',label:'DPE énergie après',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe énergie après travaux.',method:'Classe A à G issue de la source.'},
     {key:'dpeGesBefore',label:'DPE GES avant',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe GES avant travaux.',method:'Classe A à G issue de la source.'},
-    {key:'dpeGesAfter',label:'DPE GES après',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe GES après travaux.',method:'Classe A à G issue de la source.'}
+    {key:'dpeGesAfter',label:'DPE GES après',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe GES après travaux.',method:'Classe A à G issue de la source.'},
+    {key:'cepnr',label:'Cep,nr projet',unit:'kWhEP/m².an',source:'OPERATIONS / RSET',type:'source',definition:'Consommation d’énergie primaire non renouvelable du projet.',method:'Valeur source.'},
+    {key:'cepnrMax',label:'Cep,nr max',unit:'kWhEP/m².an',source:'OPERATIONS / RSET',type:'source',definition:'Seuil Cep,nr maximal applicable.',method:'Valeur source.'},
+    {key:'tic',label:'TIC projet',unit:'°C',source:'OPERATIONS / RSET',type:'source',definition:'Température intérieure conventionnelle du projet.',method:'Valeur source.'},
+    {key:'ticRef',label:'TIC ref',unit:'°C',source:'OPERATIONS / RSET',type:'source',definition:'TIC de référence (valeur maximale à ne pas dépasser).',method:'Valeur source.'},
+    {key:'cepBefore',label:'Cep initial',unit:'kWhEP/m².an',source:'OPERATIONS / étude thermique',type:'source',definition:'Consommation d’énergie primaire avant travaux.',method:'Valeur source.'},
+    {key:'cepAfter',label:'Cep après travaux',unit:'kWhEP/m².an',source:'OPERATIONS / étude thermique',type:'source',definition:'Consommation d’énergie primaire après travaux.',method:'Valeur source ; à défaut, Cep projet.'},
+    {key:'median',label:'Médiane',unit:'',source:'Calcul Observatoire',type:'calculated',definition:'Valeur du milieu : la moitié des opérations est au-dessous, l’autre moitié au-dessus. Contrairement à la moyenne, elle n’est pas tirée par quelques valeurs extrêmes. La « moitié centrale » va du 1er au 3e quartile (25 % à 75 % des opérations).',method:'Lecture principale des onglets Énergie & transition et Carbone & DPE depuis la V6.51. Moitié centrale affichée seulement à partir de 5 opérations ; la moyenne reste en information secondaire.'},
+    {key:'thresholdMargin',label:'Marge au seuil',unit:'%',source:'Calcul Observatoire',type:'calculated',definition:'De combien les opérations restent sous leur seuil maximal (Cep max, Cep,nr max, Bbio max, DH max, TIC ref, IC Énergie max, IC Construction max). Le seuil est une butée : il ne doit pas être dépassé.',method:'Seules les opérations ayant la valeur ET son seuil sont retenues. Pour chacune : ratio = valeur ÷ seuil. Marge = 1 − médiane des ratios. Moins de 5 opérations : échantillon faible (pas de moitié centrale). Aucune opération : « Non calculable » (jamais 0 %). Une valeur au-dessus de son seuil est écartée de la médiane, listée et signalée en Qualité (erreur de saisie, de référentiel ou d’unité probable). DH : sans DH max, seuil par défaut 1 250 °C·h, indiqué sous la barre.'},
+    {key:'beforeAfterMedian',label:'Avant → après (Ubat, Cep)',unit:'',source:'Calcul Observatoire',type:'calculated',definition:'Évolution entre la valeur avant travaux et la valeur après travaux (Ubat initial → Ubat projet ; Cep initial → Cep après travaux).',method:'Opérations ayant les deux valeurs ; médiane avant → médiane après et écart en %. Ubat hors plage 0,1–5 W/m².K écarté et signalé en Qualité.'},
+    {key:'windowFamilies',label:'Menuiseries extérieures (familles)',unit:'',source:'OPERATIONS',type:'calculated',definition:'Regroupement des textes libres Matériau, Vitrage et Occultation des menuiseries en familles comparables, et combinaisons les plus fréquentes.',method:'Matériau : PVC, Bois, Aluminium ; plusieurs matériaux cités (ex. « Bois + PVC sur autres façades ») → Matériaux combinés ; autre matériau seul (acier…) → Autre ; vide → Non renseigné. Vitrage : « triple » → Triple vitrage ; « argon » ou le mot isolé « Ar » (ex. « 10.10.4 Ar ») → Double vitrage argon ; « simple vitrage » seul → Simple vitrage ; sinon Double vitrage ; vide → Non renseigné. Occultation : « roulant » → Volets roulants ; « persienne » ou « battant » → Persiennes / battants ; « store », BSO ou brise-soleil → Stores ; plusieurs familles → Occultations combinées ; « sans occultation » → Sans occultation ; texte non reconnu → Autre ; vide → Non renseigné. Base des pourcentages : opérations ayant au moins un champ menuiserie ; une combinaison compte les opérations ayant EXACTEMENT ces trois familles.'},
+    {key:'dpeGain',label:'Gain de classes DPE',unit:'classes',source:'Calcul Observatoire',type:'calculated',definition:'Nombre de classes gagnées entre avant et après travaux (ex. E → C = +2), pour l’étiquette énergie et l’étiquette GES.',method:'Seules les opérations ayant la classe avant ET après. Une étiquette ne peut pas se dégrader avec des travaux : toute dégradation est affichée en rouge, listée et signalée en Qualité ; la donnée n’est pas corrigée par l’Observatoire.'}
   ];
   const dictByKey = Object.fromEntries(DICTIONARY.map(x=>[x.key,x]));
   // Clés lues comme des nombres (contrôle de lisibilité en Qualité & données).
-  const NUMERIC_KEYS = [...DICTIONARY.filter(d=>d.unit&&d.unit!=='classe'&&!/^icConstruction20/.test(d.key)).map(d=>d.key),'roofThickness','wallThickness','floorThickness'];
+  const NUMERIC_KEYS = [...DICTIONARY.filter(d=>d.unit&&d.unit!=='classe'&&d.type!=='calculated'&&d.key!=='surface'&&!/^icConstruction20/.test(d.key)).map(d=>d.key),'roofThickness','wallThickness','floorThickness'];
   // Colonnes de dates lues pour les années (contrôle de lisibilité en Qualité).
   const DATE_KEYS = {certificationDecisionDate:'Date de décision de certification',createdDate:'Date de création'};
   function provenance(op,key){
@@ -118,7 +130,10 @@
     if(build!==null&&build<0)issues.push({severity:'error',code:'negative:buildings',label:'Nombre de bâtiments négatif'});
     if(dwell===0&&build>0&&/logement|resident/i.test(String(op?.referential||'')+' '+String(op?.nature||'')))issues.push({severity:'warn',code:'zero:dwellings',label:'0 logement avec bâtiment(s) résidentiel(s)'});
     [['roofR','R toiture',0,20],['wallR','R façade',0,15],['floorR','R plancher bas',0,15],['bbio','Bbio',0,500],['cep','CEP',0,2000],['dh','DH',0,10000],['icConstruction','IC Construction',0,3000],['icEnergy','IC Énergie',0,3000]].forEach(([k,l,min,max])=>{const n=rawNumber(op,k);if(n!==null&&(n<min||n>max))issues.push({severity:'warn',code:`outlier:${k}`,label:`${l} atypique : ${n}`});});
-    [['bbio','bbioMax','Bbio'],['cep','cepMax','CEP'],['dh','dhMax','DH'],['icEnergy','icEnergyMax','IC Énergie'],['icConstruction','icConstructionMax','IC Construction']].forEach(([vKey,mKey,l])=>{const v=rawNumber(op,vKey),m=rawNumber(op,mKey);if(v!==null&&m!==null&&v>m)issues.push({severity:'warn',code:`threshold:${vKey}`,label:`${l} supérieur au seuil (${v} > ${m})`});});
+    // V6.51 : un seuil est un maximum ; le dépasser signale une erreur de saisie, de référentiel ou d'unité.
+    THRESHOLD_PAIRS.forEach(([vKey,mKey,l])=>{const v=rawNumber(op,vKey);let m=rawNumber(op,mKey),dflt=false;if(v!==null&&(m===null||!(m>0))&&vKey==='dh'){m=DH_DEFAULT_MAX;dflt=true;}if(v!==null&&m!==null&&m>0&&v>m)issues.push({severity:'warn',code:`threshold:${vKey}`,label:`${l} au-dessus de son seuil${dflt?' par défaut':''} (${v} > ${m}) : saisie, référentiel ou unité à contrôler`});});
+    [['ubatBefore','Ubat initial'],['ubatAfter','Ubat projet']].forEach(([k,l])=>{const n=rawNumber(op,k);if(n!==null&&(n<UBAT_RANGE[0]||n>UBAT_RANGE[1]))issues.push({severity:'warn',code:`range:${k}`,label:`${l} hors plage plausible ${UBAT_RANGE[0]}–${UBAT_RANGE[1]} W/m².K : ${n}`});});
+    [['dpeEnergyBefore','dpeEnergyAfter','DPE énergie','energy'],['dpeGesBefore','dpeGesAfter','DPE GES','ges']].forEach(([b,a,l,t])=>{const g=dpeGain(op,b,a);if(g&&g.gain<0)issues.push({severity:'warn',code:`dpe:degraded:${t}`,label:`${l} dégradé après travaux (${g.before} → ${g.after}) : étiquette à corriger dans la source`});});
     NUMERIC_KEYS.forEach(k=>unreadableValues(op,k).forEach(u=>issues.push({severity:'warn',code:`unreadable:${k}`,label:`${(dictByKey[k]?.label)||k} illisible : « ${u.raw} » (${u.reason})`,detail:u})));
     if(op?.progressState==='invalid')issues.push({severity:'warn',code:'progress:invalid',label:`Avancement hors liste : « ${op.rawStatus||''} »`});
     else if(op?.progressState==='empty'||op?.status==='unknown')issues.push({severity:'info',code:'progress:missing',label:'Avancement non renseigné'});
@@ -132,6 +147,150 @@
     const avgScore=reports.length?reports.reduce((s,x)=>s+x.report.score,0)/reports.length:100;
     return {reports,errors,warnings,withIssues,avgScore};
   }
+  // ---- V6.51 : barre de marge, avant → après, DPE en escalier --------------------------------
+  const DH_DEFAULT_MAX=1250, UBAT_RANGE=[0.1,5], MIN_SAMPLE=5, DPE_LETTERS='ABCDEFG';
+  const THRESHOLD_PAIRS=[['cep','cepMax','Cep'],['cepnr','cepnrMax','Cep,nr'],['bbio','bbioMax','Bbio'],['dh','dhMax','DH'],['tic','ticRef','TIC'],['icEnergy','icEnergyMax','IC Énergie'],['icConstruction','icConstructionMax','IC Construction']];
+  function quantile(sorted,p){if(!sorted.length)return null;const pos=(sorted.length-1)*p,base=Math.floor(pos),rest=pos-base;return sorted[base+1]!==undefined?sorted[base]+rest*(sorted[base+1]-sorted[base]):sorted[base];}
+  const median=vals=>quantile([...vals].sort((a,b)=>a-b),.5);
+  // Code projet affichable : en mode anonymisé, le projectCode d'une opération technique reste le vrai code ;
+  // il est donc pseudonymisé ici comme le code du projet (même résultat, la fiche s'ouvre).
+  function projectCode(op){const base=String(op?.projectCode||String(op?.code??'').split('::')[0]);const P=(typeof window!=='undefined'&&window.NEWOSB_PRIVACY)||null;return op?.__newosbAnonymized&&op?.projectCode&&P?.operationCode?P.operationCode(base):base;}
+  // Ratio valeur ÷ seuil opération par opération ; médiane des ratios ; dépassements écartés.
+  function thresholdMargin(ops,valueKey,maxKey,options={}){
+    const rows=[],over=[];let withValue=0,withoutMax=0,defaulted=0;
+    (ops||[]).forEach(op=>{
+      const v=rawNumber(op,valueKey);if(v===null)return;withValue++;
+      let m=rawNumber(op,maxKey),dflt=false;
+      if((m===null||!(m>0))&&options.defaultMax>0){m=options.defaultMax;dflt=true;}
+      if(m===null||!(m>0)){withoutMax++;return;}
+      const row={op,code:projectCode(op),value:v,max:m,ratio:v/m,defaulted:dflt};
+      if(v>m)over.push(row);else{rows.push(row);if(dflt)defaulted++;}
+    });
+    const n=rows.length, ratios=rows.map(r=>r.ratio).sort((a,b)=>a-b);
+    const reason=n?'':(!withValue?'aucune valeur projet renseignée':(over.length&&!withoutMax?'toutes les valeurs renseignées dépassent leur seuil':'seuil non renseigné pour les valeurs présentes'));
+    const med=quantile(ratios,.5), enough=n>=MIN_SAMPLE;
+    return {valueKey,maxKey,population:(ops||[]).length,withValue,withoutMax,n,rows,over,defaulted,
+      medianRatio:med,q1:enough?quantile(ratios,.25):null,q3:enough?quantile(ratios,.75):null,
+      margin:med===null?null:1-med,medianValue:n?median(rows.map(r=>r.value)):null,medianMax:n?median(rows.map(r=>r.max)):null,
+      meanValue:n?rows.reduce((s,r)=>s+r.value,0)/n:null,underRate:(n+over.length)?100*n/(n+over.length):null,
+      lowSample:n>0&&n<MIN_SAMPLE,reason};
+  }
+  // Médiane avant → médiane après sur les opérations ayant les deux valeurs (hors plage écartée).
+  function beforeAfterMedian(ops,beforeKey,afterKey,options={}){
+    const range=options.range||null, fallback=options.afterFallback||'', outOfRange=[], pairs=[];
+    const inRange=v=>!range||(v>=range[0]&&v<=range[1]);
+    (ops||[]).forEach(op=>{
+      const b=rawNumber(op,beforeKey);let a=rawNumber(op,afterKey);if(a===null&&fallback)a=rawNumber(op,fallback);
+      let bad=false;
+      if(b!==null&&!inRange(b)){outOfRange.push({op,code:projectCode(op),key:beforeKey,value:b});bad=true;}
+      if(a!==null&&!inRange(a)){outOfRange.push({op,code:projectCode(op),key:afterKey,value:a});bad=true;}
+      if(b!==null&&a!==null&&!bad)pairs.push({op,before:b,after:a});
+    });
+    const n=pairs.length, before=n?median(pairs.map(p=>p.before)):null, after=n?median(pairs.map(p=>p.after)):null;
+    return {n,before,after,change:(n&&before)?(after-before)/Math.abs(before):null,outOfRange,lowSample:n>0&&n<MIN_SAMPLE};
+  }
+  function dpeLetterOf(op,key){return String(rawValue(op,key)||'').toUpperCase().match(/[A-G]/)?.[0]||'';}
+  function dpeGain(op,beforeKey,afterKey){const b=dpeLetterOf(op,beforeKey),a=dpeLetterOf(op,afterKey);if(!b||!a)return null;return {before:b,after:a,gain:DPE_LETTERS.indexOf(b)-DPE_LETTERS.indexOf(a)};}
+  function dpeGainBucket(gain){return gain<0?'worse':gain>=4?'4plus':String(gain);}
+  // DPE en escalier : effectifs avant / après par classe + histogramme du gain (paires seulement).
+  function dpeStaircase(ops,beforeKey,afterKey){
+    const before=Object.fromEntries([...DPE_LETTERS].map(l=>[l,0])), after={...before}, buckets={worse:0,'0':0,'1':0,'2':0,'3':0,'4plus':0}, degraded=[], bl=[], al=[];
+    (ops||[]).forEach(op=>{
+      const b=dpeLetterOf(op,beforeKey),a=dpeLetterOf(op,afterKey);
+      if(b){before[b]++;bl.push(DPE_LETTERS.indexOf(b));} if(a){after[a]++;al.push(DPE_LETTERS.indexOf(a));}
+      if(b&&a){const g=DPE_LETTERS.indexOf(b)-DPE_LETTERS.indexOf(a);buckets[dpeGainBucket(g)]++;if(g<0)degraded.push({op,code:projectCode(op),before:b,after:a});}
+    });
+    const medLetter=list=>{if(!list.length)return '';const sorted=[...list].sort((x,y)=>x-y);return DPE_LETTERS[sorted[Math.floor((sorted.length-1)/2)]];};
+    return {before,after,beforeCount:bl.length,afterCount:al.length,pairs:Object.values(buckets).reduce((s,v)=>s+v,0),buckets,degraded,medianBefore:medLetter(bl),medianAfter:medLetter(al)};
+  }
+
+  // ---- V6.52 : menuiseries extérieures (textes libres → familles) -----------------------------
+  const WINDOW_OTHER=['Non renseigné','Autre'];
+  function windowMaterialFamily(value){
+    const s=normalize(value); if(!s) return 'Non renseigné';
+    const found=[]; if(/\bpvc\b/.test(s))found.push('PVC'); if(/\bbois\b/.test(s))found.push('Bois'); if(/\balu(minium)?\b/.test(s))found.push('Aluminium'); if(/\b(acier|metal|metallique)\b/.test(s))found.push('Acier');
+    if(found.length>1) return 'Matériaux combinés';
+    return ['PVC','Bois','Aluminium'].includes(found[0])?found[0]:'Autre';
+  }
+  function glazingFamily(value){
+    const s=normalize(value); if(!s) return 'Non renseigné';
+    if(/\btriple\b/.test(s)) return 'Triple vitrage';
+    if(/argon|\bar\b/.test(s)) return 'Double vitrage argon';
+    if(/\bsimple vitrage\b/.test(s)&&!/double/.test(s)) return 'Simple vitrage';
+    return 'Double vitrage';
+  }
+  function shadingFamily(value){
+    const s=normalize(value); if(!s) return 'Non renseigné';
+    if(/\b(sans occultation|sans volet|sans fermeture|aucune occultation)\b/.test(s)) return 'Sans occultation';
+    const found=[]; if(/roulant/.test(s))found.push('Volets roulants'); if(/persienne|battant/.test(s))found.push('Persiennes / battants'); if(/\bstores?\b|\bbso\b|brise soleil/.test(s))found.push('Stores');
+    if(found.length>1) return 'Occultations combinées';
+    return found[0]||'Autre';
+  }
+  // Bandes 100 % + combinaisons exactes, sur les opérations ayant au moins un champ menuiserie.
+  function windowComposition(ops,get={}){
+    const g={material:get.material||(o=>o.windowMaterial),glazing:get.glazing||(o=>o.windowGlazing),shading:get.shading||(o=>o.windowShading)};
+    const filled=(ops||[]).filter(o=>['material','glazing','shading'].some(k=>String(g[k](o)??'').trim()));
+    const n=filled.length, fam={material:windowMaterialFamily,glazing:glazingFamily,shading:shadingFamily};
+    const band=k=>{const m=new Map();filled.forEach(o=>{const f=fam[k](g[k](o));m.set(f,(m.get(f)||0)+1);});return [...m].map(([name,count])=>({name,count,share:n?100*count/n:null})).sort((a,b)=>(WINDOW_OTHER.includes(a.name)-WINDOW_OTHER.includes(b.name))||b.count-a.count||a.name.localeCompare(b.name,'fr'));};
+    const combos=new Map();filled.forEach(o=>{const c=[fam.material(g.material(o)),fam.glazing(g.glazing(o)),fam.shading(g.shading(o))],k=c.join('\u0001');const e=combos.get(k)||{parts:c,count:0};e.count++;combos.set(k,e);});
+    const combinations=[...combos.values()].map(e=>({...e,key:e.parts.join('\u0001'),share:n?100*e.count/n:null})).sort((a,b)=>b.count-a.count||a.key.localeCompare(b.key,'fr'));
+    return {n,population:(ops||[]).length,material:band('material'),glazing:band('glazing'),shading:band('shading'),combinations};
+  }
+
+  // ---- V6.53 : Croiser les données ------------------------------------------------------------
+  // Paires pertinentes : [axe X, axe Y]. Pour les paires « seuil », X = seuil, Y = valeur (sous la ligne y = x = sous le seuil).
+  const CROSS_PAIRS=[['cepMax','cep'],['bbioMax','bbio'],['ticRef','tic'],['ubatBefore','ubatAfter'],['cepBefore','cepAfter'],['surface','dwellings'],['icEnergy','icConstruction']];
+  function crossValue(op,key){if(key==='cepAfter'){const v=rawNumber(op,'cepAfter');return v!==null?v:rawNumber(op,'cep');}return rawNumber(op,key);}
+  function crossPoints(ops,x,y){return (ops||[]).map(op=>({op,x:crossValue(op,x),y:crossValue(op,y)})).filter(p=>p.x!==null&&p.y!==null).map(p=>({...p,ratio:p.x?p.y/p.x:null}));}
+  function crossMetricCounts(ops,keys){return Object.fromEntries((keys||[]).map(k=>[k,(ops||[]).filter(o=>crossValue(o,k)!==null).length]));}
+  function bestCrossPair(ops,pairs=CROSS_PAIRS){let best=null;pairs.forEach(([x,y])=>{const n=crossPoints(ops,x,y).length;if(!best||n>best.n)best={x,y,n};});return best;}
+  function isThresholdPair(x,y){return THRESHOLD_PAIRS.some(([v,m])=>(x===m&&y===v)||(x===v&&y===m));}
+  // Valeur hors cadre : au-delà du 99e percentile ET franchement aberrante (au-delà de Q3 + 3 × IQR, ou en deçà du 1er percentile et de Q1 − 3 × IQR).
+  // Le double critère évite de masquer systématiquement la plus grande valeur d'un petit échantillon sain.
+  function robustOutliers(values){
+    const v=(values||[]).filter(Number.isFinite).sort((a,b)=>a-b);if(v.length<4)return {lo:v[0]??null,hi:v.at(-1)??null,isOut:()=>false};
+    const q1=quantile(v,.25),q3=quantile(v,.75),iqr=q3-q1,p1=quantile(v,.01),p99=quantile(v,.99),hiF=q3+3*iqr,loF=q1-3*iqr;
+    const isOut=x=>(x>p99&&x>hiF)||(x<p1&&x<loF);const kept=v.filter(x=>!isOut(x));
+    return {lo:kept[0],hi:kept.at(-1),isOut};
+  }
+
+  // ---- V6.54 : carte des projets de la Vue d'ensemble -------------------------------------------
+  const GEO_MIN_K=5;
+  const toNum=v=>{if(v===null||v===undefined||String(v).trim()==='')return null;const n=Number(String(v).replace(',','.').trim());return Number.isFinite(n)?n:null;};
+  function validLatLon(lat,lon){return lat!==null&&lon!==null&&lat>40&&lat<55&&lon>-10&&lon<15&&!(lat===0&&lon===0);}
+  function validInsee(v){return /^(\d{5}|2[AB]\d{3})$/i.test(String(v??'').trim());}
+  // Précise (latitude / longitude valides) → approximative (centre de la commune, code INSEE) → non localisée.
+  function geoClass(op){
+    const lat=toNum(op?.latitude),lon=toNum(op?.longitude);
+    if(validLatLon(lat,lon))return {kind:'precise',lat,lon};
+    if(validInsee(op?.insee))return {kind:'commune',insee:String(op.insee).trim().toUpperCase(),department:String(op?.department||'')};
+    return {kind:'none'};
+  }
+  // Mode anonymisé : jamais de coordonnées exactes ni d'adresse (le script et privacy.js les retirent) ; un projet dont la commune
+  // est connue est placé au centre de la commune si elle compte au moins 5 projets dans la sélection, sinon au centre du
+  // département ; sans commune : non localisé.
+  function geoPlan(projects,{anonymized=false}={}){
+    if(!anonymized)return (projects||[]).map(op=>({op,...geoClass(op)}));
+    const key=op=>`${normalize(op?.city)}|${String(op?.department||'')}`, counts=new Map();
+    (projects||[]).forEach(op=>{if(normalize(op?.city)&&op?.department)counts.set(key(op),(counts.get(key(op))||0)+1);});
+    return (projects||[]).map(op=>{
+      const dep=String(op?.department||'');
+      if(!normalize(op?.city)||!dep)return {op,kind:'none'};
+      if(counts.get(key(op))>=GEO_MIN_K)return {op,kind:'commune',city:String(op.city).trim(),department:dep};
+      return {op,kind:'department',department:dep};
+    });
+  }
+  // Regroupement des points qui se chevauchent (distance en unités de la carte).
+  function clusterPoints(points,radius){
+    const clusters=[];
+    (points||[]).forEach(p=>{const c=clusters.find(c=>Math.hypot(c.x-p.x,c.y-p.y)<=radius);if(c){c.items.push(p);c.x=(c.x*(c.items.length-1)+p.x)/c.items.length;c.y=(c.y*(c.items.length-1)+p.y)/c.items.length;}else clusters.push({x:p.x,y:p.y,items:[p]});});
+    return clusters;
+  }
+  function columnTags(op){
+    const out=[],seen=new Set(),add=v=>String(v??'').split(',').map(x=>x.trim()).filter(Boolean).forEach(x=>{const k=normalize(x);if(k&&!seen.has(k)){seen.add(k);out.push(x);}});
+    add(op?.tags);const h=op?.fields?.tags;if(h)rows(op).forEach(r=>add(r?.[h]));return out;
+  }
+
   function comparableSet(target,ops){
     const candidates=(ops||[]).filter(o=>o!==target && !isExcludedOperation(o));
     const score=o=>{
@@ -184,5 +343,5 @@
     return (ops||[]).filter(op=>{const cp=String(op?.postalCode||'').replace(/\D/g,'');const d=String(op?.department||'').toUpperCase();if(cp.length<2||!d)return false;if(d==='2A'||d==='2B')return cp.startsWith('20')===false;return cp.slice(0,2)!==d.slice(0,2);}).length;
   }
 
-  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
+  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,quantile,thresholdMargin,beforeAfterMedian,dpeGain,dpeGainBucket,dpeStaircase,windowMaterialFamily,glazingFamily,shadingFamily,windowComposition,displayCode:projectCode,geoClass,geoPlan,clusterPoints,columnTags,GEO_MIN_K,crossPairs:CROSS_PAIRS,crossValue,crossPoints,crossMetricCounts,bestCrossPair,isThresholdPair,robustOutliers,thresholdPairs:THRESHOLD_PAIRS,DH_DEFAULT_MAX,UBAT_RANGE,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
 })();
