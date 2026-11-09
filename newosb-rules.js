@@ -442,6 +442,16 @@
     return out;
   }
 
+  // ---- V6.59 : contrat en « Version préliminaire » (colonne Statut) = proposition commerciale en cours -------------
+  // Règle validée par l'utilisateur (09/11/2026) : prioritaire sur un avancement BC « Non démarrée » ou vide ;
+  // un avancement BC plus avancé est conservé.
+  const isPreliminaryContract = stage => /^version preliminaire$/.test(stripAccents(stage).toLowerCase().replace(/\s+/g, ' ').trim());
+  function applyContractStage(progress, stage) {
+    if (!isPreliminaryContract(stage)) return progress;
+    if (progress && progress.state !== 'empty' && progress.key !== 'notStarted' && progress.key !== 'unknown') return progress;
+    return { key: 'proposal', label: 'Proposition commerciale en cours', state: 'valid', source: 'contract', raw: progress?.raw || '' };
+  }
+
   // ---- V6.56 : lignes dont le bloc technique est collé une colonne trop à gauche dans la Sheet ----------------
   // Constat (export du 30/09/2026) : pour certaines lignes, les valeurs de « Zonage logement social » → « DPE GES après
   // travaux final » sont décalées d'une colonne vers la gauche (l'adresse dans « Zonage », la structure de toiture dans
@@ -508,7 +518,7 @@
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
     parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
-    realignShiftedRows, shiftLayout, PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
+    realignShiftedRows, shiftLayout, isPreliminaryContract, applyContractStage, PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };
   root.NEWOSB_RULES = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

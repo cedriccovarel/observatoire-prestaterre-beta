@@ -276,6 +276,35 @@ test('V6.56 : RCU avant travaux → autre vecteur après = signalé (Qualité, t
   const n = read('newosb.js'); assert(n.includes('function rcuGuard(ops)') && n.includes("degraded?'is-degraded':''") && /RCU/.test(C.dictByKey.rcuRule.method));
 });
 
+test('V6.57 : tout l’onglet Solutions constructives au format bandes + tableau ; règles chauffage complétées', () => {
+  const n = read('newosb.js');
+  assert(n.includes('${constructionCompositionCard()}') && n.includes("${systemCompositionCard('heating')}") && n.includes("${systemCompositionCard('ecs')}") && n.includes("${systemCompositionCard('ventcool')}"));
+  assert(!n.includes('function technicalCard(') && !n.includes('function normalizedSingleCard(') && !n.includes('function distributionVisual(') && !n.includes('function solutionViewToggle('));
+  const ctx = { normalizedTokens: v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9/ ]+/g, ' ').trim(), normalizeEnergyVectorFamily: () => '' }; vm.createContext(ctx);
+  const i = n.indexOf('  function normalizeHeatingFamily(op){'); vm.runInContext(n.slice(i, n.indexOf('\n  }\n', i) + 4), ctx);
+  const H = (m, v) => ctx.normalizeHeatingFamily({ heatingModeAfter: m, heatingAfter: v });
+  assert.strictEqual(H('Chauffage électrique direct', 'Électricité'), 'Électrique direct'); assert.strictEqual(H('Radiateurs / panneaux rayonnants électriques individuels', 'Électricité'), 'Électrique direct');
+  assert.strictEqual(H('Chauffage collectif gaz – radiateurs eau chaude', 'Gaz'), 'Chaudière gaz'); assert.strictEqual(H('Chaufferie collective gaz à condensation', 'Gaz'), 'Chaudière gaz');
+  assert.strictEqual(H('Réseau de chaleur urbain - radiateurs', 'RCU'), 'Réseau de chaleur');
+  const c = C.familyComposition([{ a: 'x' }], [{ value: o => o.a, family: (v, o) => (o.a === 'x' ? 'vu' : 'non') }]); same(c.bands[0].map(b => b.name), ['vu']);
+});
+
+test('V6.58 : la recherche signale les opérations hors statistiques (annulées, perdues, abandonnées) au lieu de « 0 »', () => {
+  const n = read('newosb.js'); assert(n.includes('function keywordExcludedNote()') && n.includes('${keywordExcludedNote()}</article>') && n.includes('filteredExcludedOperations({keepExcluded:true})'));
+});
+
+test('V6.59 : contrat « Version préliminaire » = proposition commerciale en cours (prioritaire sur BC « Non démarrée » ou vide, jamais sur une étape plus avancée)', () => {
+  const P = (bc, stage) => R.applyContractStage(R.readProgress({ BC: bc }, 'BC', ''), stage);
+  assert.strictEqual(P('Non démarrée', 'Version préliminaire').key, 'proposal'); assert.strictEqual(P('', 'version preliminaire').key, 'proposal');
+  assert.strictEqual(P('Analyse réalisée', 'Version préliminaire').key, 'analysis'); assert.strictEqual(P('Non démarrée', 'En cours').key, 'notStarted');
+  const a = read('app.js'); assert.strictEqual((a.match(/DATA_RULES\.applyContractStage\(progress,/g) || []).length, 2);
+});
+test('V6.59 : avancement — sorties commerciales (annulées, abandonnées, perdues) toujours visibles et rapprochement complet', () => {
+  const n = read('newosb.js');
+  assert(n.includes('function tunnelExits(') && n.includes('function tunnelReconciliation(') && n.includes("tunnel(ops,{exits:filteredExcludedOperations()})") && n.includes('exits:excluded,'));
+  assert(n.includes("EXIT_KEYS=['cancelledAffair','abandonedAffair','lostAffair']") && read('app.js').includes('getSheetReconciliation(){'));
+});
+
 section('4 quater. Croiser les données (V6.53)');
 test('paire par défaut : la plus renseignée parmi les paires pertinentes', () => {
   const ops = [mk('A', { cep: 50, cepMax: 100, ubatBefore: 1, ubatAfter: 0.5 }), mk('B', { ubatBefore: 1.2, ubatAfter: 0.6 }), mk('C', { ubatBefore: 1.4, ubatAfter: 0.7 }), mk('D', { cep: 60 })];

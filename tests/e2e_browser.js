@@ -208,7 +208,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check((await page.textContent('#obsPage')).includes('elles reprennent les chiffres de la colonne BC'), 'note explicative affichée quand l’option est cochée');
       await page.uncheck('[data-tunnel-excluded-toggle]', { force: true }); await page.waitForTimeout(300);
       check((await cardNumbers()).join('/') === offNumbers.join('/'), 'option décochée : retour aux chiffres du tunnel actif');
-      check(/ne sont pas comptées dans le tunnel|n’est pas comptée dans le tunnel|ne est pas|sont pas comptées/.test(await page.textContent('#obsPage')), 'note : nombre d’affaires annulées hors tunnel indiqué');
+      check(await page.evaluate(() => !!document.querySelector('.obs-tunnel-exits [data-tunnel-exit="cancelledAffair"]') && /annulée/.test(document.querySelector('.obs-tunnel-reconcile')?.textContent || '')), 'affaires annulées hors tunnel : tuile « Annulées » et rapprochement (V6.59)');
       const pageText = await page.textContent('#obsPage');
       check(!/TUNNEL INTERACTIF/i.test(pageText) && /AVANCEMENT/.test(pageText), 'carte « Tunnel interactif » renommée « Avancement »');
       for (const w of [1440, 1100, 900]) {
@@ -841,7 +841,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       for (const vp of [{ width: 1440, height: 1000, tag: 'desktop' }, { width: 390, height: 844, tag: 'mobile' }]) {
         const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows], viewport: { width: vp.width, height: vp.height } });
         await page.evaluate(() => document.querySelector('button[data-page="solutions"]').click()); await page.waitForTimeout(500);
-        const info = () => page.evaluate(() => { const c = document.querySelector('.obs-window-card:not(.obs-envelope-composition)'); return { bands: c ? c.querySelectorAll('.obs-window-band').length : 0, aria: c ? [...c.querySelectorAll('.obs-window-bar')].every(b => b.getAttribute('aria-label')) : false, head: c?.querySelector('.obs-card-head small')?.textContent || '', rows: c ? [...c.querySelectorAll('.obs-window-table tbody tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], firstBold: c ? getComputedStyle(c.querySelector('.obs-window-table tbody tr td')).fontWeight : '', toggle: !!c?.querySelector('.obs-view-toggle'), pie: !!c?.querySelector('svg circle, .obs-pie'), segs: c ? [...c.querySelectorAll('.obs-window-band:first-child .obs-window-seg b')].map(b => b.textContent) : [], minFont: c ? Math.min(...[...c.querySelectorAll('*')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) : 0, scrollX: c ? (() => { const w = c.querySelector('.obs-window-table-wrap'); return w.scrollWidth > w.clientWidth; })() : false }; });
+        const info = () => page.evaluate(() => { const c = document.querySelector('.obs-windows-composition'); return { bands: c ? c.querySelectorAll('.obs-window-band').length : 0, aria: c ? [...c.querySelectorAll('.obs-window-bar')].every(b => b.getAttribute('aria-label')) : false, head: c?.querySelector('.obs-card-head small')?.textContent || '', rows: c ? [...c.querySelectorAll('.obs-window-table tbody tr')].map(r => r.textContent.replace(/\s+/g, ' ').trim()) : [], firstBold: c ? getComputedStyle(c.querySelector('.obs-window-table tbody tr td')).fontWeight : '', toggle: !!c?.querySelector('.obs-view-toggle'), pie: !!c?.querySelector('svg circle, .obs-pie'), segs: c ? [...c.querySelectorAll('.obs-window-band:first-child .obs-window-seg b')].map(b => b.textContent) : [], minFont: c ? Math.min(...[...c.querySelectorAll('*')].filter(e => [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => parseFloat(getComputedStyle(e).fontSize))) : 0, scrollX: c ? (() => { const w = c.querySelector('.obs-window-table-wrap'); return w.scrollWidth > w.clientWidth; })() : false }; });
         const a = await info();
         if (vp.tag === 'desktop') {
           check(a.bands === 3 && a.aria && !a.toggle && !a.pie, 'trois bandes alignées (matériau, vitrage, occultation), aria-label, plus de bascule barres / camembert');
@@ -850,22 +850,24 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
           check(a.rows.length >= 3 && /^PVC ?Double vitrage argon ?Volets roulants ?\d+ %/.test(a.rows[0]) && Number(a.firstBold) >= 700, 'combinaison dominante en gras : PVC · Double vitrage argon · Volets roulants — ' + a.rows[0]);
           check(a.minFont >= 9, `textes ≥ 9 px (min ${a.minFont})`);
           const before0 = await page.textContent('.obs-selection-note');
-          await page.click('.obs-window-card:not(.obs-envelope-composition) .obs-window-table tbody tr:first-child'); await page.waitForTimeout(400);
+          await page.click('.obs-windows-composition .obs-window-table tbody tr:first-child'); await page.waitForTimeout(400);
           const f = await page.evaluate(() => ({ note: document.querySelector('.obs-selection-note')?.textContent, rows: document.querySelectorAll('.obs-window-table tbody tr').length, active: !!document.querySelector('.obs-window-table tr.is-active') }));
           check(/^\d+ opérations?/.test(f.note) && f.note !== before0 && f.active, 'clic sur une combinaison : filtre croisé — ' + before0 + ' → ' + f.note);
           await page.click('.obs-window-table tbody tr.is-active'); await page.waitForTimeout(300);
           check(/^\d+ opérations/.test(await page.textContent('.obs-selection-note')) && !(await page.$('.obs-window-table tr.is-active')), 'second clic : filtre retiré');
           const env = await page.evaluate(() => [...document.querySelectorAll('.obs-envelope-composition')].map(c => ({ h: c.querySelector('h2').textContent, bands: c.querySelectorAll('.obs-window-band').length, rows: c.querySelectorAll('tbody tr').length, first: c.querySelector('.obs-window-band .obs-window-seg b')?.textContent, r: c.querySelector('.obs-envelope-metrics-inline b')?.textContent })));
           check(env.length === 3 && env.every(e => e.bands === 2 && e.rows >= 2) && env[0].first === 'Béton' && /Planchers bas/.test(env[2].h), 'toitures, façades, planchers bas : bandes structure + isolant et combinaisons, comme les menuiseries — ' + env.map(e => `${e.h.split(' :')[0]} (${e.first}, ${e.rows} comb.)`).join(' | '));
+          const all = await page.evaluate(() => ({ cards: [...document.querySelectorAll('.obs-page .obs-card')].filter(c => !c.closest('.obs-grid-kpi') && !c.matches('.obs-analytics-toolbar, .obs-analytics-toolbar *')).map(c => c.className), toggles: document.querySelectorAll('.obs-page .obs-view-toggle').length, titles: [...document.querySelectorAll('.obs-window-card h2')].map(h => h.textContent.split(' :')[0]) }));
+          check(all.toggles === 0 && all.titles.length === 8 && ['Mode constructif', 'Chauffage après travaux', 'ECS après travaux', 'Ventilation et refroidissement'].every(t => all.titles.includes(t)), 'onglet harmonisé : 8 cartes au format bandes + tableau (mode constructif, parois, menuiseries, chauffage, ECS, ventilation / refroidissement), plus aucune bascule barres / camembert — ' + all.titles.join(' | '));
           const n0 = await page.textContent('.obs-selection-note');
           await page.click('.obs-envelope-composition .obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
           check((await page.textContent('.obs-selection-note')) !== n0 && await page.$('.obs-envelope-composition .obs-window-seg.is-active'), 'clic sur un isolant de toiture : filtre croisé');
           await page.click('.obs-envelope-composition .obs-window-seg.is-active'); await page.waitForTimeout(300);
-          await page.click('.obs-window-card:not(.obs-envelope-composition) .obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
+          await page.click('.obs-windows-composition .obs-window-band:nth-child(2) .obs-window-seg'); await page.waitForTimeout(300);
           check(await page.evaluate(() => !!document.querySelector('.obs-window-seg.is-active')), 'clic sur un segment : filtre croisé');
           await page.click('.obs-window-seg.is-active'); await page.waitForTimeout(300);
         } else check(a.bands === 3 && a.minFont >= 9 && a.scrollX, `mobile : 3 bandes, textes ≥ 9 px, tableau défilable horizontalement (${a.minFont} px)`);
-        const card = await page.$('.obs-window-card:not(.obs-envelope-composition)'); if (card) await card.screenshot({ path: path.join(SHOTS, `v652_menuiseries_${vp.tag}.png`) });
+        const card = await page.$('.obs-windows-composition'); if (card) await card.screenshot({ path: path.join(SHOTS, `v652_menuiseries_${vp.tag}.png`) });
         const envCard = await page.$('.obs-envelope-composition'); if (envCard) await envCard.screenshot({ path: path.join(SHOTS, `v655_toiture_${vp.tag}.png`) });
         check(errors.length === 0, `V6.52 (${vp.tag}) : aucune erreur JavaScript` + (errors.length ? ' : ' + errors.join(' | ') : ''));
         await context.close();
@@ -984,7 +986,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       const EXTRA = ['Code INSEE', 'Zonage logement social 1/2/3', 'Adresse', 'Nature', 'Année', 'Vecteur chauffage avant travaux', 'Vecteur chauffage après travaux', 'Planchers hauts structure', 'Planchers hauts type isolant', 'Planchers hauts R isolant', 'Ubat projet', 'DPE énergie avant travaux', 'TAG'];
       H.push(...EXTRA);
       const VAL = { 'OP-1': ['', '12 rue Exemple', 'Rénovation', '1972', 'RCU', 'PAC air/eau', 'Béton', 'PUR', '6,5', '0,9', 'D', 'biosourcé', ''], 'OP-2': ['33063', '2', '3 rue Test', 'Rénovation', '1965', 'Gaz', 'Gaz', 'Béton', 'Laine de verre', '7', '0,8', 'E', 'bois'] };
-      rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); r.push(...(VAL[r[0]] || EXTRA.map(() => ''))); });
+      rows.forEach(r => { while (r.length < MATRIX[1].length) r.push(''); r.push(...(VAL[r[0]] || EXTRA.map(() => ''))); if (r[0] === 'OP-5') r[H.indexOf('Statut')] = 'Annulé'; if (r[0] === 'OP-6') r[H.indexOf('Statut')] = 'Abandonné'; if (r[0] === 'OP-8') { r[H.indexOf('Statut')] = 'Version préliminaire'; r[H.indexOf('Opération: Évaluation: Statut')] = 'Non démarrée'; } });
       const { page, context, errors } = await scenario(browser, origin, { NEWOSB_ALLOWED_ORIGINS: origin }, { matrix: [MATRIX[0], H, [], ...rows] });
       await page.waitForFunction(() => !window.NEWOSB_REQUIREMENTS?.status?.().loading, null, { timeout: 30000 }).catch(() => {});
       const op1 = await page.evaluate(() => { const o = window.NEWOSB_ENGINE.getOperations().find(x => x.code === 'OP-1'); return { address: o.address, heatingBefore: o.heatingBefore, heatingAfter: o.heatingAfter, nature: o.nature }; });
@@ -1002,6 +1004,21 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(await page.evaluate(() => !!document.querySelector('.obs-flow-link.is-degraded')), 'flux chauffage : lien RCU → PAC en rouge');
       await page.evaluate(() => document.querySelector('button[data-page="quality"]').click()); await page.waitForTimeout(400);
       check(/RCU avant travaux → « PAC/.test(await page.evaluate(() => document.querySelector('.obs-page').textContent)), 'Qualité & données : contrôle RCU (alerte)');
+      await page.evaluate(() => document.querySelector('button[data-page="overview"]').click()); await page.waitForTimeout(300);
+      await page.evaluate(() => { const i = document.querySelector('.obs-search input'); i.value = 'OP-5'; i.dispatchEvent(new Event('input', { bubbles: true })); }); await page.waitForTimeout(700);
+      const kw = await page.evaluate(() => document.querySelector('.obs-kw-excluded')?.textContent.replace(/\s+/g, ' ') || '');
+      check(/1 opération correspondante hors statistiques/.test(kw) && /OP-5/.test(kw) && /Annulé/.test(kw), 'recherche d’une opération annulée : signalée « hors statistiques » avec son statut (V6.58) — ' + kw.slice(0, 120));
+      await page.evaluate(() => document.querySelector('.obs-kw-excluded [data-op-code="OP-5"]').click()); await page.waitForTimeout(400);
+      check(await page.evaluate(() => document.querySelector('.obs-project-window')?.classList.contains('is-open')), 'opération hors statistiques : sa fiche s’ouvre depuis la recherche');
+      await page.keyboard.press('Escape'); await page.evaluate(() => { const i = document.querySelector('.obs-search input'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); }); await page.waitForTimeout(300);
+      await page.evaluate(() => document.querySelector('button[data-page="certification"]').click()); await page.waitForTimeout(500);
+      const av = await page.evaluate(() => ({ exits: Object.fromEntries([...document.querySelectorAll('.obs-tunnel-exit')].map(b => [b.dataset.tunnelExit, Number(b.querySelector('strong').textContent)])), rec: document.querySelector('.obs-tunnel-reconcile')?.textContent.replace(/\s+/g, ' ') || '', total: window.NEWOSB_ENGINE.getOperations().length, prop: window.NEWOSB_ENGINE.getOperations().find(o => o.code === 'OP-8')?.status }));
+      const nums = (av.rec.match(/= (.*)\./) || ['', ''])[1].match(/\d[\d\s]*/g)?.map(x => Number(x.replace(/\s/g, ''))) || [];
+      const recTotal = Number((av.rec.match(/^([\d\s]+) opération/) || ['', '0'])[1].replace(/\s/g, ''));
+      check(av.exits.cancelledAffair >= 1 && av.exits.abandonedAffair === 1 && av.prop === 'proposal', `avancement : tuiles Annulées / Abandonnées / Perdues ; « Version préliminaire » → proposition commerciale (V6.59) — ${JSON.stringify(av.exits)}`);
+      check(recTotal === av.total && /dont \d+ proposition/.test(av.rec), `rapprochement : ${recTotal} opérations dans la sélection = total chargé (${av.total}) — ${av.rec.slice(0, 160)}`);
+      await page.evaluate(() => document.querySelector('[data-tunnel-exit="cancelledAffair"]').click()); await page.waitForTimeout(300);
+      check(await page.evaluate(() => /OP-5/.test(document.querySelector('.obs-tunnel-exit-list')?.textContent || '')), 'clic sur « Annulées » : liste des opérations (OP-5)');
       check(errors.length === 0, 'V6.56 : aucune erreur JavaScript' + (errors.length ? ' : ' + errors.join(' | ') : ''));
       await context.close(); }
     console.log('\nI. Écran de chargement : chantier de rénovation, une seule barre pour OPERATIONS + RAPPORT (V6.23)');

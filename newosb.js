@@ -123,7 +123,7 @@
     activeGroupMoa:'',
     crossX:'icConstructionMax',
     crossY:'icConstruction',
-    crossUserSet:false,crossView:'scatter',crossColor:'referential',crossLog:false,crossShowOut:false,crossTablePage:1,
+    tunnelExitOpen:'',tunnelExitPage:1,crossUserSet:false,crossView:'scatter',crossColor:'referential',crossLog:false,crossShowOut:false,crossTablePage:1,
     overviewShowTotal:true,
     overviewYearBasis:'auto',
     qualityIssuePage:1,
@@ -1083,11 +1083,11 @@
     if(/pac air.?eau|air\/eau/.test(s)) return 'PAC air / eau';
     if(/pac eau.?eau|eau\/eau/.test(s)) return 'PAC eau / eau';
     if(/geotherm/.test(s)) return 'PAC géothermique';
-    if(/chaudiere.*gaz|gaz.*chaudiere|condensation/.test(s)) return 'Chaudière gaz';
+    if(/chaudiere.*gaz|gaz.*chaudiere|condensation|chaufferie.*gaz|gaz.*chaufferie|chauffage collectif gaz/.test(s)) return 'Chaudière gaz';
     if(/chaudiere.*fioul|fioul.*chaudiere/.test(s)) return 'Chaudière fioul';
     if(/chaudiere.*bois|biomasse/.test(s)) return 'Chaudière bois / biomasse';
     if(/poele|insert/.test(s)) return 'Poêle / insert bois';
-    if(/radiateur elect|effet joule|convecteur/.test(s)) return 'Électrique direct';
+    if(/radiateurs? elect|effet joule|convecteur|electrique direct|chauffage electrique|panneaux? rayonnants?/.test(s)) return 'Électrique direct';
     if(/plancher chauffant/.test(s)) return 'Plancher chauffant';
     if(/hybride/.test(s)) return 'Système hybride';
     return normalizeEnergyVectorFamily(op.heatingAfter||op.heatingModeAfter)==='PAC'?'PAC':'Autre système';
@@ -1136,6 +1136,9 @@
   // V6.52 : familles menuiseries calculées par newosb-core.js (règles testées et documentées au Dictionnaire).
   const normalizeWindowMaterialFamily=v=>core.windowMaterialFamily(v), normalizeGlazingFamily=v=>core.glazingFamily(v), normalizeShadingFamily=v=>core.shadingFamily(v);
   function normalizedValue(op,key){
+    if(key==='heatingCombo') return [normalizeEnergyVectorFamily(op.heatingAfter),normalizeHeatingFamily(op)].join(' · ');
+    if(key==='ecsCombo') return [normalizeEnergyVectorFamily(op.ecsAfter||op.ecs),normalizeEcsFamily(op)].join(' · ');
+    if(key==='ventCoolCombo') return [normalizeVentilationFamily(op.ventilation),normalizeCoolingFamily(op.cooling)].join(' · ');
     if(key==='roofCombo') return [normalizeStructureFamily(op.roofStructure),normalizeInsulationFamily(op.roofInsulation)].join(' · ');
     if(key==='wallCombo') return [normalizeStructureFamily(op.wallStructure),normalizeInsulationFamily(op.wallInsulation)].join(' · ');
     if(key==='floorCombo') return [normalizeFloorFamily(op.floorStructure),normalizeInsulationFamily(op.floorInsulation)].join(' · ');
@@ -1231,11 +1234,17 @@
     keywordCache={raw,key,scope}; return scope;
   }
   // Résultats de la recherche : retirer les faux positifs (ex. « crèche » cité sans en être une).
+  // V6.58 : une opération annulée / perdue / abandonnée est hors statistiques ; la recherche la signale au lieu de répondre « 0 ».
+  function keywordExcludedNote(){
+    const out=filteredExcludedOperations({keepExcluded:true});
+    if(!out.length)return '';
+    return `<div class="obs-kw-excluded" role="note"><b>${fmt(out.length)} opération${out.length>1?'s':''} correspondante${out.length>1?'s':''} hors statistiques</b><span>Statut commercial annulé, perdu ou abandonné : ${out.length>1?'elles ne sont':'elle n’est'} pas comptée${out.length>1?'s':''} dans les onglets, mais ${out.length>1?'leurs fiches restent':'sa fiche reste'} consultable${out.length>1?'s':''}.</span><ul>${out.slice(0,20).map(o=>`<li>${o.code?`<button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button>`:'<small class="obs-muted-cell">sans code</small>'} ${esc(o.name||'')} <small>${esc(operationAffairStage(o)||'Hors statistiques')}</small></li>`).join('')}</ul>${out.length>20?`<small>+${fmt(out.length-20)} autres</small>`:''}</div>`;
+  }
   function keywordCard(){
     const q=norm(state.search); if(!q) return '';
     const ops=filteredOperations({keepExcluded:true}), removed=ops.filter(o=>state.searchExcluded.has(String(o.code))).length;
     return `<article class="obs-card obs-kw-card"><div class="obs-card-head"><div><span>RECHERCHE</span><h2>« ${esc(String(state.search).trim())} » : ${fmt(ops.length-removed)} opération${ops.length-removed>1?'s':''} retenue${ops.length-removed>1?'s':''}</h2></div><div class="obs-kw-tools"><button type="button" class="obs-card-action" data-kw-collapse aria-expanded="${!state.kwCollapsed}">${state.kwCollapsed?'▸ Afficher la liste':'▾ Réduire'}</button>${state.kwCollapsed?'':`<small>Retire celles qui ne correspondent pas : elles sortent de tous les onglets, de l’onglet Exigences et des liens de partage.</small>`}${removed?`<button type="button" class="btn btn-secondary" data-kw-reset>Tout remettre (${fmt(removed)})</button>`:''}</div></div>
-      ${state.kwCollapsed?'':`<div class="obs-table-wrap obs-kw-list"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>${ops.map(o=>{const out=state.searchExcluded.has(String(o.code));return `<tr class="${out?'is-removed':''}"><td><button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td><button type="button" class="btn ${out?'btn-secondary':'obs-kw-remove'}" data-kw-toggle="${attr(o.code)}" aria-pressed="${out}">${out?'Remettre':'Retirer'}</button></td></tr>`;}).join('')}</tbody></table></div>`}</article>`;
+      ${state.kwCollapsed||!ops.length?'':`<div class="obs-table-wrap obs-kw-list"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Localisation</th><th><span class="sr-only">Action</span></th></tr></thead><tbody>${ops.map(o=>{const out=state.searchExcluded.has(String(o.code));return `<tr class="${out?'is-removed':''}"><td><button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button></td><td>${esc(o.name)}</td><td>${esc(o.moa)}</td><td>${esc([o.city,departmentName(o.department)].filter(Boolean).join(' · '))}</td><td><button type="button" class="btn ${out?'btn-secondary':'obs-kw-remove'}" data-kw-toggle="${attr(o.code)}" aria-pressed="${out}">${out?'Remettre':'Retirer'}</button></td></tr>`;}).join('')}</tbody></table></div>`}${keywordExcludedNote()}</article>`;
   }
   function filteredOperations(options={}){ return filterOperationList(baseOperations(),options); }
   function filteredTechnicalOperations(options={}){ return filterOperationList(baseTechnicalOperations(),options); }
@@ -1405,12 +1414,31 @@
 
   // V6.13.7 : includeExcluded=true compte aussi les affaires annulées / abandonnées / perdues
   // (chiffres bruts de la colonne BC) ; sinon elles sont hors tunnel (comportement historique).
-  function tunnel(ops,{analytic=false,includeExcluded=false,excludedCount=0}={}){
+  function tunnel(ops,{analytic=false,includeExcluded=false,excludedCount=0,exits=null}={}){
     let a=engine.aggregateTunnel(ops);
     if(includeExcluded){const counts={};PROGRESS_ORDER.forEach(k=>counts[k]=0);let unknown=0;ops.forEach(o=>{if(counts[o.status]!==undefined)counts[o.status]++;else unknown++;});a={...a,counts,unknown};}
     const order=PROGRESS_ORDER;
     const icons={proposal:'✎',notStarted:'▤',incomplete:'◔',complete:'◕',planned:'▣',analysis:'⌕',visit:'⌂',compliant:'✓'};
-    return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>${tunnelUnknownNote(a,analytic)}${includeExcluded?'<p class="obs-tunnel-note is-info">Les cartes incluent les affaires annulées, abandonnées et perdues : elles reprennent les chiffres de la colonne BC. Le reste de la page les exclut.</p>':(excludedCount?`<p class="obs-tunnel-note is-info"><b>${fmt(excludedCount)}</b> affaire${excludedCount>1?'s':''} annulée${excludedCount>1?'s':''} / abandonnée${excludedCount>1?'s':''} / perdue${excludedCount>1?'s':''} ne ${excludedCount>1?'sont':'est'} pas comptée${excludedCount>1?'s':''} dans le tunnel (cocher « Inclure annulés / abandonnés » pour retrouver les chiffres de la Sheet).</p>`:'')}`;
+    return `<div class="obs-tunnel-scroll"><div class="obs-tunnel obs-tunnel-visual obs-tunnel-oneline" style="--obs-tunnel-steps:${order.length}">${order.map((key,index)=>{const v=a.counts[key]||0, active=analytic&&activeCross('status',key), share=pct(v,ops.length);return `<button class="obs-tunnel-step ${active?'is-active':''}" type="button" ${analytic?crossAttrs('status',key,STATUS_LABELS[key]):`data-quick-filter="status" data-quick-value="${key}"`} style="--obs-step-color:${STATUS_COLORS[key]}"><i class="obs-tunnel-icon">${icons[key]||'●'}</i><span>${esc(STATUS_LABELS[key])}</span><strong>${fmt(v)}</strong><small>${fmt(share,1)} %</small><em>${index+1}</em></button>`}).join('')}</div></div>${exits?tunnelExits(exits,{inTunnel:includeExcluded}):''}${tunnelUnknownNote(a,analytic)}${exits?tunnelReconciliation(ops,exits,a,includeExcluded):''}${exits?tunnelExitListBlock(exits):''}${includeExcluded?'<p class="obs-tunnel-note is-info">Les cartes incluent les affaires annulées, abandonnées et perdues : elles reprennent les chiffres de la colonne BC. Le reste de la page les exclut.</p>':(excludedCount?`<p class="obs-tunnel-note is-info"><b>${fmt(excludedCount)}</b> affaire${excludedCount>1?'s':''} annulée${excludedCount>1?'s':''} / abandonnée${excludedCount>1?'s':''} / perdue${excludedCount>1?'s':''} ne ${excludedCount>1?'sont':'est'} pas comptée${excludedCount>1?'s':''} dans le tunnel (cocher « Inclure annulés / abandonnés » pour retrouver les chiffres de la Sheet).</p>`:'')}`;
+  }
+  function hasAnyFilter(){return Object.keys(state.filters||{}).some(k=>globalFilterValues(k).length)||(state.crossFilters||[]).length>0||!!String(state.search||'').trim()||matrixSelectionValues('mention').length>0||matrixSelectionValues('performance').length>0;}
+  // V6.59 : sorties commerciales (annulées, abandonnées, perdues) toujours visibles à côté des étapes, et rapprochement :
+  // chaque opération de la sélection est retrouvée quelque part (étapes, sans avancement, ou sortie commerciale).
+  const EXIT_KEYS=['cancelledAffair','abandonedAffair','lostAffair'], EXIT_LABELS={cancelledAffair:'Annulées',abandonedAffair:'Abandonnées',lostAffair:'Perdues'};
+  function tunnelExits(exits,{inTunnel=false}={}){
+    const by=k=>exits.filter(o=>chronologyStatus(o)===k);
+    return `<div class="obs-tunnel-exits" role="group" aria-label="Sorties commerciales, hors statistiques"><span class="obs-tunnel-exits-title">SORTIES COMMERCIALES · hors statistiques${inTunnel?' (aussi comptées dans les étapes ci-dessus selon leur avancement)':''}</span>${EXIT_KEYS.map(k=>{const n=by(k).length,open=state.tunnelExitOpen===k;return `<button type="button" class="obs-tunnel-exit ${open?'is-active':''}" data-tunnel-exit="${k}" aria-expanded="${open}" style="--obs-step-color:${CHRONOLOGY_STATUS_COLORS[k]}" ${n?'':'disabled'}><span>${EXIT_LABELS[k]}</span><strong>${fmt(n)}</strong><small>${open?'masquer la liste':n?'voir la liste':'aucune'}</small></button>`;}).join('')}</div>`;
+  }
+  function tunnelExitListBlock(exits){return state.tunnelExitOpen&&EXIT_KEYS.includes(state.tunnelExitOpen)?tunnelExitList(exits.filter(o=>chronologyStatus(o)===state.tunnelExitOpen),state.tunnelExitOpen):'';}
+  function tunnelExitList(list,key){
+    const model=paged([...list].sort((a,b)=>String(a.code).localeCompare(String(b.code),'fr')),state.tunnelExitPage,15);state.tunnelExitPage=model.page;
+    return `<div class="obs-tunnel-exit-list"><div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Code</th><th>Projet</th><th>MOA</th><th>Statut commercial</th><th>Avancement (BC)</th><th>Année de création</th></tr></thead><tbody>${model.items.map(o=>`<tr><td>${o.code?`<button type="button" class="obs-kw-code" data-op-code="${attr(o.code)}">${esc(o.code)}</button>`:`<small class="obs-muted-cell">${o.contractNumber?`contrat n° ${esc(String(o.contractNumber).replace(/\.0+$/,''))}`:'sans code'}</small>`}</td><td>${esc(o.name||'')}</td><td>${esc(o.moa||'')}</td><td>${esc(operationAffairStage(o)||EXIT_LABELS[key])}</td><td>${esc(o.rawStatus||STATUS_LABELS[o.status]||'')}</td><td>${esc(o.createdYear||'')}</td></tr>`).join('')}</tbody></table>${paginationHtml('tunnel-exit',model)}</div></div>`;
+  }
+  function tunnelReconciliation(ops,exits,a,includeExcluded){
+    const active=includeExcluded?ops.filter(o=>!isLostAbandonedOperation(o)):ops, nExit=exits.length, total=active.length+nExit, unknown=active.filter(o=>!PROGRESS_ORDER.includes(o.status)).length, inSteps=active.length-unknown, proposal=active.filter(o=>o.status==='proposal').length;
+    const by=k=>exits.filter(o=>chronologyStatus(o)===k).length;
+    const sheet=!hasAnyFilter()&&engine.getSheetReconciliation?engine.getSheetReconciliation():null;
+    return `<p class="obs-tunnel-reconcile"><b>${fmt(total)} opération${total>1?'s':''} dans la sélection</b> = ${fmt(inSteps)} dans les étapes (dont ${fmt(proposal)} proposition${proposal>1?'s':''} commerciale${proposal>1?'s':''} en cours)${unknown?` + ${fmt(unknown)} sans avancement exploitable`:''} + ${fmt(by('cancelledAffair'))} annulée${by('cancelledAffair')>1?'s':''} + ${fmt(by('abandonedAffair'))} abandonnée${by('abandonedAffair')>1?'s':''} + ${fmt(by('lostAffair'))} perdue${by('lostAffair')>1?'s':''}.${sheet?` <span>Sheet : ${fmt(sheet.rows)} ligne${sheet.rows>1?'s':''} lue${sheet.rows>1?'s':''} → ${fmt(sheet.operations)} opérations${sheet.notCounted?` (${esc(sheet.summary)} ; détail dans la fenêtre Données)`:''}.</span>`:''}</p>`;
   }
   // V6.13.6 : les projets sans avancement exploitable restent visibles et listables.
   function tunnelUnknownNote(a,analytic){
@@ -1569,7 +1597,7 @@
         <article class="obs-card"><div class="obs-card-head"><div><span>DYNAMIQUE</span><h2>Évolution des projets</h2></div><div class="obs-evolution-head-tools"><small>Une courbe par référentiel · clique sur une année ou la légende pour filtrer · clique sur « Total général » dans la légende pour l’afficher/masquer</small></div></div><div class="obs-chart">${evolutionSvg(ops,state.overviewShowTotal)}</div>${lostAbandonedNotice()}</article>
         <article class="obs-card"><div class="obs-card-head"><div><span>TERRITOIRES</span><h2>Départements les plus représentés</h2></div><button class="obs-card-action" data-page-link="territories">Explorer</button></div>${topBars(deps,8,'departmentName')}</article>
       </div>
-      <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>CERTIFICATION</span><h2>Avancement</h2></div><button class="obs-card-action" data-page-link="certification">Voir le détail</button></div>${tunnel(ops)}</article>
+      <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>CERTIFICATION</span><h2>Avancement</h2></div><button class="obs-card-action" data-page-link="certification">Voir le détail</button></div>${tunnel(ops,{exits:filteredExcludedOperations()})}</article>
       <div class="obs-grid-3">
         <article class="obs-card"><div class="obs-card-head"><div><span>ACTEURS</span><h2>Principaux maîtres d’ouvrage</h2></div><button class="obs-card-action" data-page-link="stakeholders">Tous</button></div>${topBars(moas,7,'moa')}</article>
         <article class="obs-card"><div class="obs-card-head"><div><span>MENTIONS</span><h2>Labels et mentions</h2></div>${compactViewToggle('mention',state.overviewMentionView,['list','bar','treemap'])}</div>${overviewTagWidget(ops,'mention')}</article>
@@ -1763,7 +1791,7 @@
       {label:'Soldés',value:fmt(a.sold),note:'dossiers marqués soldés',crossKey:'sold',crossValue:'true',crossLabel:'Dossiers soldés'},
       {label:'Perdus / abandonnés / annulés',value:fmt(inactive.length),note:'hors tunnel actif'}
     ])}
-    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Compter aussi les affaires annulées, abandonnées et perdues, comme dans la colonne BC de la Sheet"><input type="checkbox" data-tunnel-excluded-toggle="1" ${state.tunnelShowExcluded?'checked':''}><span>Inclure annulés / abandonnés</span></label><small>Chaque étape filtre l’ensemble du dashboard</small></div></div>${tunnel(state.tunnelShowExcluded?[...statusUniverse,...excluded]:statusUniverse,{analytic:true,includeExcluded:state.tunnelShowExcluded,excludedCount:excluded.length})}</article>
+    <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>AVANCEMENT</span><h2>Avancement</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Compter aussi les affaires annulées, abandonnées et perdues, comme dans la colonne BC de la Sheet"><input type="checkbox" data-tunnel-excluded-toggle="1" ${state.tunnelShowExcluded?'checked':''}><span>Inclure annulés / abandonnés</span></label><small>Chaque étape filtre l’ensemble du dashboard</small></div></div>${tunnel(state.tunnelShowExcluded?[...statusUniverse,...excluded]:statusUniverse,{analytic:true,includeExcluded:state.tunnelShowExcluded,exits:excluded,excludedCount:0})}</article>
     <article class="obs-card obs-cert-chronology"><div class="obs-card-head"><div><span>CHRONOLOGIE</span><h2>Statut par année de création</h2></div><div class="obs-cert-head-controls"><label class="obs-cert-excluded-toggle" title="Afficher ou masquer les affaires perdues, abandonnées et annulées dans cette chronologie"><input type="checkbox" data-status-year-excluded-toggle="1" ${state.statusYearShowExcluded?'checked':''}><span>Afficher perdus / abandonnés / annulés</span></label><div class="obs-card-head-tools"><small>Non démarrée reste distinct des sorties commerciales</small>${tableViewToggle('status-year',state.statusYearView,['list','histogram'])}</div></div></div>${statusYearMatrix([...filteredOperations({ignoreCrossKey:'statusYear'}),...(state.statusYearShowExcluded&&!globalFilterValues('status').length?filteredExcludedOperations({ignoreCrossKey:'statusYear'}):[])])}</article>
     ${labelYearCard(ops)}`;
   }
@@ -1916,10 +1944,6 @@
   }
 
   function solutionCardView(cardKey){ return state.solutionViews?.[cardKey]==='pie'?'pie':'bar'; }
-  function solutionViewToggle(cardKey){
-    const view=solutionCardView(cardKey);
-    return `<div class="obs-view-toggle obs-solution-view-toggle" role="group" aria-label="Mode d’affichage"><button type="button" class="${view==='bar'?'is-active':''}" data-solution-view="${attr(cardKey)}" data-view="bar" title="Barres">▥</button><button type="button" class="${view==='pie'?'is-active':''}" data-solution-view="${attr(cardKey)}" data-view="pie" title="Camembert">◕</button></div>`;
-  }
   function normalizedDistribution(key,options={}){
     const crossKey=`norm:${key}`, universe=filteredTechnicalOperations({ignoreCrossKey:crossKey});
     return {items:countBy(universe,o=>normalizedValue(o,key)),crossKey,...options};
@@ -1955,9 +1979,6 @@
     rows.forEach((x,i)=>{const a=100*acc/total;acc+=Number(x.value)||0;const b=100*acc/total;const color=colorFn?colorFn(x.name):palette[i%palette.length];stops.push(`${color} ${a.toFixed(2)}% ${b.toFixed(2)}%`);x._color=color;});
     return `<div class="obs-pie-layout"><div class="obs-pie-chart" style="background:conic-gradient(${stops.join(',')})" role="img" aria-label="Répartition en camembert"></div><div class="obs-pie-legend">${rows.map(x=>{const clickable=key&&!x.isOther;return `<${clickable?'button':'div'} ${clickable?`type="button" class="${activeCross(key,x.name)?'is-active':''}" ${crossAttrs(key,x.name,`${labelPrefix||key} : ${x.name}`)}`:'class="obs-pie-legend-static"'}><i style="background:${x._color}"></i><span>${esc(x.name)}</span><strong>${fmt(x.value)}<small>${fmt(pct(x.value,total),1)} %</small></strong></${clickable?'button':'div'}>`;}).join('')}</div></div>`;
   }
-  function distributionVisual(items,{view='bar',key='',labelPrefix='',maxItems=12,colorFn=null}={}){
-    return view==='pie'?pieDistribution(items,{key,labelPrefix,maxItems,colorFn}):tileDistribution(items,{key,labelPrefix,maxItems,colorFn});
-  }
 
   function tileDistribution(items,{key='',labelPrefix='',maxItems=12,colorFn=null}={}){
     const rows=items.slice(0,maxItems), total=items.reduce((a,x)=>a+(Number(x.value)||0),0)||1, max=Math.max(1,...rows.map(x=>x.value));
@@ -1969,15 +1990,7 @@
     }).join('')}</div>`;
   }
 
-  function normalizedSingleCard(title,cardKey,normKey,subtitle='Grande famille normalisée'){
-    const view=solutionCardView(cardKey), dist=normalizedDistribution(normKey);
-    return `<article class="obs-card obs-envelope-card"><div class="obs-card-head"><div><span>ENVELOPPE NORMALISÉE</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>${esc(subtitle)}</small>${solutionViewToggle(cardKey)}</div></div>${distributionVisual(dist.items,{view,key:dist.crossKey,maxItems:12,labelPrefix:title})}</article>`;
-  }
 
-  function technicalCard(title,cardKey,normKey){
-    const view=solutionCardView(cardKey),dist=normalizedDistribution(normKey),isVector=['heatingVector','ecsVector'].includes(normKey);
-    return `<article class="obs-card obs-technical-card ${isVector?'obs-vector-card':''}"><div class="obs-card-head"><div><span>SYSTÈMES NORMALISÉS</span><h2>${esc(title)}</h2></div><div class="obs-card-head-tools"><small>Grandes familles</small>${solutionViewToggle(cardKey)}</div></div>${distributionVisual(dist.items,{view,key:dist.crossKey,maxItems:12,labelPrefix:title,colorFn:isVector?vectorColor:null})}</article>`;
-  }
 
   function solutionMetricKpi(ops){
     const metric=state.solutionMetric||'ubat';
@@ -2007,7 +2020,7 @@
   }
   // dims : [{label, normKey, value: op => texte source, family: texte => famille}] ; comboKey : clé normalizedValue de la combinaison.
   function compositionCard({kicker='ENVELOPPE NORMALISÉE',title,subject,dims,comboKey,extra='',cls=''}){
-    const comp=ops=>core.familyComposition(ops,dims.map(d=>({value:d.value,family:d.family})));
+    const comp=ops=>core.familyComposition(ops,dims.map(d=>({value:d.value,family:d.family}))), single=dims.length===1;
     const all=comp(filteredTechnicalOperations()), n=all.n, N=all.population;
     const head=`<div class="obs-card-head"><div><span>${esc(kicker)}</span><h2>${esc(title)}</h2></div><small>${fmt(n)} opération${n>1?'s':''} renseignée${n>1?'s':''} sur ${fmt(N)}${lowSample(n)}</small></div>${extra}`;
     if(!n)return `<article class="obs-card obs-windows-wide obs-window-card ${cls}">${head}<div class="obs-empty">Aucune opération ne renseigne ${esc(subject)}.</div></article>`;
@@ -2015,11 +2028,11 @@
     const cu=comp(filteredTechnicalOperations({ignoreCrossKey:`norm:${comboKey}`})), top=cu.combinations.slice(0,5), peak=Math.max(1,...top.map(x=>x.count));
     const rows=top.map((c,i)=>{const label=c.parts.join(' · ');return `<tr class="${i===0?'is-first':''} ${activeCross(`norm:${comboKey}`,label)?'is-active':''}" ${crossAttrs(`norm:${comboKey}`,label,`${title} : ${label}`)} tabindex="0">${c.parts.map(p=>`<td>${esc(p)}</td>`).join('')}<td><span class="obs-window-share"><i style="width:${(100*c.count/peak).toFixed(1)}%"></i></span><b>${fmt(c.share,0)} %</b> <small>(${fmt(c.count)})</small></td></tr>`;}).join('');
     return `<article class="obs-card obs-windows-wide obs-window-card ${cls}">${head}<div class="obs-window-bands">${bands}</div>
-      <div class="obs-subsection-title">Combinaisons les plus fréquentes</div><div class="obs-table-wrap obs-window-table-wrap"><table class="obs-table obs-window-table"><thead><tr>${dims.map(d=>`<th>${esc(d.label)}</th>`).join('')}<th>Part des opérations</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="obs-margin-foot">Part = opérations ayant EXACTEMENT cette combinaison, sur les ${fmt(cu.n)} opérations renseignant ${esc(subject)}. Textes libres regroupés en familles (règles au Dictionnaire). Clic sur un segment ou une ligne : filtre croisé.</p></article>`;
+      <div class="obs-subsection-title">${single?'Familles les plus fréquentes':'Combinaisons les plus fréquentes'}</div><div class="obs-table-wrap obs-window-table-wrap"><table class="obs-table obs-window-table"><thead><tr>${dims.map(d=>`<th>${esc(d.label)}</th>`).join('')}<th>Part des opérations</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="obs-margin-foot">Part = opérations ayant ${single?'cette famille':'EXACTEMENT cette combinaison'}, sur les ${fmt(cu.n)} opérations renseignant ${esc(subject)}. Textes libres regroupés en familles (règles au Dictionnaire). Clic sur un segment ou une ligne : filtre croisé.</p></article>`;
   }
   function windowCompositionCard(){
-    return compositionCard({title:'Menuiseries extérieures : composition et combinaisons dominantes',subject:'au moins un champ menuiserie',comboKey:'windowCombo',dims:[
+    return compositionCard({title:'Menuiseries extérieures : composition et combinaisons dominantes',subject:'au moins un champ menuiserie',comboKey:'windowCombo',cls:'obs-windows-composition',dims:[
       {label:'Matériau',normKey:'windowMaterial',value:o=>o.windowMaterial,family:normalizeWindowMaterialFamily},
       {label:'Vitrage',normKey:'windowGlazing',value:o=>o.windowGlazing,family:normalizeGlazingFamily},
       {label:'Occultation',normKey:'windowShading',value:o=>o.windowShading,family:normalizeShadingFamily}]});
@@ -2032,6 +2045,22 @@
       {label:P.sl,normKey:P.sn||P.s,value:o=>o[P.s],family:P.sf},
       {label:'Isolant',normKey:P.i,value:o=>o[P.i],family:normalizeInsulationFamily}]});
   }
+  // V6.57 : tout l'onglet au même format (bandes + tableau) — mode constructif et systèmes techniques.
+  function constructionCompositionCard(){
+    return compositionCard({title:'Mode constructif',subject:'le mode constructif',comboKey:'structure',dims:[{label:'Mode constructif',normKey:'structure',value:o=>o.structure,family:normalizeStructureFamily}]});
+  }
+  function systemCompositionCard(kind){
+    const SYS='SYSTÈMES NORMALISÉS';
+    if(kind==='heating')return compositionCard({kicker:SYS,title:'Chauffage après travaux : vecteur et système',subject:'le chauffage après travaux',comboKey:'heatingCombo',dims:[
+      {label:'Vecteur',normKey:'heatingVector',value:o=>o.heatingAfter,family:normalizeEnergyVectorFamily},
+      {label:'Système',normKey:'heatingSystem',value:o=>[o.heatingModeAfter,o.heatingAfter].filter(Boolean).join(' '),family:(v,o)=>normalizeHeatingFamily(o)}]});
+    if(kind==='ecs')return compositionCard({kicker:SYS,title:'ECS après travaux : vecteur et système',subject:'l’ECS après travaux',comboKey:'ecsCombo',dims:[
+      {label:'Vecteur',normKey:'ecsVector',value:o=>o.ecsAfter||o.ecs,family:normalizeEnergyVectorFamily},
+      {label:'Système',normKey:'ecsSystem',value:o=>[o.ecs,o.ecsAfter].filter(Boolean).join(' '),family:(v,o)=>normalizeEcsFamily(o)}]});
+    return compositionCard({kicker:SYS,title:'Ventilation et refroidissement',subject:'la ventilation ou le refroidissement',comboKey:'ventCoolCombo',dims:[
+      {label:'Ventilation',normKey:'ventilationFamily',value:o=>o.ventilation,family:normalizeVentilationFamily},
+      {label:'Refroidissement',normKey:'coolingFamily',value:o=>o.cooling,family:normalizeCoolingFamily}]});
+  }
   function renderSolutions(){
     const ops=filteredTechnicalOperations();
     const roofR=averageRaw(ops,'roofR'), wallR=averageRaw(ops,'wallR'), floorR=averageRaw(ops,'floorR');
@@ -2041,19 +2070,19 @@
       ${solutionRGauge('Plancher bas · R moyen',floorR,'▱',10,3)}
       ${solutionMetricKpi(ops)}
     </div>
-    <div class="obs-section-title"><div><span>01</span><h2>Enveloppe du bâtiment</h2></div><p>Lecture compacte par grandes familles ; les valeurs détaillées restent conservées dans les données source.</p></div>
+    <div class="obs-section-title"><div><span>01</span><h2>Enveloppe du bâtiment</h2></div><p>Chaque paroi est lue de la même façon : répartition par famille (bandes) et combinaisons les plus fréquentes ; les valeurs détaillées restent dans les données source.</p></div>
     <div class="obs-solutions-grid">
-      <div class="obs-solutions-construction">${normalizedSingleCard('Mode constructif','construction','structure')}</div>
+      ${constructionCompositionCard()}
       ${envelopeCompositionCard('Toitures / planchers hauts : structure et isolant','roof')}
       ${envelopeCompositionCard('Façades / parois verticales : structure et isolant','walls')}
       ${envelopeCompositionCard('Planchers bas : type de plancher et isolant','floors')}
       ${windowCompositionCard()}
     </div>
-    <div class="obs-section-title"><div><span>02</span><h2>Systèmes techniques</h2></div><p>Chauffage, ECS, ventilation et refroidissement sont ramenés à des familles homogènes ; chaque encart peut basculer entre barres et camembert.</p></div>
-    <div class="obs-systems-grid">
-      ${technicalCard('Vecteur chauffage','heating-vector','heatingVector')}
-      ${technicalCard('Vecteur ECS','ecs-vector','ecsVector')}
-      ${technicalCard('Ventilation','ventilation','ventilationFamily')}${technicalCard('Refroidissement','cooling','coolingFamily')}
+    <div class="obs-section-title"><div><span>02</span><h2>Systèmes techniques</h2></div><p>Chauffage, ECS, ventilation et refroidissement ramenés à des familles homogènes, lus comme l’enveloppe : répartition et combinaisons les plus fréquentes.</p></div>
+    <div class="obs-solutions-grid obs-systems-composition">
+      ${systemCompositionCard('heating')}
+      ${systemCompositionCard('ecs')}
+      ${systemCompositionCard('ventcool')}
     </div>`;
   }
 
@@ -3514,6 +3543,7 @@
     const entityToggle=e.target.closest('[data-operations-entity-toggle]');if(entityToggle){state.operationsEntityView=entityToggle.checked?'groups':'operations';state.operationsPage=1;renderPage();return;}
     const groupCard=e.target.closest('[data-moa-group-card]');if(groupCard){openMoaGroupDrawer(groupCard.dataset.moaGroupCard);return;}const techOp=e.target.closest('[data-tech-op-code]');if(techOp){openTechnicalOperation(techOp.dataset.techOpCode);return;}
     const scatter=e.target.closest('[data-scatter-op]');if(scatter){openTechnicalOperation(scatter.dataset.scatterOp);return;}
+    const te=e.target.closest('[data-tunnel-exit]');if(te){state.tunnelExitOpen=state.tunnelExitOpen===te.dataset.tunnelExit?'':te.dataset.tunnelExit;state.tunnelExitPage=1;renderPage();return;}
     const cv=e.target.closest('[data-cross-view]');if(cv){state.crossView=cv.dataset.crossView;renderPage();return;}
     const cp=e.target.closest('[data-cross-pair]');if(cp){const [x,y]=cp.dataset.crossPair.split('|');state.crossX=x;state.crossY=y;state.crossUserSet=true;state.crossShowOut=false;renderPage();return;}
     if(e.target.closest('[data-cross-outliers]')){state.crossShowOut=!state.crossShowOut;renderPage();return;}
@@ -3555,7 +3585,7 @@
     const backRegion=e.target.closest('[data-map-back-region]'); if(backRegion){closeMapPopover();state.crossFilters=state.crossFilters.filter(f=>f.key!=='department');state.mapFocusRegion=state.mapFocusRegion||regionName(state.mapFocusDepartment);state.mapFocusDepartment='';state.mapFocusPending=true;state.mapOperationGrouping='department';renderPage();return;}
     const pastille=e.target.closest('[data-map-pastille]'); if(pastille){openMapPastille(pastille);return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
-    const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='cross')state.crossTablePage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
+    const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='tunnel-exit')state.tunnelExitPage=page;else if(kind==='cross')state.crossTablePage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
     const viewToggle=e.target.closest('[data-overview-view][data-view]'); if(viewToggle){const kind=viewToggle.dataset.overviewView,view=viewToggle.dataset.view;if(kind==='mention'){state.overviewMentionView=view;state.overviewMentionPage=1;}else if(kind==='performance'){state.overviewPerformanceView=view;state.overviewPerformancePage=1;}renderPage();return;}
     if(state.page==='overview'&&e.target.closest?.('#obsOverviewMap,.obs-ovmap-wrap,[data-ovmap-missing]')&&ovHandleClick(e))return;
     const cross=e.target.closest('[data-cross-key][data-cross-value]'); if(cross){const decodedValue=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossValue):cross.dataset.crossValue, decodedLabel=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossLabel||''):cross.dataset.crossLabel;const fixed=crossKeyValueFix(cross.dataset.crossKey,decodedValue,decodedLabel);if(fixed.value){if(state.page==='territories'&&fixed.key==='department'){closeMapPopover();if(state.mapFocusDepartment===fixed.value){state.mapFocusDepartment='';state.mapFocusPending=true;if(!activeCross('department',fixed.value)){renderPage();return;}}else{state.mapFocusDepartment=fixed.value;state.mapFocusRegion=state.mapFocusRegion||regionName(fixed.value);state.mapFocusPending=true;state.territorySummaryPage=1;state.territoryPage=1;if(activeCross('department',fixed.value)){renderPage();return;}}}if(state.page==='territories'&&fixed.key==='region'){closeMapPopover();if(activeCross('region',fixed.value)){resetTerritoryMapFocus();state.mapOperationGrouping='region';}else{focusTerritoryRegion(fixed.value);state.mapFocusDepartment='';state.mapOperationGrouping='department';state.mapLayers.departments=true;state.mapLayers.regions=true;state.territorySummaryPage=1;state.territoryPage=1;}}setCrossFilter(fixed.key,fixed.value,fixed.label);}return;}

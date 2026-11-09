@@ -1,5 +1,38 @@
 # Historique
 
+## V6.59
+
+**Avancement : toutes les opérations se retrouvent**
+- Sous les 8 étapes (Vue d’ensemble et Certification), trois tuiles « Sorties commerciales · hors statistiques » toujours visibles : **Annulées**, **Abandonnées**, **Perdues**, chacune avec la liste de ses opérations (code → fiche, projet, MOA, statut commercial, avancement BC, année de création ; « sans code » ou n° de contrat pour les lignes sans code interne).
+- **Rapprochement** sous l’avancement : « N opérations dans la sélection = étapes (dont propositions commerciales en cours) + sans avancement exploitable + annulées + abandonnées + perdues » — le total suit les filtres. Sans filtre, lien avec la Sheet : lignes lues → opérations (lignes regroupées sous un même code, sans code ni nom, vides ; détail dans la fenêtre Données). Export du 30/09/2026 : 7 003 lignes → 6 073 opérations = 5 226 dans les étapes (dont 56 propositions) + 17 sans avancement + 753 annulées + 77 abandonnées.
+- **Proposition commerciale en cours** : un contrat au Statut « Version préliminaire » est compté dans cette étape (règle validée), prioritaire sur un avancement BC « Non démarrée » ou vide ; une étape BC plus avancée est conservée. Export du 30/09/2026 : 56 contrats.
+
+**Écran de chargement**
+- Fine ligne de joint sur l’enduit au-dessus du compteur d’eau.
+
+## V6.58
+
+**Recherche : les opérations hors statistiques ne « disparaissent » plus**
+- Une opération dont le statut commercial est annulé, perdu ou abandonné reste exclue des statistiques (comme avant), mais la recherche la signale désormais : « n opérations correspondantes hors statistiques », avec le code (clic → fiche), le nom et le statut commercial. Avant, la recherche répondait seulement « 0 opération retenue » (cas signalé : OPE-004683, « Annulé »).
+- Le tableau vide de la recherche n’est plus affiché quand aucune opération n’est retenue.
+
+**Écran de chargement**
+- Minuscule point de rouille au pied de la vis droite du compteur d’eau.
+
+## V6.57
+
+**Solutions constructives : tout l’onglet au même format**
+- Mode constructif, Chauffage, ECS, Ventilation et refroidissement passent au format des parois et des menuiseries : bandes 100 % alignées (verts de l’Observatoire, « Non renseigné », « Autre… » et « non précisé » en gris), tableau des familles ou combinaisons les plus fréquentes, « n opérations renseignées sur N », clic = filtre croisé.
+  - Chauffage après travaux : bandes Vecteur et Système, combinaisons vecteur × système.
+  - ECS après travaux : bandes Vecteur et Système, combinaisons vecteur × système.
+  - Ventilation et refroidissement : une carte, deux bandes, combinaisons.
+  - Mode constructif : une bande et les familles les plus fréquentes.
+- Plus de bascule barres / camembert dans l’onglet ; les chiffres clés (R moyens, indicateur Ubat / TIC / DH) restent en tête.
+- Règles du système de chauffage complétées : « chauffage électrique direct », « radiateurs / panneaux rayonnants électriques » → Électrique direct ; « chauffage collectif gaz », « chaufferie gaz » → Chaudière gaz.
+
+**Écran de chargement**
+- Fine ombre portée sous le boîtier du compteur d’eau.
+
 ## V6.56
 
 **Import : lignes collées une colonne trop à gauche recalées automatiquement**

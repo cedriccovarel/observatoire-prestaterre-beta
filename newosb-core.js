@@ -235,7 +235,7 @@
   const isOtherFamily=name=>WINDOW_OTHER.includes(name)||/^Autre\b/.test(name)||/non précisé$/i.test(name);
   function familyComposition(ops,dims){
     const filled=(ops||[]).filter(o=>dims.some(d=>String(d.value(o)??'').trim()));
-    const n=filled.length, fams=filled.map(o=>dims.map(d=>d.family(d.value(o))));
+    const n=filled.length, fams=filled.map(o=>dims.map(d=>d.family(d.value(o),o)));
     const bands=dims.map((d,i)=>{const m=new Map();fams.forEach(f=>m.set(f[i],(m.get(f[i])||0)+1));return [...m].map(([name,count])=>({name,count,share:n?100*count/n:null})).sort((a,b)=>(isOtherFamily(a.name)-isOtherFamily(b.name))||b.count-a.count||a.name.localeCompare(b.name,'fr'));});
     const combos=new Map();fams.forEach(c=>{const k=c.join('\u0001');const e=combos.get(k)||{parts:c,count:0};e.count++;combos.set(k,e);});
     const combinations=[...combos.values()].map(e=>({...e,key:e.parts.join('\u0001'),share:n?100*e.count/n:null})).sort((a,b)=>b.count-a.count||a.key.localeCompare(b.key,'fr'));

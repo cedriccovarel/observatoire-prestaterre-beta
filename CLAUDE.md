@@ -20,6 +20,9 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.59 | Fine ligne de joint sur l'enduit au-dessus du compteur d'eau. |
+| V6.58 | Minuscule point de rouille au pied de la vis droite du compteur d'eau. |
+| V6.57 | Fine ombre portée sous le boîtier du compteur d'eau. |
 | V6.56 | Petit reflet clair sur le collier bleu du raccord du compteur d'eau. |
 | V6.55 | Petit joint noir entre le collier bleu et le tuyau du compteur d'eau. |
 | V6.54 | Petite étiquette blanche « relevé » suspendue par un fil à la vis gauche du compteur d'eau. |
@@ -76,3 +79,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - V6.56 : `NEWOSB_RULES.realignShiftedRows` recale à l'import (app.js `dataMatrixRowsToObjects`) les lignes dont le bloc
   « Zonage logement social » → « TAG » est collé une colonne trop à gauche dans la Sheet (l'utilisateur ne peut pas déplacer
   les colonnes) ; nombre affiché dans la fenêtre Données. Règle métier : RCU avant → autre vecteur après = alerte.
+- V6.59 (règle validée par l'utilisateur) : Statut « Version préliminaire » = Proposition commerciale en cours (prioritaire sur BC
+  « Non démarrée » / vide). L'avancement affiche toujours les sorties commerciales et un rapprochement : chaque opération de la
+  sélection doit se retrouver (étapes + sans avancement + annulées + abandonnées + perdues ; lignes Sheet → opérations).

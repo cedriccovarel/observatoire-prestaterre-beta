@@ -6961,6 +6961,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       // seulement pour une ligne sans code interne ET sans aucun avancement.
       let progress=DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{key:'unknown',label:'',state:'empty',source:'none'};
       if(!hasCode&&progress.state==='empty')progress={key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',source:'proposal'};
+      if(DATA_RULES?.applyContractStage)progress=DATA_RULES.applyContractStage(progress,dataRawValue(r,fields.affairStage));
       const rawStatus=progress.label;
       const contractNumber=String(dataRawValue(r,fields.contractNumber)||'').trim();
       const analysisExcluded=dataIsLostAbandonedStage(affairStage);
@@ -7014,6 +7015,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       const rowHasCode=String(dataRawValue(r,fields.code)||'').trim()!=='';
       let progress=(fields.status||fields.progressFallback)&&DATA_RULES?DATA_RULES.readProgress(r,fields.status,fields.progressFallback):{key:project.status||'unknown',label:project.rawStatus||'',state:project.progressState||'empty',source:project.progressSource||'none'};
       if(!rowHasCode&&progress.state==='empty')progress={key:'proposal',label:DATA_PROGRESS_LABELS.proposal||'Proposition commerciale en cours',state:'valid',source:'proposal'};
+      if(DATA_RULES?.applyContractStage)progress=DATA_RULES.applyContractStage(progress,affairStage);
       const rawStatus=progress.label;
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||project.constructionYear||'';
       const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||project.certificationYear||'';
@@ -7539,6 +7541,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   // NEWOSB V01 bridge: expose the proven V29.7.13 data engine to the new observatory UI.
   window.NEWOSB_ENGINE = {
     version:'29.7.13',
+    // V6.59 : rapprochement lignes de la Sheet → opérations (lignes lues, regroupées sous un même code, sans code ni nom, vides).
+    getSheetReconciliation(){const m=dataRuntime.sourceMeta;if(!dataRuntime.connected||!m||!Array.isArray(m.rows))return null;const r=dataUncountedReport(m.rows,m.rowNumbers,dataRuntime.sourceOperations,m.emptyRows,c=>c);return {rows:m.rows.length+(Number(m.emptyRows)||0),operations:(dataRuntime.sourceOperations||[]).length,notCounted:r.total,summary:r.summary};},
     getRuntime(){return {connected:dataRuntime.connected,mode:dataRuntime.mode,sourceUrl:dataRuntime.sourceUrl,sourceTab:dataRuntime.sourceTab,zone123Status:dataRuntime.zone123Status,count:dataRuntime.operations.length,lastLoadedAt:dataRuntime.lastLoadedAt,sourceMeta:dataRuntime.sourceMeta,progress:dataRuntime.progressDiagnostics||null,years:dataRuntime.yearDiagnostics||null,duplicateHeaders:dataRuntime.duplicateHeaders||[]};},
     getOperations(){return dataPrivacyApply((dataRuntime.sourceOperations&&dataRuntime.sourceOperations.length)?dataRuntime.sourceOperations:dataRuntime.operations);},
     getTechnicalOperations(){const projects=(dataRuntime.sourceOperations&&dataRuntime.sourceOperations.length)?dataRuntime.sourceOperations:dataRuntime.operations;return dataPrivacyApply(dataTechnicalOperations(projects));},
