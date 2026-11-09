@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.60 | Minuscule tache d'humidité sur l'enduit, sous le robinet du compteur d'eau. |
 | V6.59 | Fine ligne de joint sur l'enduit au-dessus du compteur d'eau. |
 | V6.58 | Minuscule point de rouille au pied de la vis droite du compteur d'eau. |
 | V6.57 | Fine ombre portée sous le boîtier du compteur d'eau. |
@@ -82,3 +83,5 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - V6.59 (règle validée par l'utilisateur) : Statut « Version préliminaire » = Proposition commerciale en cours (prioritaire sur BC
   « Non démarrée » / vide). L'avancement affiche toujours les sorties commerciales et un rapprochement : chaque opération de la
   sélection doit se retrouver (étapes + sans avancement + annulées + abandonnées + perdues ; lignes Sheet → opérations).
+- V6.60 : encarts « Marge au seuil » (Énergie, Carbone) : quartiles des valeurs (25 / 50 / 75 % des opérations), opérations sous la
+  médiane, moitié centrale (min–max, définition au survol) ; jauges masquables depuis ⓘ (`newosb.marginHidden.v1`, préférence locale).

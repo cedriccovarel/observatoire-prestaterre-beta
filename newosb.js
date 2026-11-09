@@ -100,6 +100,8 @@
     labelMergeDerogation:(()=>{try{return localStorage.getItem('newosb.labelMergeDerogation')!=='0';}catch{return true;}})(),
     layoutEditing:false,
     kwCollapsed:(()=>{try{return localStorage.getItem('newosb.kwCollapsed')==='1';}catch{return false;}})(),
+    // V6.60 — jauges masquées dans les encarts « Marge au seuil » (par encart : energy, carbon), préférence de ce navigateur.
+    marginHidden:(()=>{try{const v=JSON.parse(localStorage.getItem('newosb.marginHidden.v1')||'{}');return v&&typeof v==='object'?v:{};}catch{return {};}})(),
     overviewPerformanceView:'list',
     territoryTableView:'list',
     moaTableView:'list',
@@ -868,9 +870,20 @@
     const selectedCodes=new Set(ops.map(o=>String(o.code))); const missingOps=key?ops.filter(o=>String(rawValue(o,key)??'').trim()===''):[];
     return `<div class="obs-audit-content"><div class="obs-audit-kpis"><div><span>${technicalPage?'Opérations techniques':'Projets actifs'}</span><b>${fmt(ops.length)}</b></div><div><span>Hors statistiques</span><b>${fmt(excluded.length)}</b></div>${cov?`<div><span>Valeurs disponibles</span><b>${fmt(cov.available)} / ${fmt(cov.population)}</b></div><div><span>Couverture</span><b>${fmt(cov.rate,1)} %</b></div>`:''}</div><div class="obs-audit-section"><h4>Périmètre</h4><p>${esc(activeFilterScopeText())}</p><p>${fmt(all.length)} ${technicalPage?'opérations techniques':'projets'} chargés · ${fmt(excluded.length)} perdues/abandonnées/annulées exclues des statistiques actives.</p><p>Source : ${esc(runtime().connected?(runtime().mode||'connectée'):'démonstration')} · ${runtime().lastLoadedAt?`dernière actualisation ${esc(new Date(runtime().lastLoadedAt).toLocaleString('fr-FR'))}`:'date d’actualisation non disponible'}</p></div>${d?`<div class="obs-audit-section"><h4>${esc(d.label)}</h4><dl><dt>Définition</dt><dd>${esc(d.definition)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Nature</dt><dd>${esc(d.type)}</dd><dt>Unité</dt><dd>${esc(d.unit||'—')}</dd><dt>Méthode</dt><dd>${esc(d.method)}</dd></dl></div>`:`<div class="obs-audit-section"><h4>Calcul / agrégation</h4><p>Ce visuel est calculé à partir de la population filtrée de l’Observatoire Prestaterre. Les projets identifiés comme perdus, abandonnés ou annulés via <b>Statut</b> sont exclus avant agrégation.</p></div>`}${missingOps.length?`<div class="obs-audit-section"><h4>Données manquantes</h4><p>${fmt(missingOps.length)} opération${missingOps.length>1?'s':''} de la sélection sans valeur pour cet indicateur.</p></div>`:''}</div>`;
   }
-  function openAudit(title,metric=''){
+  // V6.60 — encart « Marge au seuil » : choix des jauges affichées, en tête de la fenêtre ⓘ.
+  function marginToggleHtml(card){
+    const id=card?.dataset?.marginCard; if(!id) return '';
+    let all=[];try{all=JSON.parse(card.dataset.marginAll||'[]');}catch{}
+    const hidden=new Set(state.marginHidden[id]||[]);
+    return `<fieldset class="obs-margin-toggles" data-margin-toggles="${attr(id)}"><legend>Jauges affichées dans cet encart</legend>${all.map(([k,l])=>`<label><input type="checkbox" data-margin-toggle="${attr(k)}"${hidden.has(k)?'':' checked'}> ${esc(l)}</label>`).join('')}<small>Préférence gardée dans ce navigateur.</small></fieldset>`;
+  }
+  function openAudit(title,metric='',card=null){
     let modal=document.getElementById('obsAuditModal');if(!modal){modal=document.createElement('div');modal.id='obsAuditModal';modal.className='obs-audit-modal';modal.innerHTML='<div class="obs-audit-backdrop" data-audit-close="1"></div><section class="obs-audit-panel"><header><div><span>TRAÇABILITÉ</span><h3 id="obsAuditTitle"></h3></div><button type="button" data-audit-close="1">×</button></header><div id="obsAuditBody"></div></section>';document.body.appendChild(modal);modal.addEventListener('click',e=>{if(e.target.closest('[data-audit-close]'))modal.classList.remove('is-open');});}
-    modal.querySelector('#obsAuditTitle').textContent=title||'Source et calcul';modal.querySelector('#obsAuditBody').innerHTML=auditHtml(title,metric);modal.classList.add('is-open');
+    modal.querySelector('#obsAuditTitle').textContent=title||'Source et calcul';modal.querySelector('#obsAuditBody').innerHTML=marginToggleHtml(card)+auditHtml(title,metric);
+    modal.querySelectorAll('[data-margin-toggle]').forEach(cb=>cb.onchange=()=>{ const box=cb.closest('[data-margin-toggles]'), id=box.dataset.marginToggles;
+      state.marginHidden[id]=[...box.querySelectorAll('[data-margin-toggle]')].filter(x=>!x.checked).map(x=>x.dataset.marginToggle);
+      try{localStorage.setItem('newosb.marginHidden.v1',JSON.stringify(state.marginHidden));}catch{}
+      renderPage(); });modal.classList.add('is-open');
   }
 
   function runtime(){ return engine.getRuntime(); }
@@ -2090,6 +2103,9 @@
   // V6.51 : barre de marge. Le seuil est une butée (trait noir) ; le point = médiane des ratios valeur ÷ seuil.
   function marginCodes(rows,limit=8){const codes=uniq(rows.map(r=>r.code).filter(Boolean));return `${codes.slice(0,limit).map(c=>`<button type="button" class="obs-margin-code" data-op-code="${attr(c)}">${esc(c)}</button>`).join('')}${codes.length>limit?`<em>+${fmt(codes.length-limit)} autre${codes.length-limit>1?'s':''}</em>`:''}`;}
   function marginBarRow(st,{label,unit='',digits=1}){
+    return marginBarRowHtml(st,{label,unit,digits}).replace('<div class="obs-margin-row','<div data-margin-key="'+attr(st.valueKey||label)+'" class="obs-margin-row');
+  }
+  function marginBarRowHtml(st,{label,unit='',digits=1}){
     const n=st.n, low=st.lowSample, u=unit?` ${unit}`:'';
     const nText=`${fmt(n)} opération${n>1?'s':''} comparable${n>1?'s':''}`;
     const overHtml=st.over.length?`<div class="obs-margin-over" role="note"><b>⚠ ${fmt(st.over.length)} hors seuil : à contrôler</b><span>${marginCodes(st.over)}</span></div>`:'';
@@ -2100,17 +2116,27 @@
     }
     const pos=r=>Math.max(0,Math.min(100,100*r));
     const med=pos(st.medianRatio), marginPct=Math.round(100*st.margin);
-    const iqr=st.q1!==null?`<span class="obs-margin-iqr" style="left:${pos(st.q1).toFixed(1)}%;width:${Math.max(.6,pos(st.q3)-pos(st.q1)).toFixed(1)}%" aria-hidden="true"></span>`:'';
+    // V6.60 — définition au survol : la moitié centrale = les 50 % d'opérations entre le repère 25 % et le repère 75 %.
+    const iqrTip=st.q1!==null?`Moitié centrale : la moitié des ${fmt(n)} opérations comparables situées au milieu, une fois classées de la plus basse à la plus haute (on écarte les 25 % les plus basses et les 25 % les plus hautes). Valeurs de ${fmt(st.valueQ1,digits)} à ${fmt(st.valueQ3,digits)}${u}, soit ${fmt(100*st.q1,0)} % à ${fmt(100*st.q3,0)} % du seuil.`:'';
+    const iqr=st.q1!==null?`<span class="obs-margin-iqr" style="left:${pos(st.q1).toFixed(1)}%;width:${Math.max(.6,pos(st.q3)-pos(st.q1)).toFixed(1)}%" title="${attr(iqrTip)}"></span><i class="obs-margin-qtick" style="left:${pos(st.q1).toFixed(1)}%" aria-hidden="true"><em>25 %</em></i><i class="obs-margin-qtick" style="left:${pos(st.q3).toFixed(1)}%" aria-hidden="true"><em>75 %</em></i>`:'';
+    // V6.60 — seuils atteints par 25 / 50 / 75 % des opérations (valeurs) et opérations sous la médiane.
+    const half=st.valueQ1!==null?`<small class="obs-margin-half" title="${attr(iqrTip)}">moitié centrale : de <b>${fmt(st.valueQ1,digits)}</b> à <b>${fmt(st.valueQ3,digits)}</b>${esc(u)}</small>`:'';
+    const quart=st.valueQ1!==null?`<small class="obs-margin-quart"><span>25 % des opérations ≤ <b>${fmt(st.valueQ1,digits)}</b></span><span>50 % ≤ <b>${fmt(st.valueQ2,digits)}</b></span><span>75 % ≤ <b>${fmt(st.valueQ3,digits)}</b>${esc(u)}</span></small>`:`<small class="obs-margin-quart">quartiles à partir de ${fmt(core.MIN_SAMPLE||5)} opérations</small>`;
+    const below=`<small class="obs-margin-below">${fmt(st.belowMedian)} opération${st.belowMedian>1?'s':''} sous la médiane (${fmt(st.medianValue,digits)}${esc(u)})</small>`;
     const aria=`${label} : médiane ${fmt(st.medianValue,digits)}${u}, soit ${fmt(100*st.medianRatio,0)} % du seuil, marge ${marginPct} %, ${nText}${low?', échantillon faible':''}${st.over.length?`, ${st.over.length} hors seuil à contrôler`:''}`;
     return `<div class="obs-margin-row ${low?'is-low':''}"><div class="obs-margin-name"><b>${esc(label)}</b><small>${nText}${low?` · <span class="obs-margin-lowtag">⚠ échantillon faible (${fmt(n)})</span>`:''}</small></div>
       <div class="obs-margin-track" role="img" aria-label="${attr(aria)}">${iqr}<span class="obs-margin-arrow" style="left:${med.toFixed(1)}%" aria-hidden="true"></span><span class="obs-margin-dot" style="left:${med.toFixed(1)}%" aria-hidden="true"><b>${fmt(st.medianValue,digits)}</b></span><i class="obs-margin-limit" aria-hidden="true"></i></div>
-      <div class="obs-margin-read"><strong>marge ${marginPct} %</strong><small>seuil médian ${fmt(st.medianMax,digits)}${esc(u)}</small><small class="obs-margin-mean">moyenne ${fmt(st.meanValue,digits)}${esc(u)}, tirée par les extrêmes</small>${dfltNote}${overHtml}</div></div>`;
+      <div class="obs-margin-read"><strong>marge ${marginPct} %</strong><small>seuil médian ${fmt(st.medianMax,digits)}${esc(u)}</small>${quart}${half}${below}<small class="obs-margin-mean">moyenne ${fmt(st.meanValue,digits)}${esc(u)}, tirée par les extrêmes</small>${dfltNote}${overHtml}</div></div>`;
   }
-  function marginBarCard(rows,{kicker,title}){
-    return `<article class="obs-card obs-margin-card"><div class="obs-card-head"><div><span>${esc(kicker)}</span><h2>${esc(title)}</h2></div><small>Le seuil est une butée : plus le point est loin du trait noir, plus la marge est grande</small></div>
+  // V6.60 — encart identifié (id : energy, carbon) : les jauges décochées dans ⓘ sont masquées.
+  function marginBarCard(allRows,{kicker,title,id=''}){
+    const hidden=new Set(id?(state.marginHidden[id]||[]):[]), keyOf=([st,opt])=>st.valueKey||opt.label;
+    const rows=allRows.filter(r=>!hidden.has(keyOf(r)));
+    const list=JSON.stringify(allRows.map(r=>[keyOf(r),r[1].label]));
+    return `<article class="obs-card obs-margin-card"${id?` data-margin-card="${attr(id)}" data-margin-all="${attr(list)}"`:''}><div class="obs-card-head"><div><span>${esc(kicker)}</span><h2>${esc(title)}</h2></div><small>Le seuil est une butée : plus le point est loin du trait noir, plus la marge est grande</small></div>
       <div class="obs-margin-scale" aria-hidden="true"><span></span><div><em>0</em><em>50 % du seuil</em><em>SEUIL</em></div><span></span></div>
-      <div class="obs-margin-list">${rows.map(([st,opt])=>marginBarRow(st,opt)).join('')}</div>
-      <div class="obs-margin-legend"><span><i class="dot"></i>médiane (valeur affichée au-dessus)</span><span><i class="iqr"></i>moitié centrale (dès 5 opérations)</span><span><i class="arrow">⟷</i>marge restante jusqu’au seuil</span><span><i class="ring"></i>moins de 5 opérations</span></div>
+      <div class="obs-margin-list">${rows.map(([st,opt])=>marginBarRow(st,opt)).join('')||'<p class="obs-margin-allhidden">Toutes les jauges sont masquées : cliquez sur ⓘ pour en réafficher.</p>'}</div>
+      <div class="obs-margin-legend"><span><i class="dot"></i>médiane (valeur affichée au-dessus)</span><span title="Moitié centrale : les 50 % d’opérations situées au milieu une fois classées de la plus basse à la plus haute, entre le repère 25 % (le quart le plus bas est à gauche) et le repère 75 % (le quart le plus haut est à droite). Survolez une bande pour ses valeurs min et max. Affichée à partir de 5 opérations."><i class="iqr"></i>moitié centrale, entre les repères 25 % et 75 % (dès 5 opérations) ⓘ</span><span><i class="arrow">⟷</i>marge restante jusqu’au seuil</span><span><i class="ring"></i>moins de 5 opérations</span></div>
       <p class="obs-margin-foot">Médiane des ratios valeur ÷ seuil, opération par opération, sur les seules opérations ayant la valeur ET son seuil. Les valeurs au-dessus de leur seuil sont écartées et signalées en Qualité & données.</p></article>`;
   }
   function beforeAfterMedianBlock(st,{unit='',digits=2,rangeNote=''}){
@@ -2164,7 +2190,7 @@
       {label:'Marge au Cep max',value:cepStats.margin===null?'—':`${Math.round(100*cepStats.margin)} %`,note:'1 − médiane des ratios Cep ÷ Cep max'},
       {label:'Sous le Cep max',value:compared?`${fmt(cepStats.underRate,1)} %`:'—',note:`${fmt(n)} / ${fmt(compared)} opérations avec Cep et Cep max${cepStats.over.length?` · ⚠ ${fmt(cepStats.over.length)} hors seuil`:''}`}
     ])}
-    ${marginBarCard([[cepStats,{label:'Cep',unit:'kWhEP/m².an'}],[cepnrStats,{label:'Cep,nr',unit:'kWhEP/m².an'}],[bbioStats,{label:'Bbio',unit:'points'}],[ticStats,{label:'TIC',unit:'°C'}],[dhStats,{label:'Confort d’été (DH)',unit:'°C·h',digits:0}]],{kicker:'MARGE AU SEUIL',title:'De combien les opérations restent-elles sous leur seuil ?'})}
+    ${marginBarCard([[cepStats,{label:'Cep',unit:'kWhEP/m².an'}],[cepnrStats,{label:'Cep,nr',unit:'kWhEP/m².an'}],[bbioStats,{label:'Bbio',unit:'points'}],[ticStats,{label:'TIC',unit:'°C'}],[dhStats,{label:'Confort d’été (DH)',unit:'°C·h',digits:0}]],{kicker:'MARGE AU SEUIL',title:'De combien les opérations restent-elles sous leur seuil ?',id:'energy'})}
     <div class="obs-section-title"><div><span>01</span><h2>Transitions énergétiques</h2></div><p>Les vecteurs sont regroupés en catégories comparables : Gaz, Électricité, PAC, CET, RCU, Bois / biomasse, etc.</p></div>
     <div class="obs-grid-2">
       <article class="obs-card obs-flow-card"><div class="obs-card-head"><div><span>CHAUFFAGE</span><h2>Vecteurs avant → après travaux</h2></div><small>Clique d’abord sur un vecteur à gauche</small></div>${transitionFlow(filteredOperations({ignoreCrossKey:'transition:heatingBefore:heatingAfter'}),'heatingBefore','heatingAfter','Chauffage','heating')}</article>
@@ -2239,7 +2265,7 @@
     ])}
     ${dpeVisualSummary(db,da,gb,ga,transitionOps)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
     <div class="obs-section-title"><div><span>01</span><h2>Marge des émissions carbone sous les maximums</h2></div><p>Le point est la médiane des ratios valeur ÷ seuil ; le trait noir est le seuil.</p></div>
-    ${marginBarCard([[iceStats,{label:'IC Énergie',unit:'kgCO₂e/m²'}],[iccStats,{label:'IC Construction',unit:'kgCO₂e/m²'}]],{kicker:'MARGE AU SEUIL',title:'IC Énergie et IC Construction'})}
+    ${marginBarCard([[iceStats,{label:'IC Énergie',unit:'kgCO₂e/m²'}],[iccStats,{label:'IC Construction',unit:'kgCO₂e/m²'}]],{kicker:'MARGE AU SEUIL',title:'IC Énergie et IC Construction',id:'carbon'})}
     <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Une étiquette ne peut pas se dégrader avec des travaux : toute dégradation est affichée en rouge et signalée en Qualité & données.</p></div>
     ${dpeStaircaseCard('energy')}${dpeStaircaseCard('ges')}`;
   }
@@ -3539,7 +3565,7 @@
   pageEl.addEventListener('click',e=>{
     if(handleLayoutClick(e))return;
     if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleClick?.(e)) return;
-    const audit=e.target.closest('[data-audit-card],.obs-kpi[data-audit-label],.obs-coverage-row[data-audit-label]'); if(audit){const card=audit.closest('.obs-card'),title=audit.dataset.auditLabel||card?.querySelector('h2')?.textContent||'Source et calcul';openAudit(title,audit.dataset.auditMetric||'');return;}
+    const audit=e.target.closest('[data-audit-card],.obs-kpi[data-audit-label],.obs-coverage-row[data-audit-label]'); if(audit){const card=audit.closest('.obs-card'),title=audit.dataset.auditLabel||card?.querySelector('h2')?.textContent||'Source et calcul';openAudit(title,audit.dataset.auditMetric||'',audit.matches('[data-audit-card]')?card:null);return;}
     const entityToggle=e.target.closest('[data-operations-entity-toggle]');if(entityToggle){state.operationsEntityView=entityToggle.checked?'groups':'operations';state.operationsPage=1;renderPage();return;}
     const groupCard=e.target.closest('[data-moa-group-card]');if(groupCard){openMoaGroupDrawer(groupCard.dataset.moaGroupCard);return;}const techOp=e.target.closest('[data-tech-op-code]');if(techOp){openTechnicalOperation(techOp.dataset.techOpCode);return;}
     const scatter=e.target.closest('[data-scatter-op]');if(scatter){openTechnicalOperation(scatter.dataset.scatterOp);return;}

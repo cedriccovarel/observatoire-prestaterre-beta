@@ -1657,3 +1657,18 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-tunnel-exit-list{margin-top:8px}
 .obs-tunnel-reconcile{margin:10px 0 0;font-size:11px;color:var(--obs-text);background:#f3f9f6;border:1px solid #d5e8de;border-radius:8px;padding:8px 10px}.obs-tunnel-reconcile span{display:block;margin-top:3px;color:var(--obs-muted);font-size:10.5px}
 .obs-muted-cell{font-size:10px;color:var(--obs-muted);font-style:italic}
+
+/* V6.60 — marge au seuil : repères 25 % / 75 %, quartiles, moitié centrale, jauges masquables */
+.obs-margin-iqr{cursor:help}
+.obs-margin-qtick{position:absolute;top:2px;bottom:2px;width:0;border-left:1.5px solid #2f6f55;pointer-events:none}
+.obs-margin-qtick em{position:absolute;top:100%;left:-14px;width:28px;text-align:center;font-style:normal;font-size:9px;color:#5c6f68;margin-top:1px}
+.obs-margin-read small.obs-margin-quart{display:flex;flex-wrap:wrap;gap:2px 8px}
+.obs-margin-read small.obs-margin-quart b,.obs-margin-read small.obs-margin-half b{color:var(--obs-text,#1f2d28);font-weight:700}
+.obs-margin-read small.obs-margin-half{cursor:help}
+.obs-margin-read small.obs-margin-below{color:#2f6f55}
+.obs-margin-legend span[title]{cursor:help}
+.obs-margin-allhidden{margin:8px 0;color:var(--obs-muted);font-size:12px}
+.obs-margin-toggles{border:1px solid #d6e3dc;border-radius:10px;padding:10px 12px;margin:0 0 14px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+.obs-margin-toggles legend{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--obs-green);padding:0 4px}
+.obs-margin-toggles label{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+.obs-margin-toggles small{flex-basis:100%;font-size:10px;color:var(--obs-muted)}

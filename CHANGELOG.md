@@ -1,5 +1,15 @@
 # Historique
 
+## V6.60
+
+**Marge au seuil (Énergie & transition, Carbone & DPE)**
+- Sous chaque jauge : seuils atteints par **25 %, 50 % et 75 % des opérations** (valeurs, dès 5 opérations), **moitié centrale** (de la valeur 25 % à la valeur 75 %) et **nombre d’opérations sous la médiane**.
+- Sur la barre : repères **25 %** et **75 %** aux bords de la moitié centrale. Au survol de la bande (et de la légende) : définition en clair de la moitié centrale, avec ses valeurs min et max et sa position par rapport au seuil.
+- Bouton **ⓘ** de l’encart : cases à cocher pour **afficher / masquer chaque jauge** (Cep, Cep,nr, Bbio, TIC, DH ; IC Énergie, IC Construction). Préférence gardée dans ce navigateur (aucune donnée).
+
+**Écran de chargement**
+- Minuscule tache d’humidité sur l’enduit, sous le robinet du compteur d’eau.
+
 ## V6.59
 
 **Avancement : toutes les opérations se retrouvent**

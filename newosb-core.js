@@ -177,6 +177,8 @@
       medianRatio:med,q1:enough?quantile(ratios,.25):null,q3:enough?quantile(ratios,.75):null,
       margin:med===null?null:1-med,medianValue:n?median(rows.map(r=>r.value)):null,medianMax:n?median(rows.map(r=>r.max)):null,
       meanValue:n?rows.reduce((s,r)=>s+r.value,0)/n:null,underRate:(n+over.length)?100*n/(n+over.length):null,
+      // V6.60 — quartiles des valeurs (dès MIN_SAMPLE opérations) et opérations strictement sous la valeur médiane.
+      ...(()=>{const vals=rows.map(r=>r.value).sort((a,b)=>a-b),q2=quantile(vals,.5);return {valueQ1:enough?quantile(vals,.25):null,valueQ2:q2,valueQ3:enough?quantile(vals,.75):null,belowMedian:n?rows.filter(r=>r.value<q2).length:0};})(),
       lowSample:n>0&&n<MIN_SAMPLE,reason};
   }
   // Médiane avant → médiane après sur les opérations ayant les deux valeurs (hors plage écartée).

@@ -141,6 +141,14 @@ test('moitié centrale (quartiles) à partir de 5 opérations seulement', () => 
   const few = C.thresholdMargin(ops.slice(0, 4), 'bbio', 'bbioMax');
   assert.strictEqual(few.lowSample, true); assert.strictEqual(few.q1, null); assert.strictEqual(few.q3, null);
 });
+test('V6.60 : quartiles des valeurs (25 / 50 / 75 %) et opérations sous la médiane', () => {
+  const ops = [10, 20, 30, 40, 50].map((v, i) => mk('Q' + i, { bbio: v, bbioMax: 100 + i }));
+  const m = C.thresholdMargin(ops, 'bbio', 'bbioMax');
+  assert.strictEqual(m.valueQ1, 20); assert.strictEqual(m.valueQ2, 30); assert.strictEqual(m.valueQ3, 40); assert.strictEqual(m.belowMedian, 2);
+  const few = C.thresholdMargin(ops.slice(0, 4), 'bbio', 'bbioMax');
+  assert.strictEqual(few.valueQ1, null); assert.strictEqual(few.valueQ3, null); assert.strictEqual(few.valueQ2, 25); assert.strictEqual(few.belowMedian, 2);
+  const none = C.thresholdMargin([], 'bbio', 'bbioMax'); assert.strictEqual(none.belowMedian, 0); assert.strictEqual(none.valueQ2, null);
+});
 test('n = 0 : non calculable avec la raison, jamais un faux 0 %', () => {
   const none = C.thresholdMargin([mk('A', { cep: '' })], 'cep', 'cepMax');
   assert.strictEqual(none.n, 0); assert.strictEqual(none.margin, null); assert.strictEqual(none.medianRatio, null); assert(/aucune valeur/.test(none.reason));
