@@ -1,5 +1,22 @@
 # Historique
 
+## V6.61 — Stock C dans « Marge au seuil » (Carbone)
+- Nouvelle jauge **Stock C** (kgC/m²) dans l'encart « Marge au seuil » de l'onglet Carbone, masquable depuis ⓘ comme les autres.
+- Source : colonne « Stock C/m² » lue par ExtracTerre et envoyée par TotalRecoll (complément en mémoire), ou une colonne
+  « Stock C » du Sheet si elle existe.
+- Le Stock C n'a pas de seuil réglementaire : la jauge montre la répartition (médiane, 25 / 50 / 75 %, moitié centrale, min–max,
+  opérations sous la médiane) sur une échelle de 0 à la valeur la plus haute. Aucune marge, aucun seuil inventé.
+- Fiche projet, onglet Carbone : ligne « Stock C (kgC/m²) ».
+- Présentation : agrandir le titre, les textes ou le bas de page décale maintenant le reste de la slide. L'en-tête et le bas de
+  page prennent la hauteur de leurs textes, et la zone des visuels se place entre les deux (réduite si besoin) au lieu d'être
+  recouverte. Le sur-titre, la mention « CONFIDENTIEL » et le numéro de page suivent les curseurs. La slide change pendant le
+  glissement du curseur, pas seulement au relâchement. L'export PPTX suit les mêmes tailles : avant, elles plafonnaient (titre
+  bloqué au-delà de ~61 px, bas de page au-delà de ~18 px).
+- Présentation, encart « Marge au seuil » capturé : les textes à droite des jauges (marge, seuil médian, quartiles, moitié
+  centrale…) suivent maintenant « Taille des textes ». Dans une slide, ces lectures s'étalent en largeur au lieu d'empiler 8
+  lignes : l'encart est moins réduit (lectures ~6,9 → 8,8 px sur la slide par défaut, ~9,6 px au maximum).
+- Écran de chargement : minuscule éclat d'enduit plus clair à gauche du compteur d'eau.
+
 ## V6.60
 
 **Marge au seuil (Énergie & transition, Carbone & DPE)**

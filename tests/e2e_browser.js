@@ -366,6 +366,14 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
       check(o2 === [t[1], t[2], t[0]].join(' | '), `glisser-déposer sur la slide : le visuel prend la place de celui où il est déposé (${o1} → ${o2})`);
       await page.dragAndDrop('.obs-pres-item-list li:nth-child(3)', '.obs-pres-item-list li:nth-child(1)'); await page.waitForTimeout(400);
       check(await order() === o1, 'glisser-déposer dans la liste de l’éditeur : ordre rétabli');
+      { const big = await page.evaluate(async () => { const set = (f, v) => { const el = document.querySelector(`[data-pres-field="${f}"]`); el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); };
+          const box = s => document.querySelector('#obsPresentationStage ' + s).getBoundingClientRect(), fs = s => getComputedStyle(document.querySelector('#obsPresentationStage ' + s)).fontSize;
+          const k0 = fs('.obs-pres-kicker'), f0 = box('.obs-pres-figure-wrap').top;
+          set('titleSize', 76); set('legendSize', 34); set('footerSize', 26); await new Promise(r => setTimeout(r, 100));
+          const r = { legendBottom: box('.obs-pres-title-block p').bottom, figTop: box('.obs-pres-figure-wrap').top, figBottom: box('.obs-pres-figure-wrap').bottom, footTop: box('.obs-pres-bottom').top, kicker: [k0, fs('.obs-pres-kicker')], num: fs('.obs-pres-page-number'), moved: box('.obs-pres-figure-wrap').top > f0 };
+          set('titleSize', 50); set('legendSize', 20); set('footerSize', 16); document.querySelectorAll('[data-pres-field$="Size"]').forEach(el => el.dispatchEvent(new Event('change', { bubbles: true }))); return r; });
+        await page.waitForTimeout(300);
+        check(big.legendBottom <= big.figTop && big.figBottom <= big.footTop && big.moved && big.kicker[0] !== big.kicker[1] && big.num !== '11px', `V6.61 : textes agrandis en direct, les visuels se décalent sans chevauchement, sur-titre et numéro suivent (${JSON.stringify(big)})`); }
       const jump = await page.evaluate(async () => { const sc = document.scrollingElement, pg = document.getElementById('obsPage'); pg.scrollTop = 160; sc.scrollTop = 120; const box = document.querySelector('[data-pres-stage-fit]'); const before = [pg.scrollTop, sc.scrollTop, box.offsetHeight]; const cb = document.querySelector('[data-pres-capture-check]'); cb.click(); await new Promise(r => setTimeout(r, 300)); const after = [pg.scrollTop, sc.scrollTop, document.querySelector('[data-pres-stage-fit]').offsetHeight]; const btn = document.querySelector('[data-pres-new-slide]').textContent; cb.click(); return { before, after, btn, same: document.querySelector('[data-pres-stage-fit]') === box }; });
       check(JSON.stringify(jump.before) === JSON.stringify(jump.after) && jump.same && /Nouvelle slide \(1\)/.test(jump.btn), `cocher une capture ne fait plus sauter la page (${JSON.stringify(jump)})`);
       await page.click('[data-pres-item-remove]'); await page.waitForTimeout(300);
@@ -815,7 +823,7 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         await page.evaluate(() => document.querySelector('button[data-page="carbon"]').click()); await page.waitForTimeout(500);
         const cb = await page.evaluate(() => ({ margins: document.querySelectorAll('.obs-margin-row').length, stairs: document.querySelectorAll('.obs-stair-card').length, flow: !!document.querySelector('.obs-flow-dpe'), worse: document.querySelector('.obs-stair-card .obs-gain-bin.is-worse b')?.textContent, guard: document.querySelector('.obs-stair-card .obs-dpe-guard')?.textContent || '', colorA: getComputedStyle(document.querySelector('.dpe-off-a')).backgroundColor, squares: document.querySelectorAll('.obs-stair-card:first-of-type .obs-stair-side.before span i').length }));
         if (vp.tag === 'desktop') {
-          check(cb.margins === 2 && cb.stairs === 2 && !cb.flow, `Carbone : 2 barres IC et 2 DPE en escalier, plus de flux DPE (${cb.margins}/${cb.stairs})`);
+          check(cb.margins === 3 && cb.stairs === 2 && !cb.flow, `Carbone : 2 barres IC + Stock C (V6.61) et 2 DPE en escalier, plus de flux DPE (${cb.margins}/${cb.stairs})`);
           check(cb.worse === '1' && /OP-9/.test(cb.guard) && /C → E/.test(cb.guard), 'DPE énergie : dégradation C → E (OP-9) comptée en rouge et listée — ' + cb.guard.slice(0, 120));
           check(cb.colorA === 'rgb(49, 152, 52)', 'classe A à la couleur officielle #319834');
           const before = await page.evaluate(() => document.querySelectorAll('.obs-stair-card .obs-stair-side.after.is-active').length);

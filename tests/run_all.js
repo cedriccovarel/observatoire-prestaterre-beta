@@ -149,6 +149,15 @@ test('V6.60 : quartiles des valeurs (25 / 50 / 75 %) et opérations sous la méd
   assert.strictEqual(few.valueQ1, null); assert.strictEqual(few.valueQ3, null); assert.strictEqual(few.valueQ2, 25); assert.strictEqual(few.belowMedian, 2);
   const none = C.thresholdMargin([], 'bbio', 'bbioMax'); assert.strictEqual(none.belowMedian, 0); assert.strictEqual(none.valueQ2, null);
 });
+test('V6.61 : Stock C sans seuil : répartition (min, quartiles, max), jamais de marge', () => {
+  const ops = [12, 30, 18, 24, 6, ''].map((v, i) => mk('S' + i, { stockC: v }));
+  const m = C.valueSpread(ops, 'stockC');
+  assert.strictEqual(m.n, 5); assert.strictEqual(m.spread, true); assert.strictEqual(m.min, 6); assert.strictEqual(m.max, 30);
+  assert.strictEqual(m.valueQ1, 12); assert.strictEqual(m.valueQ2, 18); assert.strictEqual(m.valueQ3, 24); assert.strictEqual(m.belowMedian, 2);
+  assert.strictEqual(m.margin, undefined); assert.strictEqual(m.medianRatio, undefined);
+  const few = C.valueSpread(ops.slice(0, 3), 'stockC'); assert.strictEqual(few.lowSample, true); assert.strictEqual(few.valueQ1, null);
+  const none = C.valueSpread([], 'stockC'); assert.strictEqual(none.n, 0); assert(/aucune valeur/.test(none.reason));
+});
 test('n = 0 : non calculable avec la raison, jamais un faux 0 %', () => {
   const none = C.thresholdMargin([mk('A', { cep: '' })], 'cep', 'cepMax');
   assert.strictEqual(none.n, 0); assert.strictEqual(none.margin, null); assert.strictEqual(none.medianRatio, null); assert(/aucune valeur/.test(none.reason));

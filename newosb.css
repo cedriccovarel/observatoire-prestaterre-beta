@@ -459,17 +459,17 @@ body.auth-granted .app-shell{height:100vh!important;min-height:0!important;overf
 .obs-pres-safe{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:50% 0;transform:translateY(37.8px) scale(.9475)}
 .obs-pres-osb-brand{position:absolute;top:14px;left:44px;width:112px;z-index:4}
 .obs-pres-osb-brand img{display:block;width:100%;height:auto}
-.obs-pres-confidential{position:absolute;right:44px;top:15px;z-index:4;border-radius:999px;background:#06402B;color:#fff;padding:8px 14px;font-size:10px;font-weight:900;letter-spacing:.16em;line-height:1;text-transform:uppercase;outline:none}
-.obs-pres-stage-standard .obs-pres-top{position:absolute;left:190px;right:180px;top:28px;height:92px;display:grid;grid-template-columns:5px minmax(0,1fr);gap:18px;align-items:stretch;z-index:3}
+.obs-pres-confidential{position:absolute;right:44px;top:15px;z-index:4;border-radius:999px;background:#06402B;color:#fff;padding:8px 14px;font-size:var(--pres-conf-size,10px);font-weight:900;letter-spacing:.16em;line-height:1;text-transform:uppercase;outline:none}
+.obs-pres-stage-standard .obs-pres-top{position:absolute;left:190px;right:180px;top:28px;height:var(--pres-top-h,92px);display:grid;grid-template-columns:5px minmax(0,1fr);gap:18px;align-items:stretch;z-index:3}
 .obs-pres-title-line{width:5px;border-radius:10px;background:#06402B;height:100%}
 .obs-pres-stage-standard .obs-pres-title-block{display:flex;flex-direction:column;gap:4px;min-width:0;justify-content:flex-start}
-.obs-pres-stage-standard .obs-pres-kicker{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#668278;font-weight:800;line-height:1.05}
+.obs-pres-stage-standard .obs-pres-kicker{font-size:var(--pres-kicker-size,11px);letter-spacing:.13em;text-transform:uppercase;color:#668278;font-weight:800;line-height:1.05}
 .obs-pres-stage-standard .obs-pres-title-block h2{font-size:var(--pres-title-size,50px);line-height:.98;color:#102D25;font-weight:900;letter-spacing:-.025em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .obs-pres-stage-standard .obs-pres-title-block p{font-size:var(--pres-legend-size,20px);line-height:1.1;color:#1c5960;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.obs-pres-stage-standard .obs-pres-figure-wrap{position:absolute;left:44px;right:44px;top:148px;bottom:90px;border:1px solid #c9d8d2;border-radius:16px;background:#fff;padding:16px;overflow:hidden}
+.obs-pres-stage-standard .obs-pres-figure-wrap{position:absolute;left:44px;right:44px;top:var(--pres-fig-top,148px);bottom:var(--pres-fig-bottom,90px);border:1px solid #c9d8d2;border-radius:16px;background:#fff;padding:16px;overflow:hidden}
 .obs-pres-stage-standard .obs-pres-figure{height:100%;width:100%;transform:scale(var(--pres-body-scale,1));transform-origin:top left}
-.obs-pres-stage-standard .obs-pres-bottom{position:absolute;left:44px;right:44px;bottom:24px;height:50px;display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.75fr) 30px;gap:18px;align-items:start;border-top:1px solid #c9d8d2;padding-top:9px;font-size:var(--pres-footer-size,16px);color:#395248}
-.obs-pres-page-number{font-size:11px;color:#7b8c85;text-align:right;padding-top:2px}
+.obs-pres-stage-standard .obs-pres-bottom{position:absolute;left:44px;right:44px;bottom:24px;height:var(--pres-bottom-h,50px);display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,.75fr) 30px;gap:18px;align-items:start;border-top:1px solid #c9d8d2;padding-top:9px;font-size:var(--pres-footer-size,16px);color:#395248}
+.obs-pres-page-number{font-size:var(--pres-num-size,11px);color:#7b8c85;text-align:right;padding-top:2px}
 .obs-pres-stage-standard [contenteditable]{outline:none;border-radius:7px}
 .obs-pres-stage-standard [contenteditable]:focus{background:#f2f8f4;box-shadow:0 0 0 2px rgba(6,64,43,.10)}
 
@@ -1672,3 +1672,27 @@ tr.is-provisional .req-compat-bar i{background:#e0b44d}
 .obs-margin-toggles legend{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--obs-green);padding:0 4px}
 .obs-margin-toggles label{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
 .obs-margin-toggles small{flex-basis:100%;font-size:10px;color:var(--obs-muted)}
+
+/* V6.61 — jauge sans seuil (Stock C) : pas de trait de seuil, fin d'échelle = valeur la plus haute observée. */
+.obs-margin-row.is-spread .obs-margin-track{background:repeating-linear-gradient(90deg,#eef3f0 0 10px,#e6ede9 10px 20px)}
+.obs-margin-scaleend{position:absolute;right:0;top:2px;bottom:2px;width:0;border-left:1.5px dashed #8aa39a;pointer-events:none}
+.obs-margin-scaleend em{position:absolute;top:100%;right:-2px;font-style:normal;font-size:9px;color:#5c6f68;margin-top:1px;white-space:nowrap}
+.obs-margin-row.is-spread .obs-margin-read strong{color:#5c6f68}
+
+/* V6.61 — la zone des visuels se réduit (sans changer la mise en page) quand l'en-tête ou le bas de page grandit. */
+.obs-pres-stage-standard .obs-pres-figure-wrap>.obs-pres-items{transform:scale(var(--pres-fit,1));transform-origin:top center}
+
+/* V6.61 — dans une slide, les textes des encarts « Marge au seuil » suivent « Taille des textes » (--pres-cap-text). */
+.obs-pres-items .obs-margin-scale,.obs-pres-items .obs-margin-row{grid-template-columns:minmax(110px,calc(160px*var(--pres-cap-text,1))) minmax(240px,1fr) minmax(220px,1.5fr)}
+.obs-pres-items .obs-margin-row{padding:20px 0 8px}
+.obs-pres-items .obs-margin-read{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px}
+.obs-pres-items .obs-margin-read>small,.obs-pres-items .obs-margin-read>strong{display:inline-block;margin-top:0}
+.obs-pres-items .obs-margin-read>.obs-margin-over{flex-basis:100%}
+.obs-pres-items .obs-margin-name b{font-size:calc(14px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-name small,.obs-pres-items .obs-margin-read small,.obs-pres-items .obs-margin-over,.obs-pres-items .obs-margin-legend{font-size:calc(10px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-read strong{font-size:calc(16px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-read small.obs-margin-mean,.obs-pres-items .obs-margin-qtick em,.obs-pres-items .obs-margin-scaleend em{font-size:calc(9px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-dot b{font-size:calc(15px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-code,.obs-pres-items .obs-margin-scale em,.obs-pres-items .obs-margin-foot,.obs-pres-items .obs-margin-over em{font-size:calc(9.5px*var(--pres-cap-text,1))}
+.obs-pres-items .obs-margin-read>small.obs-margin-quart{display:inline-flex;flex-wrap:wrap;gap:0 8px}
+.obs-pres-items .obs-margin-qtick em{width:auto;left:0;transform:translateX(-50%);white-space:nowrap}

@@ -86,6 +86,7 @@
     {key:'icEnergyMax',label:'IC Énergie max',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Seuil IC Énergie applicable.',method:'Valeur source.'},
     {key:'icConstruction',label:'IC Construction',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Indicateur carbone construction.',method:'Valeur source.'},
     {key:'icConstructionMax',label:'IC Construction max',unit:'kgCO₂e/m²',source:'OPERATIONS / RSEnv',type:'source',definition:'Seuil IC Construction réglementaire applicable à l’opération.',method:'Valeur source. Sert de niveau réglementaire courant dans les comparaisons carbone.'},
+    {key:'stockC',label:'Stock C',unit:'kgC/m²',source:'ExtracTerre via TotalRecoll (RSEnv)',type:'source',definition:'Stockage de carbone biogénique dans le bâtiment (Stock,C), par m².',method:'Valeur source lue par ExtracTerre et transmise par TotalRecoll. Aucun seuil réglementaire : l’Observatoire montre la répartition des valeurs (médiane, quartiles), pas une marge.'},
     {key:'icConstruction2028',label:'Seuil IC Construction 2028',unit:'kgCO₂e/m²',source:'RSEnv / Calcul NEWOSB',type:'normalized',definition:'Seuil carbone construction applicable au jalon 2028.',method:'Recherche prioritaire d’une colonne source contenant IC Construction et 2028 ; à défaut valeur de référence NEWOSB 589,63 kgCO₂e/m².'},
     {key:'icConstruction2031',label:'Seuil IC Construction 2031',unit:'kgCO₂e/m²',source:'RSEnv / Calcul NEWOSB',type:'normalized',definition:'Seuil carbone construction applicable au jalon 2031.',method:'Recherche prioritaire d’une colonne source contenant IC Construction et 2031 ; à défaut valeur de référence NEWOSB 498,16 kgCO₂e/m².'},
     {key:'dpeEnergyBefore',label:'DPE énergie avant',unit:'classe',source:'OPERATIONS / DPE',type:'source',definition:'Classe énergie avant travaux.',method:'Classe A à G issue de la source.'},
@@ -180,6 +181,15 @@
       // V6.60 — quartiles des valeurs (dès MIN_SAMPLE opérations) et opérations strictement sous la valeur médiane.
       ...(()=>{const vals=rows.map(r=>r.value).sort((a,b)=>a-b),q2=quantile(vals,.5);return {valueQ1:enough?quantile(vals,.25):null,valueQ2:q2,valueQ3:enough?quantile(vals,.75):null,belowMedian:n?rows.filter(r=>r.value<q2).length:0};})(),
       lowSample:n>0&&n<MIN_SAMPLE,reason};
+  }
+  // V6.61 — répartition d'une valeur SANS seuil réglementaire (Stock C) : min, quartiles, médiane, max. Aucune marge calculée.
+  function valueSpread(ops,key){
+    const rows=[];(ops||[]).forEach(op=>{const v=rawNumber(op,key);if(v!==null&&v>=0)rows.push({op,code:projectCode(op),value:v});});
+    const n=rows.length,vals=rows.map(r=>r.value).sort((a,b)=>a-b),enough=n>=MIN_SAMPLE,q2=quantile(vals,.5);
+    return {valueKey:key,spread:true,population:(ops||[]).length,n,rows,over:[],min:n?vals[0]:null,max:n?vals[n-1]:null,
+      valueQ1:enough?quantile(vals,.25):null,valueQ2:q2,valueQ3:enough?quantile(vals,.75):null,medianValue:q2,
+      meanValue:n?vals.reduce((s,v)=>s+v,0)/n:null,belowMedian:n?rows.filter(r=>r.value<q2).length:0,lowSample:n>0&&n<MIN_SAMPLE,
+      reason:n?'':'aucune valeur renseignée (ExtracTerre via TotalRecoll)'};
   }
   // Médiane avant → médiane après sur les opérations ayant les deux valeurs (hors plage écartée).
   function beforeAfterMedian(ops,beforeKey,afterKey,options={}){
@@ -364,5 +374,5 @@
     return (ops||[]).filter(op=>{const cp=String(op?.postalCode||'').replace(/\D/g,'');const d=String(op?.department||'').toUpperCase();if(cp.length<2||!d)return false;if(d==='2A'||d==='2B')return cp.startsWith('20')===false;return cp.slice(0,2)!==d.slice(0,2);}).length;
   }
 
-  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,quantile,thresholdMargin,beforeAfterMedian,dpeGain,dpeGainBucket,dpeStaircase,windowMaterialFamily,glazingFamily,shadingFamily,windowComposition,familyComposition,isOtherFamily,displayCode:projectCode,isRcu,rcuDegradations,geoClass,geoPlan,clusterPoints,columnTags,GEO_MIN_K,crossPairs:CROSS_PAIRS,crossValue,crossPoints,crossMetricCounts,bestCrossPair,isThresholdPair,robustOutliers,thresholdPairs:THRESHOLD_PAIRS,DH_DEFAULT_MAX,UBAT_RANGE,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
+  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,quantile,thresholdMargin,valueSpread,beforeAfterMedian,dpeGain,dpeGainBucket,dpeStaircase,windowMaterialFamily,glazingFamily,shadingFamily,windowComposition,familyComposition,isOtherFamily,displayCode:projectCode,isRcu,rcuDegradations,geoClass,geoPlan,clusterPoints,columnTags,GEO_MIN_K,crossPairs:CROSS_PAIRS,crossValue,crossPoints,crossMetricCounts,bestCrossPair,isThresholdPair,robustOutliers,thresholdPairs:THRESHOLD_PAIRS,DH_DEFAULT_MAX,UBAT_RANGE,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
 })();

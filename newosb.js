@@ -515,6 +515,8 @@
 
   // ---- Disposition automatique des captures d'une slide ----
   const PRES_LAYOUTS=[['auto','Automatique'],['feature','Mise en avant (1 grand + autres)'],['1','1 colonne'],['2','2 colonnes'],['3','3 colonnes'],['4','4 colonnes']];
+  // V6.61 — « Taille des textes » agrandit aussi les petits textes des visuels capturés (ex. lectures à droite des jauges de marge).
+  function presCapText(slide){return Math.round(((Number(slide?.legendSize)||20)/20)*1000)/1000;}
   function presItemTitleSize(n,slide){const base=n<=1?20:n===2?18:n===3?16:n===4?15:n<=6?14:13;return Math.round(base*((Number(slide?.legendSize)||20)/20)*10)/10;}
   function presentationLayout(caps,slide,W=PRES_AREA.width,H=PRES_AREA.height){
     const n=caps.length;if(!n)return [];
@@ -536,7 +538,7 @@
     if(!n)return `<div class="obs-pres-items is-empty" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px"><div class="obs-pres-items-empty"><b>Slide sans visuel</b><span>Coche des captures dans la boîte, à gauche, puis « Ajouter à cette slide ».</span></div></div>`;
     const rects=presentationLayout(caps,slide),ts=presItemTitleSize(n,slide),scale=Math.max(.5,Math.min(1,(Number(slide.bodyScale)||100)/100));
     const dnd=editable&&n>1;
-    return `<div class="obs-pres-items ${n>1?'is-multi':'is-single'}" data-pres-scale="${scale}" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;--pres-item-title:${ts}px">${caps.map((c,i)=>{const r=rects[i];return `<section class="obs-pres-item" style="left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;padding:${r.pad/2}px" ${dnd?`data-pres-drop-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}"`:''}>${dnd?`<span class="obs-pres-item-grip" draggable="true" data-pres-drag-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" title="Glisser sur un autre visuel pour échanger leur place" aria-hidden="true">⠿</span>`:''}${r.head?`<header class="obs-pres-item-head" style="height:${r.head}px"><b ${editable?`contenteditable="true" spellcheck="false" data-pres-capture-title="${attr(c.id)}"`:''}>${esc(c.title)}</b></header>`:''}<div class="obs-pres-item-body" style="height:calc(100% - ${r.head}px)"><div class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}" style="width:${Math.max(120,Number(c.w)||1100)}px">${c.contentHtml||''}</div></div></section>`;}).join('')}</div>`;
+    return `<div class="obs-pres-items ${n>1?'is-multi':'is-single'}" data-pres-scale="${scale}" style="width:${PRES_AREA.width}px;height:${PRES_AREA.height}px;--pres-item-title:${ts}px;--pres-cap-text:${presCapText(slide)}">${caps.map((c,i)=>{const r=rects[i];return `<section class="obs-pres-item" style="left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;padding:${r.pad/2}px" ${dnd?`data-pres-drop-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}"`:''}>${dnd?`<span class="obs-pres-item-grip" draggable="true" data-pres-drag-item="${attr(c.id)}" data-pres-id="${attr(slide.id)}" title="Glisser sur un autre visuel pour échanger leur place" aria-hidden="true">⠿</span>`:''}${r.head?`<header class="obs-pres-item-head" style="height:${r.head}px"><b ${editable?`contenteditable="true" spellcheck="false" data-pres-capture-title="${attr(c.id)}"`:''}>${esc(c.title)}</b></header>`:''}<div class="obs-pres-item-body" style="height:calc(100% - ${r.head}px)"><div class="obs-pres-item-scaler" data-nat-w="${Math.max(120,Number(c.w)||1100)}" data-nat-h="${Math.max(60,Number(c.h)||520)}" style="width:${Math.max(120,Number(c.w)||1100)}px">${c.contentHtml||''}</div></div></section>`;}).join('')}</div>`;
   }
   // Mise à l'échelle de chaque visuel dans sa case (le contenu est rendu à sa largeur d'origine, puis réduit
   // ou agrandi proportionnellement et centré). Appelée après chaque affichage et avant chaque export.
@@ -549,7 +551,7 @@
         el.style.transform='none';
         // Le visuel est rendu à plusieurs largeurs proches de sa largeur d'origine (graphiques, tableaux et
         // tuiles se réorganisent) ; on garde celle qui remplit le mieux la case, à lisibilité égale.
-        const widths=[...new Set([1,0.8,0.65,1.25].map(f=>Math.round(Math.max(260,natW*f))))];
+        const widths=[...new Set([1,0.8,0.65,1.25,...(el.querySelector('.obs-margin-card')?[1.5,1.8,2.2,2.6]:[])].map(f=>Math.round(Math.max(260,natW*f))))]; // V6.61 : encart de marge (haut) aussi essayé plus large
         let best=null;
         widths.forEach((w,i)=>{el.style.width=`${w}px`;const ew=Math.max(w,el.scrollWidth),h=Math.max(1,el.offsetHeight||Number(el.dataset.natH)||520),k=Math.min(bw/ew,bh/h,PRES_ITEM_MAX_ZOOM),area=k*k*w*h*(i===0?1.08:1)*(k<.5?k/.5:1);if(!best||area>best.area)best={w,h,k,area};});
         el.style.width=`${best.w}px`;
@@ -573,6 +575,19 @@
     box.style.width=`${Math.round(1280*k)}px`;box.style.height=`${Math.round(720*k)}px`;
   }
   window.addEventListener('resize',()=>{if(state.page==='presentation')fitPresentationPreview();});
+  // V6.61 — tailles de texte d'une slide standard : l'en-tête et le bas de page prennent la hauteur de leurs textes,
+  // la zone des visuels se place entre les deux (réduite si besoin) ; sur-titre, mention et numéro suivent les curseurs.
+  function presSlideMetrics(slide){
+    const T=Number(slide.titleSize)||50,L=Number(slide.legendSize)||20,F=Number(slide.footerSize)||16;
+    const kicker=Math.max(11,Math.round(L*.55)),conf=Math.max(10,Math.round(L*.5)),num=Math.max(11,Math.round(F*.7));
+    const topH=Math.ceil(kicker*1.05+4+T*.98+4+L*1.1+2),figTop=28+topH+27,botH=Math.max(50,Math.round(F*1.45*2+3)),figBottom=24+botH+16;
+    const fit=Math.max(.4,Math.min(1,(720-figTop-figBottom-32)/PRES_AREA.height));
+    return {T,L,F,kicker,conf,num,topH,figTop,botH,figBottom,fit};
+  }
+  function presStageVars(slide){
+    const m=presSlideMetrics(slide);
+    return `--pres-title-size:${m.T}px;--pres-legend-size:${m.L}px;--pres-footer-size:${m.F}px;--pres-kicker-size:${m.kicker}px;--pres-conf-size:${m.conf}px;--pres-num-size:${m.num}px;--pres-top-h:${m.topH}px;--pres-fig-top:${m.figTop}px;--pres-bottom-h:${m.botH}px;--pres-fig-bottom:${m.figBottom}px;--pres-fit:${m.fit.toFixed(4)};`;
+  }
   function presentationSlideMarkup(slide){
     if(!slide) return `<div class="obs-empty">Aucune slide. Ajoute une couverture ou crée une slide depuis la boîte de captures.</div>`;
     const slideIndex=Math.max(1,state.presentationSlides.findIndex(s=>s.id===slide.id)+1);
@@ -586,7 +601,7 @@
         </div>
       </article>`;
     }
-    return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-standard" style="--pres-title-size:${Number(slide.titleSize)||50}px;--pres-legend-size:${Number(slide.legendSize)||20}px;--pres-footer-size:${Number(slide.footerSize)||16}px;font-family:${attr(slide.fontFamily||fontChoices()[0])}">
+    return `<article id="obsPresentationStage" class="obs-pres-stage obs-pres-stage-standard" style="${presStageVars(slide)}font-family:${attr(slide.fontFamily||fontChoices()[0])}">
       <div class="obs-pres-safe">
       <div class="obs-pres-osb-brand"><img src="assets/prestaterre_logo_green.png" alt="Prestaterre"></div>
       <div class="obs-pres-confidential" contenteditable="true" spellcheck="false" data-pres-editable="confidentialText" data-pres-id="${attr(slide.id)}">${esc(slide.confidentialText||'CONFIDENTIEL')}</div>
@@ -812,25 +827,33 @@
       const font=pptxFontName(model.fontFamily);
       if(model.type==='cover'){
         if(coverData)s.addImage({data:coverData,x:0,y:0,w:13.333,h:7.5});
-        s.addText(String(model.title||''),{x:.72,y:3.55,w:8.8,h:.78,fontFace:font,fontSize:Math.max(28,Math.min(48,(Number(model.titleSize)||64)*.58)),bold:true,color:'06402B',margin:0,breakLine:false,fit:'shrink'});
-        s.addText(String(model.subtitle||''),{x:.75,y:4.42,w:8.8,h:.55,fontFace:font,fontSize:Math.max(15,Math.min(27,(Number(model.subtitleSize)||28)*.72)),color:'315D50',margin:0,fit:'shrink'});
-        s.addText(String(model.dateText||''),{x:9.2,y:4.52,w:3.35,h:.45,fontFace:font,fontSize:Math.max(14,Math.min(24,(Number(model.dateSize)||26)*.72)),bold:true,color:'111111',align:'right',margin:0,fit:'shrink'});
+        // V6.61 — tailles sans plafond ; le sous-titre et la date descendent quand le titre grandit.
+        const cT=Math.max(28,(Number(model.titleSize)||64)*.58),cS=Math.max(15,(Number(model.subtitleSize)||28)*.72),cD=Math.max(14,(Number(model.dateSize)||26)*.72);
+        const cTh=Math.max(.78,cT/72*1.2),cSy=3.55+cTh+.09,cSh=Math.max(.55,cS/72*1.35);
+        s.addText(String(model.title||''),{x:.72,y:3.55,w:8.8,h:cTh,fontFace:font,fontSize:cT,bold:true,color:'06402B',margin:0,breakLine:false,fit:'shrink'});
+        s.addText(String(model.subtitle||''),{x:.75,y:cSy,w:8.8,h:cSh,fontFace:font,fontSize:cS,color:'315D50',margin:0,fit:'shrink'});
+        s.addText(String(model.dateText||''),{x:9.2,y:cSy+.1,w:3.35,h:Math.max(.45,cD/72*1.3),fontFace:font,fontSize:cD,bold:true,color:'111111',align:'right',margin:0,fit:'shrink'});
         s.addText(String(model.footerText||''),{x:.42,y:7.08,w:3.4,h:.22,fontFace:font,fontSize:8.5,color:'111111',margin:0,fit:'shrink'});
         s.addText(String(model.confidentialText||''),{x:10.35,y:7.05,w:1.7,h:.22,fontFace:font,fontSize:8.5,color:'A30000',align:'right',margin:0,fit:'shrink'});
       }else{
         if(logoData)s.addImage({data:logoData,x:.46,y:.13,w:1.06,h:.42});
         s.addShape(pptx.ShapeType.rect,{x:1.74,y:.30,w:.045,h:.78,line:{color:'06402B',transparency:100},fill:{color:'06402B'}});
-        s.addText(String(model.kicker||''),{x:1.92,y:.18,w:7.9,h:.22,fontFace:font,fontSize:9,color:'648075',bold:true,charSpacing:1.6,margin:0,fit:'shrink'});
-        s.addText(String(model.title||''),{x:1.92,y:.42,w:8.7,h:.55,fontFace:font,fontSize:Math.max(22,Math.min(38,(Number(model.titleSize)||50)*.62)),bold:true,color:'102D25',margin:0,fit:'shrink'});
-        s.addText(String(model.legend||''),{x:1.92,y:1.02,w:8.7,h:.34,fontFace:font,fontSize:Math.max(10,Math.min(19,(Number(model.legendSize)||20)*.7)),color:'315D50',margin:0,fit:'shrink'});
-        s.addText(String(model.confidentialText||''),{x:11.2,y:.18,w:1.45,h:.28,fontFace:font,fontSize:8.5,bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0,fill:{color:'06402B'},fit:'shrink'});
+        // V6.61 — comme à l'écran : tailles sans plafond, la légende et le visuel descendent quand le titre grandit.
+        const pT=Math.max(22,(Number(model.titleSize)||50)*.62),pL=Math.max(10,(Number(model.legendSize)||20)*.7),pF=Math.max(8.5,(Number(model.footerSize)||16)*.65);
+        const tH=Math.max(.55,pT/72*1.15),lY=.42+tH+.05,lH=Math.max(.34,pL/72*1.3),bodyY=Math.max(1.50,lY+lH+.14);
+        const fH=Math.max(.48,pF/72*1.45*2),scopeY=7.08-fH,lineY=scopeY-.12;
+        s.addText(String(model.kicker||''),{x:1.92,y:.18,w:7.9,h:.22,fontFace:font,fontSize:Math.max(9,pL*.65),color:'648075',bold:true,charSpacing:1.6,margin:0,fit:'shrink'});
+        s.addText(String(model.title||''),{x:1.92,y:.42,w:8.7,h:tH,fontFace:font,fontSize:pT,bold:true,color:'102D25',margin:0,fit:'shrink'});
+        s.addText(String(model.legend||''),{x:1.92,y:lY,w:8.7,h:lH,fontFace:font,fontSize:pL,color:'315D50',margin:0,fit:'shrink'});
+        s.addText(String(model.confidentialText||''),{x:11.2,y:.18,w:1.45,h:.28,fontFace:font,fontSize:Math.max(8.5,pL*.6),bold:true,color:'FFFFFF',align:'center',valign:'mid',margin:0,fill:{color:'06402B'},fit:'shrink'});
         let body='';try{body=await bodyPngForSlide(model);}catch{}
-        if(body)s.addImage({data:body,x:.46,y:1.50,w:12.40,h:+(12.40*PRES_AREA.height/PRES_AREA.width).toFixed(3),transparency:0});
+        const bH=Math.min(+(12.40*PRES_AREA.height/PRES_AREA.width).toFixed(3),lineY-.06-bodyY),bW=+(bH*PRES_AREA.width/PRES_AREA.height).toFixed(3);
+        if(body)s.addImage({data:body,x:+(.46+(12.40-bW)/2).toFixed(3),y:bodyY,w:bW,h:bH,transparency:0});
         else s.addText('Visuel indisponible lors de l’export – conserve la slide de l’Observatoire Prestaterre pour réexporter.',{x:1.0,y:3.2,w:11.3,h:.5,fontFace:font,fontSize:16,color:'728279',align:'center',margin:0});
-        s.addShape(pptx.ShapeType.line,{x:.46,y:6.48,w:12.4,h:0,line:{color:'C9D8D1',width:1}});
-        s.addText(String(model.scope||''),{x:.46,y:6.60,w:8.4,h:.48,fontFace:font,fontSize:Math.max(8.5,Math.min(12,(Number(model.footerSize)||16)*.65)),color:'38544A',margin:0,fit:'shrink'});
-        s.addText(String(model.notes||''),{x:9.0,y:6.60,w:3.15,h:.48,fontFace:font,fontSize:Math.max(8.5,Math.min(12,(Number(model.footerSize)||16)*.65)),color:'38544A',align:'right',margin:0,fit:'shrink'});
-        s.addText(String(i+1),{x:12.33,y:7.05,w:.45,h:.18,fontFace:font,fontSize:8,color:'7A8882',align:'right',margin:0});
+        s.addShape(pptx.ShapeType.line,{x:.46,y:lineY,w:12.4,h:0,line:{color:'C9D8D1',width:1}});
+        s.addText(String(model.scope||''),{x:.46,y:scopeY,w:8.4,h:fH,fontFace:font,fontSize:pF,color:'38544A',margin:0,fit:'shrink'});
+        s.addText(String(model.notes||''),{x:9.0,y:scopeY,w:3.15,h:fH,fontFace:font,fontSize:pF,color:'38544A',align:'right',margin:0,fit:'shrink'});
+        s.addText(String(i+1),{x:12.33,y:7.05,w:.45,h:.18,fontFace:font,fontSize:Math.max(8,pF*.7),color:'7A8882',align:'right',margin:0});
       }
     }
     const fn=`Observatoire_Prestaterre_Presentation_${new Date().toISOString().slice(0,10)}.pptx`;
@@ -2106,6 +2129,7 @@
     return marginBarRowHtml(st,{label,unit,digits}).replace('<div class="obs-margin-row','<div data-margin-key="'+attr(st.valueKey||label)+'" class="obs-margin-row');
   }
   function marginBarRowHtml(st,{label,unit='',digits=1}){
+    if(st.spread)return spreadBarRowHtml(st,{label,unit,digits});
     const n=st.n, low=st.lowSample, u=unit?` ${unit}`:'';
     const nText=`${fmt(n)} opération${n>1?'s':''} comparable${n>1?'s':''}`;
     const overHtml=st.over.length?`<div class="obs-margin-over" role="note"><b>⚠ ${fmt(st.over.length)} hors seuil : à contrôler</b><span>${marginCodes(st.over)}</span></div>`:'';
@@ -2127,6 +2151,20 @@
     return `<div class="obs-margin-row ${low?'is-low':''}"><div class="obs-margin-name"><b>${esc(label)}</b><small>${nText}${low?` · <span class="obs-margin-lowtag">⚠ échantillon faible (${fmt(n)})</span>`:''}</small></div>
       <div class="obs-margin-track" role="img" aria-label="${attr(aria)}">${iqr}<span class="obs-margin-arrow" style="left:${med.toFixed(1)}%" aria-hidden="true"></span><span class="obs-margin-dot" style="left:${med.toFixed(1)}%" aria-hidden="true"><b>${fmt(st.medianValue,digits)}</b></span><i class="obs-margin-limit" aria-hidden="true"></i></div>
       <div class="obs-margin-read"><strong>marge ${marginPct} %</strong><small>seuil médian ${fmt(st.medianMax,digits)}${esc(u)}</small>${quart}${half}${below}<small class="obs-margin-mean">moyenne ${fmt(st.meanValue,digits)}${esc(u)}, tirée par les extrêmes</small>${dfltNote}${overHtml}</div></div>`;
+  }
+  // V6.61 — valeur sans seuil réglementaire (Stock C) : même jauge, échelle 0 → valeur la plus haute observée, pas de marge ni de trait de seuil.
+  function spreadBarRowHtml(st,{label,unit='',digits=1}){
+    const n=st.n,low=st.lowSample,u=unit?` ${unit}`:'',nText=`${fmt(n)} opération${n>1?'s':''} renseignée${n>1?'s':''}`;
+    if(!n)return `<div class="obs-margin-row is-empty is-spread"><div class="obs-margin-name"><b>${esc(label)}</b><small>0 opération renseignée</small></div><div class="obs-margin-track" role="img" aria-label="${attr(`${label} : non calculable, ${st.reason}`)}"><span class="obs-margin-na">Non calculable</span></div><div class="obs-margin-read"><strong>—</strong><small>${esc(st.reason)}</small></div></div>`;
+    const top=st.max>0?st.max:1,pos=v=>Math.max(0,Math.min(100,100*v/top)),med=pos(st.valueQ2);
+    const tip=st.valueQ1!==null?`Moitié centrale : la moitié des ${fmt(n)} opérations situées au milieu, une fois classées de la plus basse à la plus haute (on écarte les 25 % les plus basses et les 25 % les plus hautes). Valeurs de ${fmt(st.valueQ1,digits)} à ${fmt(st.valueQ3,digits)}${u}.`:'';
+    const iqr=st.valueQ1!==null?`<span class="obs-margin-iqr" style="left:${pos(st.valueQ1).toFixed(1)}%;width:${Math.max(.6,pos(st.valueQ3)-pos(st.valueQ1)).toFixed(1)}%" title="${attr(tip)}"></span><i class="obs-margin-qtick" style="left:${pos(st.valueQ1).toFixed(1)}%" aria-hidden="true"><em>25 %</em></i><i class="obs-margin-qtick" style="left:${pos(st.valueQ3).toFixed(1)}%" aria-hidden="true"><em>75 %</em></i>`:'';
+    const quart=st.valueQ1!==null?`<small class="obs-margin-quart"><span>25 % des opérations ≤ <b>${fmt(st.valueQ1,digits)}</b></span><span>50 % ≤ <b>${fmt(st.valueQ2,digits)}</b></span><span>75 % ≤ <b>${fmt(st.valueQ3,digits)}</b>${esc(u)}</span></small>`:`<small class="obs-margin-quart">quartiles à partir de ${fmt(core.MIN_SAMPLE||5)} opérations</small>`;
+    const half=st.valueQ1!==null?`<small class="obs-margin-half" title="${attr(tip)}">moitié centrale : de <b>${fmt(st.valueQ1,digits)}</b> à <b>${fmt(st.valueQ3,digits)}</b>${esc(u)}</small>`:'';
+    const aria=`${label} : médiane ${fmt(st.valueQ2,digits)}${u}, de ${fmt(st.min,digits)} à ${fmt(st.max,digits)}${u}, ${nText}, pas de seuil réglementaire${low?', échantillon faible':''}`;
+    return `<div class="obs-margin-row is-spread ${low?'is-low':''}"><div class="obs-margin-name"><b>${esc(label)}</b><small>${nText}${low?` · <span class="obs-margin-lowtag">⚠ échantillon faible (${fmt(n)})</span>`:''}</small></div>
+      <div class="obs-margin-track" role="img" aria-label="${attr(aria)}">${iqr}<span class="obs-margin-dot" style="left:${med.toFixed(1)}%" aria-hidden="true"><b>${fmt(st.valueQ2,digits)}</b></span><i class="obs-margin-scaleend" aria-hidden="true"><em>${fmt(st.max,digits)}</em></i></div>
+      <div class="obs-margin-read"><strong>pas de seuil</strong><small>répartition, sans marge : plus haut = plus de carbone stocké</small>${quart}${half}<small class="obs-margin-below">${fmt(st.belowMedian)} opération${st.belowMedian>1?'s':''} sous la médiane (${fmt(st.valueQ2,digits)}${esc(u)})</small><small class="obs-margin-mean">de ${fmt(st.min,digits)} à ${fmt(st.max,digits)}${esc(u)} · échelle de 0 à la valeur la plus haute</small></div></div>`;
   }
   // V6.60 — encart identifié (id : energy, carbon) : les jauges décochées dans ⓘ sont masquées.
   function marginBarCard(allRows,{kicker,title,id=''}){
@@ -2255,7 +2293,7 @@
 
   function renderCarbon(){
     const ops=filteredTechnicalOperations(), transitionOps=applyMatrixSelection(ops), ice=core.stats(ops,'icEnergy'), icc=core.stats(ops,'icConstruction'), db=averageDpe(transitionOps,'dpeEnergyBefore'), da=averageDpe(transitionOps,'dpeEnergyAfter'), gb=averageDpe(transitionOps,'dpeGesBefore'), ga=averageDpe(transitionOps,'dpeGesAfter');
-    const iceStats=core.thresholdMargin(ops,'icEnergy','icEnergyMax'), iccStats=core.thresholdMargin(ops,'icConstruction','icConstructionMax');
+    const iceStats=core.thresholdMargin(ops,'icEnergy','icEnergyMax'), iccStats=core.thresholdMargin(ops,'icConstruction','icConstructionMax'), stockStats=core.valueSpread(ops,'stockC');
     const underKpi=(st,l)=>{const c=st.n+st.over.length;return {label:`${l} sous seuil`,value:c?`${fmt(st.underRate,1)} %`:'—',note:`${fmt(st.n)} / ${fmt(c)} comparables${st.margin!==null?` · marge médiane ${Math.round(100*st.margin)} %`:''}`};};
     return `${pageHead('carbon',`<div class="obs-selection-note">${fmt(ops.length)} opération${ops.length>1?'s':''} technique${ops.length>1?'s':''}</div>`)}${analyticsToolbar()}${kpiGrid([
       {label:'IC Énergie projet médian',value:ice.median===null?'—':fmt(ice.median,1),note:ice.n?`${fmt(ice.n)} opérations renseignées · moyenne ${fmt(ice.mean,1)}, tirée par les extrêmes`:'aucune valeur renseignée',sample:ice.n},
@@ -2265,7 +2303,7 @@
     ])}
     ${dpeVisualSummary(db,da,gb,ga,transitionOps)}${(matrixSelectionValues('mention').length||matrixSelectionValues('performance').length)?`<div class="obs-dpe-matrix-scope"><b>Périmètre Label & performance</b><span>${esc(matrixSelectionSummary(transitionOps))}</span><small>${fmt(transitionOps.length)} opération${transitionOps.length>1?'s':''} technique${transitionOps.length>1?'s':''} retenue${transitionOps.length>1?'s':''} pour les transitions DPE/GES.</small></div>`:''}
     <div class="obs-section-title"><div><span>01</span><h2>Marge des émissions carbone sous les maximums</h2></div><p>Le point est la médiane des ratios valeur ÷ seuil ; le trait noir est le seuil.</p></div>
-    ${marginBarCard([[iceStats,{label:'IC Énergie',unit:'kgCO₂e/m²'}],[iccStats,{label:'IC Construction',unit:'kgCO₂e/m²'}]],{kicker:'MARGE AU SEUIL',title:'IC Énergie et IC Construction',id:'carbon'})}
+    ${marginBarCard([[iceStats,{label:'IC Énergie',unit:'kgCO₂e/m²'}],[iccStats,{label:'IC Construction',unit:'kgCO₂e/m²'}],[stockStats,{label:'Stock C',unit:'kgC/m²'}]],{kicker:'MARGE AU SEUIL',title:'IC Énergie, IC Construction et Stock C',id:'carbon'})}
     <div class="obs-section-title"><div><span>02</span><h2>DPE avant / après travaux</h2></div><p>Une étiquette ne peut pas se dégrader avec des travaux : toute dégradation est affichée en rouge et signalée en Qualité & données.</p></div>
     ${dpeStaircaseCard('energy')}${dpeStaircaseCard('ges')}`;
   }
@@ -3022,7 +3060,7 @@
       certification:()=>`<div class="obs-detail-grid">${detail('Statut',op.rawStatus||STATUS_LABELS[op.status])}${detail('Étape normalisée',STATUS_LABELS[op.status]||op.status)}${detail('Soldée',op.sold?'Oui':'Non')}${detail('Mentions',op.mentions)}${detail('Performance',op.performance)}${detail('Profil',op.profile)}</div>`,
       technical:()=>`<div class="obs-detail-grid">${detail('Structure principale',op.structure)}${detail('Structure toiture',op.roofStructure)}${detail('Isolation toiture',op.roofInsulation)}${detail('R toiture',rawValue(op,'roofR'))}${detail('Épaisseur toiture',rawValue(op,'roofThickness'))}${detail('Structure façade',op.wallStructure)}${detail('Isolation façade',op.wallInsulation)}${detail('R façade',rawValue(op,'wallR'))}${detail('Épaisseur façade',rawValue(op,'wallThickness'))}${detail('Structure plancher bas',op.floorStructure)}${detail('Isolation plancher',op.floorInsulation)}${detail('R plancher',rawValue(op,'floorR'))}${detail('Épaisseur plancher',rawValue(op,'floorThickness'))}${detail('Menuiseries',op.windowMaterial)}${detail('Vitrage',op.windowGlazing)}${detail('Occultations',op.windowShading)}${detail('Ventilation',op.ventilation)}${detail('Refroidissement',op.cooling)}</div>`,
       energy:()=>`<div class="obs-detail-grid">${detail('Chauffage avant',op.heatingBefore)}${detail('Chauffage après',op.heatingAfter)}${detail('Mode chauffage après',op.heatingModeAfter)}${detail('ECS avant',op.ecsBefore)}${detail('ECS après',op.ecsAfter)}${detail('Bbio',rawValue(op,'bbio'))}${detail('Bbio max',rawValue(op,'bbioMax'))}${detail('Cep',rawValue(op,'cep'))}${detail('Cep max',rawValue(op,'cepMax'))}${detail('Cep,nr',rawValue(op,'cepnr'))}${detail('Cep,nr max',rawValue(op,'cepnrMax'))}${detail('DH',rawValue(op,'dh'))}${detail('DH max',rawValue(op,'dhMax'))}${detail('Ubat avant',rawValue(op,'ubatBefore'))}${detail('Ubat après',rawValue(op,'ubatAfter'))}${detail('Cep avant travaux',rawValue(op,'cepBefore'))}${detail('Cep après travaux',rawValue(op,'cepAfter'))}</div>`,
-      carbon:()=>`<div class="obs-detail-grid">${detail('IC Énergie',rawValue(op,'icEnergy'))}${detail('IC Énergie max',rawValue(op,'icEnergyMax'))}${detail('IC Construction',rawValue(op,'icConstruction'))}${detail('IC Construction max',rawValue(op,'icConstructionMax'))}${detail('DPE énergie avant',rawValue(op,'dpeEnergyBefore'))}${detail('DPE énergie après',rawValue(op,'dpeEnergyAfter'))}${detail('DPE GES avant',rawValue(op,'dpeGesBefore'))}${detail('DPE GES après',rawValue(op,'dpeGesAfter'))}</div>`,
+      carbon:()=>`<div class="obs-detail-grid">${detail('IC Énergie',rawValue(op,'icEnergy'))}${detail('IC Énergie max',rawValue(op,'icEnergyMax'))}${detail('IC Construction',rawValue(op,'icConstruction'))}${detail('IC Construction max',rawValue(op,'icConstructionMax'))}${detail('Stock C (kgC/m²)',rawValue(op,'stockC'))}${detail('DPE énergie avant',rawValue(op,'dpeEnergyBefore'))}${detail('DPE énergie après',rawValue(op,'dpeEnergyAfter'))}${detail('DPE GES avant',rawValue(op,'dpeGesBefore'))}${detail('DPE GES après',rawValue(op,'dpeGesAfter'))}</div>`,
       quality:()=>operationQualityHtml(op),
       compare:()=>operationComparablesHtml(op),
       trace:()=>operationTraceHtml(op),
@@ -3654,7 +3692,12 @@
   pageEl.addEventListener('dragend',()=>{presDrag=null;pageEl.querySelectorAll('.is-dragging,.is-drop-target').forEach(x=>x.classList.remove('is-dragging','is-drop-target'));});
   pageEl.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;if(e.target.matches?.('tr[data-cross-key],tr[data-scatter-op]')){e.preventDefault();e.target.click();return;}const p=e.target.closest?.('[data-map-pastille]');if(p){e.preventDefault();openMapPastille(p);}});
 
-  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField&&presField.type==='checkbox')return; if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide(); if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const capTitle=e.target.closest?.('[data-pres-capture-title]'); if(capTitle){const c=presentationCapture(capTitle.dataset.presCaptureTitle);if(c){c.title=(capTitle.textContent||'').trim()||c.title;savePresentationState();}return;} const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
+  pageEl.addEventListener('input',e=>{if(state.page==='requirements' && window.NEWOSB_REQUIREMENTS?.handleInput?.(e)) return;const presField=e.target.closest?.('[data-pres-field][data-pres-id]'); if(presField&&presField.type==='checkbox')return; if(presField){ updatePresentationField(presField.dataset.presId, presField.dataset.presField, presField.value); const slide=currentPresentationSlide();
+      // V6.61 — curseurs de taille : la slide suit pendant le glissement (pas seulement au relâchement).
+      if(slide&&slide.id===presField.dataset.presId&&presField.type==='range'){ const st=document.getElementById('obsPresentationStage'), lab=presField.parentElement?.querySelector('span'); if(lab) lab.textContent=`${fmt(Number(presField.value)||0)} ${presField.dataset.presField==='bodyScale'?'%':'px'}`;
+        if(st){ if(slide.type==='cover'){ st.style.setProperty('--pres-title-size',`${Number(slide.titleSize)||64}px`); st.style.setProperty('--pres-subtitle-size',`${Number(slide.subtitleSize)||28}px`); st.style.setProperty('--pres-date-size',`${Number(slide.dateSize)||26}px`); }
+          else if(presField.dataset.presField!=='bodyScale'){ presStageVars(slide).split(';').filter(Boolean).forEach(d=>{const i=d.indexOf(':');st.style.setProperty(d.slice(0,i),d.slice(i+1));});
+            if(presField.dataset.presField==='legendSize'){ st.querySelectorAll('.obs-pres-items').forEach(a=>a.style.setProperty('--pres-cap-text',String(presCapText(slide)))); fitPresentationItems(st); } } } return; } if(slide && slide.id===presField.dataset.presId){ const live=document.querySelector(`[data-pres-editable="${presField.dataset.presField}"][data-pres-id="${presField.dataset.presId}"]`); if(live) live.textContent=presField.value; } return; } const capTitle=e.target.closest?.('[data-pres-capture-title]'); if(capTitle){const c=presentationCapture(capTitle.dataset.presCaptureTitle);if(c){c.title=(capTitle.textContent||'').trim()||c.title;savePresentationState();}return;} const editable=e.target.closest?.('[data-pres-editable][data-pres-id]'); if(editable){ updatePresentationField(editable.dataset.presId, editable.dataset.presEditable, editable.textContent||''); return; } const matrixSearch=e.target.closest?.('[data-matrix-search]');if(matrixSearch){const kind=matrixSearch.dataset.matrixSearch,tokens=matrixSearchTokens(matrixSearch.value||'');if(!state.matrixSearch)state.matrixSearch={mention:'',performance:''};state.matrixSearch[kind]=matrixSearch.value||'';let shown=0;const list=pageEl.querySelector(`[data-matrix-check-list="${kind}"]`);list?.querySelectorAll('[data-matrix-option]').forEach(el=>{const ok=!tokens.length||tokens.every(t=>String(el.dataset.matrixOption||'').includes(t));el.hidden=!ok;if(ok)shown++;});if(list)list.scrollTop=0;const empty=pageEl.querySelector(`[data-matrix-empty="${kind}"]`);if(empty)empty.hidden=shown>0;return;} const search=e.target.closest?.('[data-table-search]');if(search){const kind=search.dataset.tableSearch,value=search.value||'';if(kind==='mention'){state.mentionSearch=value;state.mentionPage=1;}else if(kind==='performance'){state.performanceSearch=value;state.performancePage=1;}else if(kind==='dictionary'){state.dictionarySearch=value;state.dictionaryPage=1;}const snap=captureUiScroll();renderPage();restoreUiScroll(snap);requestAnimationFrame(()=>{const el=pageEl.querySelector(`[data-table-search="${kind}"]`);if(el){el.focus();try{el.setSelectionRange(value.length,value.length);}catch{}}});}});
 
   document.addEventListener('fullscreenchange',()=>{if(state.page==='presentation')requestAnimationFrame(fitPresentationPreview);const btn=document.querySelector('[data-map-fullscreen]');if(btn)btn.textContent=document.fullscreenElement?'⛶ Quitter le plein écran':'⛶ Plein écran';});
   window.addEventListener('newosb:requirementschange',e=>{if(projectWindowEl?.classList.contains('is-open')&&state.activeProject){projectUxRefresh();if(state.page!=='requirements')return;}if(state.page!=='requirements')return;const d=e?.detail?.scroll;const snapshot=d?{pageTop:Number(d.top)||0,pageLeft:Number(d.left)||0,winX:Number(d.winX)||0,winY:Number(d.winY)||0}:captureUiScroll();renderPage();restoreUiScroll(snapshot);});
