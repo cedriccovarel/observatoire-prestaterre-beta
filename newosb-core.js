@@ -311,6 +311,28 @@
       return {op,kind:'department',department:dep};
     });
   }
+  // V6.62 : répartition par commune (Territoires). Clé = commune normalisée + département (pas de fusion des homonymes) ;
+  // libellé = graphie la plus fréquente (MAJUSCULES remises en casse de titre). Mode anonymisé : une commune de moins de
+  // GEO_MIN_K projets n'est pas nommée, elle rejoint « Autres communes ».
+  function prettyCity(v){const s=String(v??'').trim().replace(/\s+/g,' ');if(!s||s!==s.toUpperCase()||!/[A-ZÀ-Ý]/.test(s))return s;return s.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu,(m,a,b)=>a+b.toUpperCase()).replace(/\b(Sur|Sous|Les|Lès|Le|La|De|Du|Des|En|Et|Aux|Au)\b(?!$)/g,(m,w,i)=>i?w.toLowerCase():w).replace(/([\s-])D'/g,"$1d'");}
+  function cityKey(op){const c=normalize(op?.city).replace(/\bcedex\b.*$/,'').replace(/[-']/g,' ').replace(/\bst\b/g,'saint').replace(/\bste\b/g,'sainte').replace(/\s+/g,' ').trim();return c?`${c}|${String(op?.department||'').trim()}`:'';}
+  function cityGroups(ops,{anonymized=false}={}){
+    const map=new Map();let missing=0;
+    (ops||[]).forEach(op=>{const k=cityKey(op);if(!k){missing++;return;}if(!map.has(k))map.set(k,{key:k,department:String(op?.department||'').trim(),value:0,spell:new Map()});const g=map.get(k);g.value++;const sp=String(op.city).trim().replace(/\s+/g,' ');g.spell.set(sp,(g.spell.get(sp)||0)+1);});
+    let rows=[...map.values()].map(g=>{const city=prettyCity([...g.spell.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0][0]);return {key:g.key,city,department:g.department,name:g.department?`${city} (${g.department})`:city,value:g.value};});
+    let hidden=null;
+    if(anonymized){const small=rows.filter(r=>r.value<GEO_MIN_K);if(small.length){rows=rows.filter(r=>r.value>=GEO_MIN_K);hidden={key:'',name:`Autres communes (moins de ${GEO_MIN_K} projets chacune)`,value:small.reduce((s,r)=>s+r.value,0),communes:small.length,merged:true};}}
+    rows.sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'fr'));
+    if(hidden)rows.push(hidden);
+    if(missing)rows.push({key:'',name:'Commune non renseignée',value:missing,missing:true});
+    return rows;
+  }
+  // V6.62 : tuiles Web Mercator (256 px) qui couvrent un rectangle de pixels monde [x0,y0]-[x0+w,y0+h] au zoom z (export PDF).
+  function tileRange(x0,y0,w,h,z){
+    const n=2**z,out=[];
+    for(let ty=Math.max(0,Math.floor(y0/256));ty<=Math.min(n-1,Math.floor((y0+h-1)/256));ty++)for(let tx=Math.floor(x0/256);tx<=Math.floor((x0+w-1)/256);tx++)out.push({x:((tx%n)+n)%n,y:ty,dx:tx*256-x0,dy:ty*256-y0});
+    return out;
+  }
   // Regroupement des points qui se chevauchent (distance en unités de la carte).
   function clusterPoints(points,radius){
     const clusters=[];
@@ -374,5 +396,5 @@
     return (ops||[]).filter(op=>{const cp=String(op?.postalCode||'').replace(/\D/g,'');const d=String(op?.department||'').toUpperCase();if(cp.length<2||!d)return false;if(d==='2A'||d==='2B')return cp.startsWith('20')===false;return cp.slice(0,2)!==d.slice(0,2);}).length;
   }
 
-  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,quantile,thresholdMargin,valueSpread,beforeAfterMedian,dpeGain,dpeGainBucket,dpeStaircase,windowMaterialFamily,glazingFamily,shadingFamily,windowComposition,familyComposition,isOtherFamily,displayCode:projectCode,isRcu,rcuDegradations,geoClass,geoPlan,clusterPoints,columnTags,GEO_MIN_K,crossPairs:CROSS_PAIRS,crossValue,crossPoints,crossMetricCounts,bestCrossPair,isThresholdPair,robustOutliers,thresholdPairs:THRESHOLD_PAIRS,DH_DEFAULT_MAX,UBAT_RANGE,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
+  window.NEWOSB_CORE={version:'06.13',normalize,number,rawValue,rawNumber,parseValue,unreadableValues,numericKeys:[...NUMERIC_KEYS,...Object.keys(DATE_KEYS)],dateKeys:DATE_KEYS,affairStage,isExcludedOperation,dictionary:DICTIONARY,dictByKey,provenance,coverage,qualityForOperation,qualitySummary,comparableSet,stats,quantile,thresholdMargin,valueSpread,beforeAfterMedian,dpeGain,dpeGainBucket,dpeStaircase,windowMaterialFamily,glazingFamily,shadingFamily,windowComposition,familyComposition,isOtherFamily,displayCode:projectCode,isRcu,rcuDegradations,geoClass,geoPlan,cityGroups,cityKey,prettyCity,tileRange,clusterPoints,columnTags,GEO_MIN_K,crossPairs:CROSS_PAIRS,crossValue,crossPoints,crossMetricCounts,bestCrossPair,isThresholdPair,robustOutliers,thresholdPairs:THRESHOLD_PAIRS,DH_DEFAULT_MAX,UBAT_RANGE,carbonThresholds,carbonBand,duplicateSummary,geoIssues};
 })();

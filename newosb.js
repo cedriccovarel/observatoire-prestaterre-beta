@@ -103,6 +103,7 @@
     // V6.60 — jauges masquées dans les encarts « Marge au seuil » (par encart : energy, carbon), préférence de ce navigateur.
     marginHidden:(()=>{try{const v=JSON.parse(localStorage.getItem('newosb.marginHidden.v1')||'{}');return v&&typeof v==='object'?v:{};}catch{return {};}})(),
     overviewPerformanceView:'list',
+    territoryUnit:'department', ovPdfDetail:'1',
     territoryTableView:'list',
     moaTableView:'list',
     statusYearView:'list',
@@ -980,6 +981,7 @@
     if(f.key==='region') return norm(operationRegion(op))===norm(value);
     if(f.key==='department') return String(op.department)===String(value);
     if(f.key==='city') return norm(op.city||'Non précisé')===norm(value);
+    if(f.key==='commune') return core.cityKey(op)===String(value);
     if(f.key==='intercommunality') return norm(op.intercommunality||'Non précisé')===norm(value);
     if(f.key==='moa') return norm(op.moa)===norm(value);
     if(f.key==='moaType') return norm(op.moaType||'Non précisé')===norm(value);
@@ -1631,7 +1633,7 @@
       </div>
       <div class="obs-grid-2">
         <article class="obs-card"><div class="obs-card-head"><div><span>DYNAMIQUE</span><h2>Évolution des projets</h2></div><div class="obs-evolution-head-tools"><small>Une courbe par référentiel · clique sur une année ou la légende pour filtrer · clique sur « Total général » dans la légende pour l’afficher/masquer</small></div></div><div class="obs-chart">${evolutionSvg(ops,state.overviewShowTotal)}</div>${lostAbandonedNotice()}</article>
-        <article class="obs-card"><div class="obs-card-head"><div><span>TERRITOIRES</span><h2>Départements les plus représentés</h2></div><button class="obs-card-action" data-page-link="territories">Explorer</button></div>${topBars(deps,8,'departmentName')}</article>
+        <article class="obs-card obs-territory-unit-card"><div class="obs-card-head"><div><span>TERRITOIRES</span><h2>${state.territoryUnit==='city'?'Villes':'Départements'} les plus représentés</h2></div><button class="obs-card-action" data-page-link="territories">Explorer</button></div><div class="obs-territory-unit-row">${territoryUnitToggle()}</div>${state.territoryUnit==='city'?cityBars(ops,8):topBars(deps,8,'departmentName')}</article>
       </div>
       <article class="obs-card" style="margin-bottom:12px"><div class="obs-card-head"><div><span>CERTIFICATION</span><h2>Avancement</h2></div><button class="obs-card-action" data-page-link="certification">Voir le détail</button></div>${tunnel(ops,{exits:filteredExcludedOperations()})}</article>
       <div class="obs-grid-3">
@@ -1642,16 +1644,23 @@
   }
 
   // V6.54 : carte de tous les projets géolocalisés de la sélection (Vue d'ensemble) + fiche résumé.
-  // Moteur SVG de Territoires (fond France, projection, couleurs d'avancement) ; seule geo.api.gouv.fr est appelée,
-  // avec un code département (jamais une adresse). Rien n'est écrit dans localStorage / sessionStorage.
-  const OVMAP={w:700,h:500};
+  // V6.62 : fond de carte Plan IGN v2 (Géoplateforme : gratuit, sans clé, noms des villes et communes) avec Leaflet ;
+  // OpenStreetMap en secours. Les serveurs de tuiles ne reçoivent que des numéros de tuiles (zoom / x / y), jamais une donnée
+  // projet ; geo.api.gouv.fr n'est appelée qu'avec un code département. Rien n'est écrit dans localStorage / sessionStorage.
+  const OV_TILES={
+    ign:{url:'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',attribution:'© IGN – Géoplateforme (Plan IGN v2)',maxZoom:19},
+    osm:{url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',attribution:'© contributeurs OpenStreetMap',maxZoom:19}
+  };
+  const OV_FRANCE=[[41.3,-5.2],[51.15,9.6]];
+  const OV_ANON_MAXZOOM=12, OV_CLUSTER_PX=18;
   const ovCommuneLists=new Map();
-  let ovMapModel=null;
+  let ovMapModel=null, ovMap=null, ovTileSource='ign';
   function ovAnon(){return !!privacy()?.enabled?.();}
   function overviewMapCard(ops){
     const anon=ovAnon();
     const statuses=countBy(ops,o=>o.status||'unknown');
-    return `<article class="obs-card obs-ovmap-card"><div class="obs-card-head"><div><span>CARTE</span><h2>Projets géolocalisés de la sélection</h2></div><div class="obs-card-head-tools"><small data-ovmap-count>Localisation en cours…</small><button class="obs-card-action" data-page-link="territories">Explorer</button></div></div>
+    const detail=String(state.ovPdfDetail??'1');
+    return `<article class="obs-card obs-ovmap-card"><div class="obs-card-head"><div><span>CARTE</span><h2>Projets géolocalisés de la sélection</h2></div><div class="obs-card-head-tools"><small data-ovmap-count>Localisation en cours…</small><label class="obs-ovmap-pdf-detail" title="Netteté de la carte dans le PDF : ×2 et ×4 gardent les noms lisibles quand on zoome dans le PDF (fichier plus lourd)"><span>Netteté PDF</span><select data-ovmap-pdf-detail><option value="0" ${detail==='0'?'selected':''}>×1</option><option value="1" ${detail==='1'?'selected':''}>×2</option><option value="2" ${detail==='2'?'selected':''}>×4</option></select></label><button type="button" class="obs-card-action" data-ovmap-pdf title="PDF de la vue affichée : carte zoomable, pastilles cliquables vers la fiche de chaque projet">Exporter en PDF</button><button class="obs-card-action" data-page-link="territories">Explorer</button></div></div>
       <div class="obs-ovmap-wrap"><div id="obsOverviewMap" class="obs-ovmap" data-anon="${anon?'1':'0'}"><div class="obs-map-loading">Chargement du fond de carte…</div></div>
       <div class="obs-ovmap-zoom" role="group" aria-label="Zoom de la carte"><button type="button" data-ovmap-zoom="in" aria-label="Zoomer">+</button><button type="button" data-ovmap-zoom="out" aria-label="Dézoomer">−</button><button type="button" data-ovmap-zoom="reset" aria-label="Recentrer la carte">⤢</button></div>
       <aside class="obs-ovmap-panel" data-ovmap-panel hidden role="dialog" aria-label="Fiche résumé du projet"></aside></div>
@@ -1664,56 +1673,192 @@
     return ovCommuneLists.get(dep);
   }
   async function ovLimit(items,n,fn){const out=[];let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const k=i++;out[k]=await fn(items[k]);}}));return out;}
+  // Centre approximatif d'un département (moyenne des sommets du contour), pour le mode anonymisé.
+  function ovDepCentres(geo){const out=new Map();(geo?.features||[]).forEach(f=>{let sx=0,sy=0,n=0;const walk=a=>{if(typeof a?.[0]==='number'){sx+=a[0];sy+=a[1];n++;}else(a||[]).forEach(walk);};walk(f?.geometry?.coordinates);if(n)out.set(featureCode(f),[sy/n,sx/n]);});return out;}
   async function hydrateOverviewMap(token){
-    const host=document.getElementById('obsOverviewMap'); if(!host||!engine.getDepartmentGeoJSON)return;
+    const host=document.getElementById('obsOverviewMap'); if(!host)return;
     const alive=()=>token===state.renderToken&&host.isConnected, anon=host.dataset.anon==='1', card=host.closest('.obs-ovmap-card');
+    if(!window.L){host.innerHTML='<div class="obs-empty">Fond de carte indisponible (bibliothèque Leaflet non chargée).</div>';return;}
     const projects=filteredOperations(), plan=core.geoPlan(projects,{anonymized:anon});
     try{
-      const geo=await engine.getDepartmentGeoJSON(); if(!alive())return;
-      const features=(geo?.features||[]).filter(f=>metroDepartment(featureCode(f))), byDep=new Map(features.map(f=>[featureCode(f),f]));
-      const project=projector(features,{x:16,y:12,width:OVMAP.w-32,height:OVMAP.h-24});
-      const deps=uniq(plan.filter(p=>p.kind==='commune').map(p=>p.insee?ovDepFromInsee(p.insee):p.department).filter(d=>metroDepartment(d)));
+      const depCentres=plan.some(p=>p.kind==='department')&&engine.getDepartmentGeoJSON?ovDepCentres(await engine.getDepartmentGeoJSON()):new Map(); if(!alive())return;
+      const deps=uniq(plan.filter(p=>p.kind==='commune').map(p=>p.insee?ovDepFromInsee(p.insee):p.department).filter(Boolean));
       const lists=new Map(); await ovLimit(deps,6,async d=>lists.set(d,await ovCommunes(d))); if(!alive())return;
       const points=[],missing=[];
       plan.forEach(p=>{
-        let lonlat=null,approx=true,where='';
-        if(p.kind==='precise'){lonlat=[p.lon,p.lat];approx=false;}
-        else if(p.kind==='commune'){const dep=p.insee?ovDepFromInsee(p.insee):p.department,l=lists.get(dep),c=p.insee?l?.byCode.get(p.insee):l?.byName.get(norm(p.city));if(c){lonlat=[c.lon,c.lat];where='commune';}}
-        if(lonlat){const [x,y]=project(lonlat[0],lonlat[1]);if(x>=0&&x<=OVMAP.w&&y>=0&&y<=OVMAP.h){points.push({op:p.op,x,y,approx,where:where||'précise'});return;}}
-        if(p.kind==='department'&&byDep.get(p.department)){const [x,y]=groupCenter([byDep.get(p.department)],project);points.push({op:p.op,x,y,approx:true,where:'département'});return;}
-        missing.push({op:p.op,reason:p.kind==='none'?'ni coordonnées ni code INSEE':p.kind==='commune'?'commune introuvable ou hors métropole':'hors métropole'});
+        let ll=null,approx=true,where='';
+        if(p.kind==='precise'){ll=[p.lat,p.lon];approx=false;}
+        else if(p.kind==='commune'){const dep=p.insee?ovDepFromInsee(p.insee):p.department,l=lists.get(dep),c=p.insee?l?.byCode.get(p.insee):l?.byName.get(norm(p.city));if(c){ll=[c.lat,c.lon];where='commune';}}
+        else if(p.kind==='department'&&depCentres.get(p.department)){ll=depCentres.get(p.department);where='département';}
+        if(ll&&Number.isFinite(ll[0])&&Number.isFinite(ll[1])){points.push({op:p.op,lat:ll[0],lon:ll[1],approx,where:where||'précise'});return;}
+        missing.push({op:p.op,reason:p.kind==='none'?'ni coordonnées ni code INSEE':p.kind==='commune'?'commune introuvable':'département inconnu'});
       });
       ovMapModel={points,missing,anon,total:projects.length};
-      const base=features.map(f=>`<path d="${geometryPath(f.geometry,project)}" class="obs-ovmap-dep"><title>${esc(departmentName(featureCode(f)))}</title></path>`).join('');
-      host.innerHTML=`<svg class="obs-ovmap-svg" viewBox="0 0 ${OVMAP.w} ${OVMAP.h}" role="img" aria-label="${attr(`Carte de France : ${points.length} projets géolocalisés sur ${projects.length}`)}"><g>${base}</g><g data-ovmap-points></g></svg>`;
-      ovApplyView(host);ovDrawPoints(host);ovBindPan(host);
+      if(ovMap){try{ovMap.remove();}catch{}ovMap=null;}
+      host.innerHTML='';
+      const map=L.map(host,{zoomControl:false,minZoom:3,maxZoom:anon?OV_ANON_MAXZOOM:18,zoomSnap:.5,zoomDelta:.5,wheelPxPerZoomLevel:90,keyboard:false});
+      ovMap=map;
+      map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+      ovAddTiles(map);
+      map.getContainer().setAttribute('aria-label',`Carte : ${points.length} projets géolocalisés sur ${projects.length}`);
+      const v=state.ovMapView; if(v&&Number.isFinite(v.lat))map.setView([v.lat,v.lng],Math.min(v.zoom,map.getMaxZoom()),{animate:false}); else ovFitAll(map,false);
+      map.on('moveend',()=>{const c=map.getCenter();state.ovMapView={lat:c.lat,lng:c.lng,zoom:map.getZoom()};});
+      map.on('zoomend',()=>ovDrawPoints());
+      ovDrawPoints();
       const precise=points.filter(p=>!p.approx).length,n=points.length;
       const countEl=card?.querySelector('[data-ovmap-count]');if(countEl)countEl.innerHTML=`${fmt(n)} projet${n>1?'s':''} géolocalisé${n>1?'s':''} sur ${fmt(projects.length)}${n&&n<MIN_SAMPLE?` · <b class="obs-low-sample">⚠ échantillon faible</b>`:''}`;
-      const note=card?.querySelector('[data-ovmap-note]');if(note)note.innerHTML=`${fmt(precise)} position${precise>1?'s':''} précise${precise>1?'s':''} · ${fmt(n-precise)} position${n-precise>1?'s':''} approximative${n-precise>1?'s':''} (${anon?'commune, ou département quand la commune compte moins de 5 projets':'commune'})${missing.length?` · <button type="button" class="obs-link-btn" data-ovmap-missing>${fmt(missing.length)} projet${missing.length>1?'s':''} non localisé${missing.length>1?'s':''} (voir la liste)</button>`:''}${anon?' · mode anonymisé : aucune adresse ni coordonnée exacte':''}`;
+      const note=card?.querySelector('[data-ovmap-note]');if(note)note.innerHTML=`${fmt(precise)} position${precise>1?'s':''} précise${precise>1?'s':''} · ${fmt(n-precise)} position${n-precise>1?'s':''} approximative${n-precise>1?'s':''} (${anon?'commune, ou département quand la commune compte moins de 5 projets':'commune'})${missing.length?` · <button type="button" class="obs-link-btn" data-ovmap-missing>${fmt(missing.length)} projet${missing.length>1?'s':''} non localisé${missing.length>1?'s':''} (voir la liste)</button>`:''}${anon?` · mode anonymisé : aucune adresse ni coordonnée exacte, zoom limité au niveau ${OV_ANON_MAXZOOM}`:''}`;
       if(state.ovMapOpenCode){const hit=[...points,...missing].find(p=>String(p.op.code)===state.ovMapOpenCode);if(hit)ovPanel(ovSummaryHtml(hit.op),state.ovMapOpenCode,false);else state.ovMapOpenCode='';}
     }catch(err){console.warn('NEWOSB carte Vue d’ensemble',err);if(alive())host.innerHTML='<div class="obs-empty">Fond de carte indisponible.</div>';}
   }
-  function ovView(){return state.ovMapView||{x:0,y:0,w:OVMAP.w,h:OVMAP.h};}
-  function ovApplyView(host){const v=ovView();host.querySelector('svg')?.setAttribute('viewBox',`${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${v.h.toFixed(1)}`);}
-  function ovZoom(host,factor,cx,cy){const v=ovView(),w=Math.max(OVMAP.w/24,Math.min(OVMAP.w,v.w/factor)),h=w*OVMAP.h/OVMAP.w;cx??=v.x+v.w/2;cy??=v.y+v.h/2;state.ovMapView={x:Math.max(-OVMAP.w*.2,Math.min(OVMAP.w*1.2-w,cx-w/2)),y:Math.max(-OVMAP.h*.2,Math.min(OVMAP.h*1.2-h,cy-h/2)),w,h};ovApplyView(host);ovDrawPoints(host);}
-  function ovDrawPoints(host){
-    const layer=host.querySelector('[data-ovmap-points]');if(!layer||!ovMapModel)return;
-    const k=ovView().w/OVMAP.w, r=6.5*k, clusters=core.clusterPoints(ovMapModel.points,r*2.1);
-    host._clusters=clusters;
-    layer.innerHTML=clusters.map((c,i)=>{
-      if(c.items.length===1){const p=c.items[0],code=String(p.op.code||'');return `<circle class="obs-ovmap-pt ${p.approx?'is-approx':''}" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${STATUS_COLORS[p.op.status]||'#9AA8A2'}" style="stroke-width:${(1.6*k).toFixed(2)}px" data-ovmap-op="${attr(code)}" tabindex="0" role="button" aria-label="${attr(`Projet ${code}${ovMapModel.anon?'':` · ${p.op.name||''}`} · ${STATUS_LABELS[p.op.status]||''}${p.approx?' · position approximative':''}`)}"><title>${esc(code)}${ovMapModel.anon?'':` · ${esc(p.op.name||'')}`}${p.approx?` · position approximative (${esc(p.where)})`:''}</title></circle>`;}
-      const n=c.items.length,rr=(8+Math.min(10,Math.sqrt(n)*1.6))*k;
-      return `<g class="obs-ovmap-cluster" data-ovmap-cluster="${i}" tabindex="0" role="button" aria-label="${attr(`${n} projets regroupés : cliquer pour zoomer ou lister`)}"><circle cx="${c.x.toFixed(2)}" cy="${c.y.toFixed(2)}" r="${rr.toFixed(2)}" style="stroke-width:${(2*k).toFixed(2)}px"></circle><text x="${c.x.toFixed(2)}" y="${(c.y+3.6*k).toFixed(2)}" text-anchor="middle" style="font-size:${(10.5*k).toFixed(2)}px">${fmt(n)}</text></g>`;
-    }).join('');
+  // Plan IGN d'abord ; si aucune tuile ne se charge (service indisponible), bascule sur OpenStreetMap.
+  function ovAddTiles(map){
+    const src=OV_TILES[ovTileSource];
+    const layer=L.tileLayer(src.url,{attribution:src.attribution,maxNativeZoom:src.maxZoom,maxZoom:19,crossOrigin:'anonymous'}).addTo(map);
+    let loaded=0,errors=0;
+    layer.on('tileload',()=>{loaded++;});
+    layer.on('tileerror',()=>{errors++;if(ovTileSource==='ign'&&!loaded&&errors>=4){ovTileSource='osm';map.removeLayer(layer);ovAddTiles(map);}});
+    map._ovTiles=layer;
   }
-  function ovBindPan(host){
-    const svg=host.querySelector('svg');if(!svg||svg._ovBound)return;svg._ovBound=true;
-    const toMap=(e)=>{const b=svg.getBoundingClientRect(),v=ovView();return [v.x+(e.clientX-b.left)/b.width*v.w,v.y+(e.clientY-b.top)/b.height*v.h];};
-    svg.addEventListener('wheel',e=>{e.preventDefault();const [x,y]=toMap(e);ovZoom(host,e.deltaY<0?1.35:1/1.35,x,y);},{passive:false});
-    let drag=null;
-    svg.addEventListener('pointerdown',e=>{if(e.target.closest('[data-ovmap-op],[data-ovmap-cluster]'))return;drag={x:e.clientX,y:e.clientY,v:{...ovView()},moved:false};});
-    svg.addEventListener('pointermove',e=>{if(!drag)return;const b=svg.getBoundingClientRect(),dx=(e.clientX-drag.x)/b.width*drag.v.w,dy=(e.clientY-drag.y)/b.height*drag.v.h;if(Math.abs(dx)+Math.abs(dy)<1&&!drag.moved)return;drag.moved=true;state.ovMapView={...drag.v,x:drag.v.x-dx,y:drag.v.y-dy};ovApplyView(host);});
-    const end=()=>{if(drag?.moved)ovDrawPoints(host);drag=null;};svg.addEventListener('pointerup',end);svg.addEventListener('pointerleave',end);
+  function ovFitAll(map=ovMap,animate=true){
+    if(!map)return;const pts=ovMapModel?.points||[];
+    if(pts.length)map.fitBounds(L.latLngBounds(pts.map(p=>[p.lat,p.lon])),{padding:[36,36],maxZoom:Math.min(12,map.getMaxZoom()),animate});
+    else map.fitBounds(OV_FRANCE,{animate});
+  }
+  function ovClusters(map=ovMap){
+    const pts=(ovMapModel?.points||[]).map(p=>{const q=map.latLngToLayerPoint([p.lat,p.lon]);return {...p,x:q.x,y:q.y};});
+    return core.clusterPoints(pts,OV_CLUSTER_PX).map(c=>({...c,latlng:map.layerPointToLatLng([c.x,c.y])}));
+  }
+  function ovDrawPoints(){
+    const map=ovMap;if(!map||!ovMapModel)return;
+    if(map._ovLayer)map._ovLayer.remove();
+    const layer=L.layerGroup().addTo(map);map._ovLayer=layer;
+    const clusters=ovClusters(map);map._ovClusters=clusters;
+    clusters.forEach((c,i)=>{
+      let html,size;
+      if(c.items.length===1){const p=c.items[0],code=String(p.op.code||'');size=14;
+        html=`<span class="obs-ovmap-pt ${p.approx?'is-approx':''}" style="--pt:${STATUS_COLORS[p.op.status]||'#9AA8A2'}" data-ovmap-op="${attr(code)}" tabindex="0" role="button" aria-label="${attr(`Projet ${code}${ovMapModel.anon?'':` · ${p.op.name||''}`} · ${STATUS_LABELS[p.op.status]||''}${p.approx?' · position approximative':''}`)}" title="${attr(`${code}${ovMapModel.anon?'':` · ${p.op.name||''}`}${p.approx?` · position approximative (${p.where})`:''}`)}"></span>`;
+        L.marker([p.lat,p.lon],{icon:L.divIcon({className:'obs-ovmap-icon',html,iconSize:[size,size],iconAnchor:[size/2,size/2]}),keyboard:false}).addTo(layer);
+        return;}
+      const n=c.items.length;size=Math.round(24+Math.min(18,Math.sqrt(n)*3));
+      html=`<span class="obs-ovmap-cluster" data-ovmap-cluster="${i}" tabindex="0" role="button" aria-label="${attr(`${n} projets regroupés : cliquer pour zoomer ou lister`)}" title="${attr(`${n} projets regroupés`)}">${fmt(n)}</span>`;
+      L.marker(c.latlng,{icon:L.divIcon({className:'obs-ovmap-icon',html,iconSize:[size,size],iconAnchor:[size/2,size/2]}),keyboard:false,zIndexOffset:500}).addTo(layer);
+    });
+  }
+  // V6.62 : export PDF de la vue affichée. Le fond est redessiné à partir des tuiles à 1, 2 ou 4 fois la résolution de l'écran
+  // (noms lisibles en zoomant dans le PDF) ; les pastilles sont dessinées en vecteur (nettes à tout zoom) et chacune est un
+  // lien vers la fiche du projet en annexe (et retour vers la carte). Mode anonymisé : codes pseudonymisés, ni nom ni adresse.
+  let ovPdfLib=null;
+  function ovLoadPdfLib(){
+    if(window.jspdf?.jsPDF)return Promise.resolve(window.jspdf.jsPDF);
+    if(!ovPdfLib)ovPdfLib=new Promise((res,rej)=>{const s=document.createElement('script');s.src='jspdf.umd.min.js?v=2.5.2';s.onload=()=>window.jspdf?.jsPDF?res(window.jspdf.jsPDF):rej(new Error('jsPDF absent'));s.onerror=()=>{ovPdfLib=null;rej(new Error('jsPDF non chargé'));};document.head.appendChild(s);});
+    return ovPdfLib;
+  }
+  // Polices standard du PDF (WinAnsi) : on remplace les rares caractères hors jeu.
+  function ovPdfText(v){return String(v??'').replace(/[  ]/g,' ').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/[₀-₉]/g,c=>String(c.charCodeAt(0)-0x2080)).replace(/→/g,'->').replace(/[^\x20-\x7E -ÿ–—‘’“”•…€Œœ]/g,'');}
+  function ovHexRgb(hex){const h=String(hex||'#9AA8A2').replace('#','');const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);return [(n>>16)&255,(n>>8)&255,n&255];}
+  function ovLoadTile(url){return new Promise(res=>{const img=new Image();let done=false;const end=v=>{if(!done){done=true;res(v);}};img.crossOrigin='anonymous';img.onload=()=>end(img);img.onerror=()=>end(null);setTimeout(()=>end(null),15000);img.src=url;});}
+  async function ovRenderBase(map,extra,progress=()=>{}){
+    const size=map.getSize(),z0=map.getZoom(),src=OV_TILES[ovTileSource];
+    let zt=Math.min(src.maxZoom,Math.ceil(z0)+extra);
+    while(zt>Math.ceil(z0)&&size.x*2**(zt-z0)>9000)zt--;
+    const s=2**(zt-z0),W=Math.round(size.x*s),H=Math.round(size.y*s);
+    const o=map.project(map.containerPointToLatLng([0,0]),zt);
+    const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#eef1ec';ctx.fillRect(0,0,W,H);
+    const tiles=core.tileRange(Math.round(o.x),Math.round(o.y),W,H,zt);let failed=0,done=0;progress(0,tiles.length);
+    await ovLimit(tiles,12,async t=>{const url=src.url.replace('{z}',zt).replace('{x}',t.x).replace('{y}',t.y);const img=await ovLoadTile(url)||await ovLoadTile(url);if(img)ctx.drawImage(img,t.dx,t.dy,256,256);else failed++;progress(++done,tiles.length);});
+    return {canvas,failed,total:tiles.length,attribution:src.attribution};
+  }
+  function ovOpLines(op,p,anon){
+    const where=anon?(p?.where==='commune'?prettyCityName(op.city):p?.where==='département'?departmentName(op.department):'')
+      :ovAddress(op);
+    const dep=op.department?`${departmentName(op.department)} (${op.department})`:'';
+    const lines=[];
+    lines.push(['Localisation',[where,dep&&!String(where).includes(departmentName(op.department))?dep:''].filter(Boolean).join(' · ')+(p?` — position ${p.approx?`approximative (${p.where})`:'précise'}`:' — non localisé')]);
+    lines.push(['Avancement',op.rawStatus||STATUS_LABELS[op.status]||'Non renseigné']);
+    const facts=[op.referential,op.nature,op.dwellings?`${fmt(op.dwellings)} logement${op.dwellings>1?'s':''}`:'',op.buildings?`${fmt(op.buildings)} bâtiment${op.buildings>1?'s':''}`:'',op.surface?`${fmt(op.surface)} m²`:''].filter(Boolean).join(' · ');
+    if(facts)lines.push(['Projet',facts]);
+    if(op.moa)lines.push(['Maître d’ouvrage',op.moa]);
+    // Libellés combinés (lignes <br> d'une même cellule) : une entrée par ligne, sans doublon.
+    const flat=list=>{const seen=new Set();return list.flatMap(t=>String(t).split('\n')).map(t=>t.trim()).filter(t=>t&&!seen.has(norm(t))&&seen.add(norm(t)));};
+    const mentions=flat(cachedOperationTags(op,'mention')),perfs=flat(cachedOperationTags(op,'performance')),tags=core.columnTags(op);
+    if(mentions.length)lines.push(['Mentions / labels',mentions.join(' · ')]);
+    if(perfs.length)lines.push(['Performances',perfs.join(' · ')]);
+    if(tags.length)lines.push(['Tags',tags.join(' · ')]);
+    return lines;
+  }
+  // Adresse lisible : code postal seulement s'il a 5 chiffres (la colonne contient parfois un nom de personne), ville non répétée.
+  function ovAddress(op){const addr=String(op.address||'').trim(),cp=/^\d{5}$/.test(String(op.postalCode||'').trim())?String(op.postalCode).trim():'',city=prettyCityName(op.city);const tail=[cp,city].filter(Boolean).join(' ');return addr&&city&&norm(addr).includes(norm(city))?addr:[addr,tail].filter(Boolean).join(', ');}
+  function prettyCityName(v){return core.prettyCity?core.prettyCity(v):String(v||'');}
+  async function ovExportPdf(btn){
+    const map=ovMap;if(!map||!ovMapModel||btn?.disabled)return;
+    const label=btn.textContent;btn.disabled=true;btn.textContent='Préparation du PDF…';
+    try{
+      const jsPDF=await ovLoadPdfLib();
+      const extra=Math.max(0,Math.min(2,Number(state.ovPdfDetail??1)));
+      const base=await ovRenderBase(map,extra,(d,n)=>{btn.textContent=`Fond de carte ${d}/${n}…`;});btn.textContent='Mise en page…';
+      const anon=!!ovMapModel.anon,size=map.getSize(),clusters=ovClusters(map).map(c=>({...c,cp:map.latLngToContainerPoint(c.latlng)})).filter(c=>c.cp.x>=-4&&c.cp.y>=-4&&c.cp.x<=size.x+4&&c.cp.y<=size.y+4);
+      const doc=new jsPDF({orientation:size.x>=size.y?'landscape':'portrait',unit:'mm',format:'a4',compress:true});
+      const PW=doc.internal.pageSize.getWidth(),PH=doc.internal.pageSize.getHeight(),M=10;
+      const T=t=>ovPdfText(t),green=[6,64,43],muted=[95,109,104];
+      const today=new Date().toLocaleDateString('fr-FR');
+      doc.setProperties({title:'Observatoire Prestaterre – carte des projets',creator:'Observatoire Prestaterre'});
+      doc.setFont('helvetica','bold');doc.setFontSize(15);doc.setTextColor(...green);doc.text(T('Projets géolocalisés de la sélection'),M,M+5);
+      doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...muted);
+      const shown=clusters.reduce((s,c)=>s+c.items.length,0);
+      doc.text(T(`${fmt(shown)} projet${shown>1?'s':''} sur cette vue · ${fmt(ovMapModel.points.length)} géolocalisé${ovMapModel.points.length>1?'s':''} sur ${fmt(ovMapModel.total)} · export du ${today}${anon?' · mode anonymisé':''}`),M,M+10);
+      const scope=activeFilterScopeText();if(scope)doc.text(doc.splitTextToSize(T(`Sélection : ${scope}`),PW-2*M).slice(0,1),M,M+14);
+      const top=M+17,bottom=PH-M-12,availW=PW-2*M,availH=bottom-top,k=Math.min(availW/size.x,availH/size.y),mw=size.x*k,mh=size.y*k,mx=M+(availW-mw)/2,my=top;
+      doc.addImage(base.canvas.toDataURL('image/jpeg',.9),'JPEG',mx,my,mw,mh,undefined,'FAST');
+      doc.setDrawColor(201,214,208);doc.setLineWidth(.2);doc.rect(mx,my,mw,mh);
+      // Annexe : une section par pastille (projet seul ou groupe), dans l'ordre nord → sud puis ouest → est.
+      const order=[...clusters].sort((a,b)=>a.cp.y-b.cp.y||a.cp.x-b.cp.x);
+      const sections=order.map((c,i)=>({c,n:i+1,page:0,y:0}));
+      const missing=ovMapModel.missing;
+      doc.addPage();let page=doc.getNumberOfPages(),y=M+6;
+      const header=()=>{doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...green);doc.text(T('Fiches des projets'),M,M+4);doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(...muted);const back=T('Retour à la carte');doc.textWithLink(back,PW-M-doc.getTextWidth(back),M+4,{pageNumber:1});y=M+11;};
+      header();
+      const ensure=h=>{if(y+h>PH-M){doc.addPage();page=doc.getNumberOfPages();header();}};
+      const writeOp=(op,p)=>{
+        const lines=ovOpLines(op,p,anon),wrapped=lines.map(([k,v])=>[k,doc.splitTextToSize(T(v),PW-2*M-38)]);
+        const h=6+wrapped.reduce((s,[,v])=>s+v.length*3.6,0)+2;ensure(h);
+        const color=ovHexRgb(STATUS_COLORS[op.status]);doc.setFillColor(...color);doc.circle(M+1.6,y-1.1,1.4,'F');
+        doc.setFont('helvetica','bold');doc.setFontSize(9.5);doc.setTextColor(20,39,31);
+        doc.text(T(`${op.code||'—'}${anon?'':op.name?` · ${op.name}`:''}`).slice(0,140),M+4.5,y);y+=4.6;
+        doc.setFontSize(7.8);wrapped.forEach(([k,v])=>{doc.setFont('helvetica','bold');doc.setTextColor(...muted);doc.text(T(k),M+4.5,y);doc.setFont('helvetica','normal');doc.setTextColor(20,39,31);doc.text(v,M+38,y);y+=v.length*3.6;});
+        y+=2.4;
+      };
+      sections.forEach(sec=>{
+        const items=[...sec.c.items].sort((a,b)=>String(a.op.code).localeCompare(String(b.op.code),'fr'));
+        const place=items.every(p=>p.where==='département')?departmentName(items[0].op.department):(countBy(items.filter(p=>p.op.city&&(!anon||p.where==='commune')),p=>prettyCityName(p.op.city))[0]?.name||departmentName(items[0].op.department));
+        ensure(14);sec.page=page;
+        doc.setFillColor(238,243,240);doc.rect(M,y-3.6,PW-2*M,5.4,'F');
+        doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(...green);
+        doc.text(T(`Repère ${sec.n}${place?` · ${place}`:''} · ${items.length} projet${items.length>1?'s':''}`),M+1.5,y);y+=6;
+        items.forEach(p=>writeOp(p.op,p));
+      });
+      // Projets non localisés : liste compacte des codes (absents de la carte), 600 au plus.
+      if(missing.length){ensure(14);doc.setFillColor(248,240,228);doc.rect(M,y-3.6,PW-2*M,5.4,'F');doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(120,72,0);doc.text(T(`Projets non localisés · ${fmt(missing.length)} (absents de la carte : ni coordonnées ni commune connue)`),M+1.5,y);y+=6;
+        const codes=missing.slice(0,600).map(m=>String(m.op.code||'—')).join(' · ')+(missing.length>600?` … et ${fmt(missing.length-600)} autres`:'');doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(...muted);doc.splitTextToSize(T(codes),PW-2*M).forEach(line=>{ensure(3.4);doc.text(line,M,y);y+=3.2;});}
+      // Retour sur la carte : pastilles vectorielles + numéro de repère + lien vers la section.
+      doc.setPage(1);
+      sections.forEach(sec=>{
+        const {c}=sec,x=mx+c.cp.x*k,yy=my+c.cp.y*k;
+        if(c.items.length===1){const p=c.items[0];doc.setFillColor(...ovHexRgb(STATUS_COLORS[p.op.status]));doc.setDrawColor(p.approx?20:255,p.approx?39:255,p.approx?31:255);doc.setLineWidth(.35);if(p.approx)doc.setLineDashPattern([.6,.45],0);doc.circle(x,yy,1.5,'FD');doc.setLineDashPattern([],0);}
+        else{const r=2.2+Math.min(2.2,Math.sqrt(c.items.length)*.45);doc.setFillColor(255,255,255);doc.setDrawColor(...green);doc.setLineWidth(.45);doc.circle(x,yy,r,'FD');doc.setFont('helvetica','bold');doc.setFontSize(6.2);doc.setTextColor(...green);doc.text(String(c.items.length),x,yy+.8,{align:'center'});}
+        doc.setFont('helvetica','bold');doc.setFontSize(5.2);doc.setTextColor(20,39,31);doc.text(String(sec.n),x+2.1,yy-1.6);
+        const r=c.items.length>1?4.4:2.6;doc.link(x-r,yy-r,2*r,2*r,{pageNumber:sec.page});
+      });
+      // Légende + sources.
+      let lx=M,ly=bottom+5;doc.setFontSize(7.2);
+      countBy(ovMapModel.points.map(p=>p.op),o=>o.status||'unknown').forEach(x=>{const t=T(`${STATUS_LABELS[x.name]||x.name} (${x.value})`);doc.setFillColor(...ovHexRgb(STATUS_COLORS[x.name]));doc.circle(lx+1.2,ly-1,1.1,'F');doc.setFont('helvetica','normal');doc.setTextColor(20,39,31);doc.text(t,lx+3.2,ly);lx+=doc.getTextWidth(t)+8;if(lx>PW-60){lx=M;ly+=3.6;}});
+      doc.setFontSize(6.6);doc.setTextColor(...muted);
+      doc.text(T(`Cliquer sur une pastille ouvre la fiche du projet (repère numéroté). Pointillés : position approximative. Fond de carte : ${base.attribution}${base.failed?` (${base.failed}/${base.total} tuiles indisponibles)`:''}.`),M,PH-M+1);
+      doc.save(`Observatoire_carte_projets_${new Date().toISOString().slice(0,10)}.pdf`);
+      btn.textContent='PDF exporté';setTimeout(()=>{if(btn.isConnected){btn.textContent=label;}},1800);
+    }catch(err){console.warn('NEWOSB export PDF carte',err);btn.textContent='Export impossible';setTimeout(()=>{if(btn.isConnected)btn.textContent=label;},2500);}
+    finally{btn.disabled=false;}
   }
   // La fiche ouverte est retenue en mémoire (jamais stockée) et rouverte si la page est redessinée.
   function ovPanel(html,code='',refocus=true){const panel=document.querySelector('[data-ovmap-panel]');if(!panel)return;panel.innerHTML=`<button type="button" class="obs-ovmap-close" data-ovmap-close aria-label="Fermer">×</button>${html}`;panel.hidden=false;state.ovMapOpenCode=code;if(refocus)panel.querySelector('[data-ovmap-close]')?.focus({preventScroll:true});}
@@ -1733,10 +1878,12 @@
   function ovHandleClick(e){
     const host=document.getElementById('obsOverviewMap'); if(!host)return false;
     if(e.target.closest('[data-ovmap-close]')){ovClosePanel();return true;}
-    const z=e.target.closest('[data-ovmap-zoom]');if(z){const k=z.dataset.ovmapZoom;if(k==='reset'){state.ovMapView=null;ovApplyView(host);ovDrawPoints(host);}else ovZoom(host,k==='in'?1.6:1/1.6);return true;}
+    if(e.target.closest('[data-ovmap-pdf]')){ovExportPdf(e.target.closest('[data-ovmap-pdf]'));return true;}
+    const z=e.target.closest('[data-ovmap-zoom]');if(z){const k=z.dataset.ovmapZoom;if(!ovMap)return true;if(k==='reset'){state.ovMapView=null;ovFitAll();}else if(k==='in')ovMap.zoomIn(1);else ovMap.zoomOut(1);return true;}
     if(e.target.closest('[data-ovmap-missing]')){ovPanel(ovListHtml(`${fmt(ovMapModel?.missing.length||0)} projets non localisés`,ovMapModel?.missing||[]));return true;}
-    const c=e.target.closest('[data-ovmap-cluster]');if(c&&host._clusters){const cl=host._clusters[Number(c.dataset.ovmapCluster)],xs=cl.items.map(p=>p.x),ys=cl.items.map(p=>p.y),spread=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys));
-      if(spread>0.5&&ovView().w>OVMAP.w/24+1)ovZoom(host,Math.min(4,Math.max(1.8,ovView().w/(spread*4||1))),cl.x,cl.y);else ovPanel(ovListHtml(`${fmt(cl.items.length)} projets au même endroit`,cl.items.map(p=>({op:p.op,reason:STATUS_LABELS[p.op.status]||''}))));return true;}
+    // Pastille groupée : zoom sur ses projets ; s'ils sont au même endroit (ou zoom maximal atteint), liste.
+    const c=e.target.closest('[data-ovmap-cluster]');if(c&&ovMap?._ovClusters){const cl=ovMap._ovClusters[Number(c.dataset.ovmapCluster)];if(!cl)return true;const b=L.latLngBounds(cl.items.map(p=>[p.lat,p.lon])),same=b.getNorthEast().distanceTo(b.getSouthWest())<40;
+      if(!same&&ovMap.getZoom()<ovMap.getMaxZoom())ovMap.fitBounds(b,{padding:[60,60],maxZoom:ovMap.getMaxZoom()});else ovPanel(ovListHtml(`${fmt(cl.items.length)} projets au même endroit`,cl.items.map(p=>({op:p.op,reason:STATUS_LABELS[p.op.status]||''}))));return true;}
     const pt=e.target.closest('[data-ovmap-op]');if(pt){const op=(ovMapModel?.points.find(p=>String(p.op.code)===pt.dataset.ovmapOp)||ovMapModel?.missing.find(p=>String(p.op.code)===pt.dataset.ovmapOp))?.op;if(op)ovPanel(ovSummaryHtml(op),String(op.code));return true;}
     if(e.target.closest('.obs-ovmap-open'))ovClosePanel();
     return false;
@@ -1769,9 +1916,27 @@
       <article class="obs-card obs-territory-summary"><div class="obs-card-head"><div><span>${groupingRegion?'RÉGIONS':'DÉPARTEMENTS'}</span><h2>${state.mapFocusRegion?`Départements de ${esc(state.mapFocusRegion)}`:(groupingRegion?'Régions':'Départements')+' les plus représentés'}</h2></div><small>15 lignes maximum</small></div>${pagedCrossBars(summaryItems,{pageKey:'territorySummaryPage',pageKind:'territory-summary',pageSize:15,key:summaryKey,labelPrefix:summaryLabel})}</article>
     </div>
     ${labelRegionCard(ops)}
-    <article class="obs-card"><div class="obs-card-head"><div><span>DRILL-DOWN TERRITORIAL</span><h2>${state.mapFocusRegion?`Départements de ${esc(state.mapFocusRegion)}`:'Départements de la sélection'}</h2></div><div class="obs-card-head-tools"><small>15 lignes par page</small>${tableViewToggle('territory',state.territoryTableView,['list','bar'])}</div></div>${territoryTable(ops)}</article>`;
+    <article class="obs-card"><div class="obs-card-head"><div><span>DRILL-DOWN TERRITORIAL</span><h2>${state.territoryUnit==='city'?'Villes de la sélection':state.mapFocusRegion?`Départements de ${esc(state.mapFocusRegion)}`:'Départements de la sélection'}</h2></div><div class="obs-card-head-tools">${territoryUnitToggle()}<small>15 lignes par page</small>${tableViewToggle('territory',state.territoryTableView,['list','bar'])}</div></div>${state.territoryUnit==='city'?cityTable(ops):territoryTable(ops)}</article>`;
   }
 
+  // V6.62 : répartition par département ou par ville (commune de la Sheet « Ville », complétée par TotalRecoll).
+  function territoryUnitToggle(){const u=state.territoryUnit==='city'?'city':'department';return `<div class="obs-view-toggle obs-territory-unit" role="group" aria-label="Répartition territoriale">${[['department','Départements'],['city','Villes']].map(([k,l])=>`<button type="button" class="${u===k?'is-active':''}" data-territory-unit="${k}" aria-pressed="${u===k}">${l}</button>`).join('')}</div>`;}
+  function cityItems(ops){return core.cityGroups(ops,{anonymized:ovAnon()});}
+  function cityNote(items){const named=items.filter(x=>x.key),miss=items.find(x=>x.missing),merged=items.find(x=>x.merged);return `<p class="obs-territory-city-note">${fmt(named.length)} commune${named.length>1?'s':''} nommée${named.length>1?'s':''}${merged?` · ${fmt(merged.communes)} commune${merged.communes>1?'s':''} de moins de ${core.GEO_MIN_K} projets regroupée${merged.communes>1?'s':''} (mode anonymisé)`:''}${miss?` · ${fmt(miss.value)} projet${miss.value>1?'s':''} sans commune (colonne Ville vide, ni TotalRecoll)`:''}</p>`;}
+  function cityBars(ops,max=8){
+    const items=cityItems(ops),named=items.filter(x=>x.key),extra=items.filter(x=>!x.key);
+    if(!items.length)return '<div class="obs-empty">Aucune donnée disponible pour cette sélection.</div>';
+    const top=[...named.slice(0,max),...extra],peak=Math.max(1,...named.slice(0,max).map(x=>x.value)),total=items.reduce((s,x)=>s+x.value,0)||1;
+    return `<div class="obs-bars obs-bars-visual">${top.map((item,index)=>{const active=item.key&&activeCross('commune',item.key);return `<button class="obs-bar-row obs-bar-row-visual ${active?'is-active':''} ${item.key?'':'is-muted'}" type="button" ${item.key?crossAttrs('commune',item.key,`Commune : ${item.name}`):'disabled'}><span class="obs-bar-label"><i>${item.key?index+1:'–'}</i><b title="${attr(item.name)}">${esc(item.name)}</b></span><span class="obs-bar-track">${item.key?`<i class="obs-bar-fill" style="width:${Math.max(2,100*item.value/peak).toFixed(1)}%"></i>`:''}</span><strong><b>${fmt(item.value)}</b><small>${fmt(pct(item.value,total),1)} %</small></strong></button>`;}).join('')}</div>${cityNote(items)}`;
+  }
+  function cityTable(ops){
+    const groups=cityItems(ops),byKey=new Map(groups.filter(g=>g.key).map(g=>[g.key,{...g,dwellings:0,buildings:0,moas:new Set()}]));
+    ops.forEach(o=>{const x=byKey.get(core.cityKey(o));if(!x)return;x.dwellings+=Number(o.dwellings)||0;x.buildings+=Number(o.buildings)||0;x.moas.add(o.moa);});
+    const rows=[...byKey.values()],model=paged(rows,state.territoryPage,15);state.territoryPage=model.page;
+    const foot=cityNote(groups);
+    if(state.territoryTableView==='bar'){const total=groups.reduce((s,x)=>s+x.value,0)||1;return `${tableBarRows(model.items,{name:x=>x.name,value:x=>x.value,secondary:x=>`${departmentName(x.department)} · ${fmt(x.dwellings)} lgts · ${fmt(x.buildings)} bât.`,crossKey:'commune',crossValue:x=>x.key,crossLabel:x=>`Commune : ${x.name}`,total})}${paginationHtml('territory',model)}${foot}`;}
+    return `<div class="obs-table-wrap"><table class="obs-table"><thead><tr><th>Commune</th><th>Département</th><th>Opérations</th><th>Logements</th><th>Bâtiments</th><th>MOA</th></tr></thead><tbody>${model.items.map(x=>`<tr class="obs-cross-row ${activeCross('commune',x.key)?'is-active':''}" ${crossAttrs('commune',x.key,`Commune : ${x.name}`)}><td><strong>${esc(x.city)}</strong></td><td>${esc(departmentName(x.department))}</td><td>${fmt(x.value)}</td><td>${fmt(x.dwellings)}</td><td>${fmt(x.buildings)}</td><td>${fmt(x.moas.size)}</td></tr>`).join('')}</tbody></table></div>${paginationHtml('territory',model)}${foot}`;
+  }
   function territoryTable(ops){
     const byName=new Map();
     ops.forEach(o=>{
@@ -3650,8 +3815,9 @@
     const pastille=e.target.closest('[data-map-pastille]'); if(pastille){openMapPastille(pastille);return;}
     const resetRegion=e.target.closest('[data-map-reset-region]'); if(resetRegion){state.crossFilters=state.crossFilters.filter(f=>f.key!=='region'&&f.key!=='department');resetTerritoryMapFocus();state.mapOperationGrouping='region';state.territorySummaryPage=1;state.territoryPage=1;renderPage();return;}
     const pager=e.target.closest('[data-table-page][data-page]'); if(pager){const kind=pager.dataset.tablePage,page=Math.max(1,Number(pager.dataset.page)||1);if(kind==='moa')state.moaPage=page;else if(kind==='tunnel-exit')state.tunnelExitPage=page;else if(kind==='cross')state.crossTablePage=page;else if(kind==='mention')state.mentionPage=page;else if(kind==='performance')state.performancePage=page;else if(kind==='territory')state.territoryPage=page;else if(kind==='territory-summary')state.territorySummaryPage=page;else if(kind==='operations')state.operationsPage=page;else if(kind==='overview-mention')state.overviewMentionPage=page;else if(kind==='overview-performance')state.overviewPerformancePage=page;else if(kind==='performance-matrix')state.performanceMatrixPage=page;else if(kind==='status-year-list')state.statusYearPage=page;else if(kind==='quality-issues')state.qualityIssuePage=page;else if(kind==='dictionary')state.dictionaryPage=page;renderPage();return;}
+    const unitBtn=e.target.closest('[data-territory-unit]');if(unitBtn){state.territoryUnit=unitBtn.dataset.territoryUnit==='city'?'city':'department';state.territoryPage=1;renderPage();return;}
     const viewToggle=e.target.closest('[data-overview-view][data-view]'); if(viewToggle){const kind=viewToggle.dataset.overviewView,view=viewToggle.dataset.view;if(kind==='mention'){state.overviewMentionView=view;state.overviewMentionPage=1;}else if(kind==='performance'){state.overviewPerformanceView=view;state.overviewPerformancePage=1;}renderPage();return;}
-    if(state.page==='overview'&&e.target.closest?.('#obsOverviewMap,.obs-ovmap-wrap,[data-ovmap-missing]')&&ovHandleClick(e))return;
+    if(state.page==='overview'&&e.target.closest?.('#obsOverviewMap,.obs-ovmap-wrap,[data-ovmap-missing],[data-ovmap-pdf]')&&ovHandleClick(e))return;
     const cross=e.target.closest('[data-cross-key][data-cross-value]'); if(cross){const decodedValue=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossValue):cross.dataset.crossValue, decodedLabel=cross.dataset.crossEncoded==='1'?decodeURIComponent(cross.dataset.crossLabel||''):cross.dataset.crossLabel;const fixed=crossKeyValueFix(cross.dataset.crossKey,decodedValue,decodedLabel);if(fixed.value){if(state.page==='territories'&&fixed.key==='department'){closeMapPopover();if(state.mapFocusDepartment===fixed.value){state.mapFocusDepartment='';state.mapFocusPending=true;if(!activeCross('department',fixed.value)){renderPage();return;}}else{state.mapFocusDepartment=fixed.value;state.mapFocusRegion=state.mapFocusRegion||regionName(fixed.value);state.mapFocusPending=true;state.territorySummaryPage=1;state.territoryPage=1;if(activeCross('department',fixed.value)){renderPage();return;}}}if(state.page==='territories'&&fixed.key==='region'){closeMapPopover();if(activeCross('region',fixed.value)){resetTerritoryMapFocus();state.mapOperationGrouping='region';}else{focusTerritoryRegion(fixed.value);state.mapFocusDepartment='';state.mapOperationGrouping='department';state.mapLayers.departments=true;state.mapLayers.regions=true;state.territorySummaryPage=1;state.territoryPage=1;}}setCrossFilter(fixed.key,fixed.value,fixed.label);}return;}
     const remove=e.target.closest('[data-remove-cross]'); if(remove){const i=Number(remove.dataset.removeCross);if(Number.isInteger(i)&&state.crossFilters[i]){if(state.crossFilters[i].key==='region'){resetTerritoryMapFocus();state.mapOperationGrouping='region';}if(state.crossFilters[i].key==='department'&&state.mapFocusDepartment){state.mapFocusDepartment='';state.mapFocusPending=true;}state.crossFilters.splice(i,1);renderPage();}return;}
     if(e.target.closest('[data-clear-cross]')){state.crossFilters=[];resetTerritoryMapFocus();state.mapOperationGrouping='region';renderPage();return;}
@@ -3671,7 +3837,7 @@
     if(e.target.closest('[data-export-current]')){exportCurrentCsv();return;}
   });
 
-  pageEl.addEventListener('change',e=>{const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;state.crossUserSet=true;state.crossShowOut=false;state.crossTablePage=1;renderPage();return;}const cc=e.target.closest?.('[data-cross-color]');if(cc){state.crossColor=cc.value;renderPage();return;}const cl=e.target.closest?.('[data-cross-log]');if(cl){state.crossLog=cl.checked;renderPage();return;}
+  pageEl.addEventListener('change',e=>{const pd=e.target.closest?.('[data-ovmap-pdf-detail]');if(pd){state.ovPdfDetail=pd.value;return;}const cm=e.target.closest?.('[data-cross-metric]');if(cm){if(cm.dataset.crossMetric==='x')state.crossX=cm.value;else state.crossY=cm.value;state.crossUserSet=true;state.crossShowOut=false;state.crossTablePage=1;renderPage();return;}const cc=e.target.closest?.('[data-cross-color]');if(cc){state.crossColor=cc.value;renderPage();return;}const cl=e.target.closest?.('[data-cross-log]');if(cl){state.crossLog=cl.checked;renderPage();return;}
     const performanceCheck=e.target.closest?.('[data-performance-matrix-check]');if(performanceCheck){const kind=performanceCheck.dataset.performanceMatrixCheck,key=kind==='mention'?'performanceMatrixMentions':'performanceMatrixPerformances',vals=matrixSelectionValues(kind).slice(),value=performanceCheck.value,idx=vals.findIndex(v=>norm(v)===norm(value));if(performanceCheck.checked&&idx<0)vals.push(value);if(!performanceCheck.checked&&idx>=0)vals.splice(idx,1);state[key]=vals;state.performanceMatrixPage=1;renderPage();return;}
     const lmd=e.target.closest?.('[data-label-merge-derog]');if(lmd){state.labelMergeDerogation=lmd.checked;try{localStorage.setItem(LABEL_MERGE_KEY,lmd.checked?'1':'0');}catch{}preserveUiScroll(()=>renderPage());return;}
     const tunnelExcluded=e.target.closest?.('[data-tunnel-excluded-toggle]');if(tunnelExcluded){state.tunnelShowExcluded=Boolean(tunnelExcluded.checked);renderPage();return;}

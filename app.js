@@ -7132,21 +7132,28 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       .map(x=>x.replace(new RegExp(BR_SENTINEL,'g'),'\n').replace(/^[-–—•]+\s*/,'').trim())
       .filter(Boolean);
   }
+  // V6.62 (comme Obslide V29.16) : un niveau RE2020 arrive sous deux formes — « Niveau IC Énergie 2025 » dans la cellule
+  // Performance et « IC Énergie 2025 » dans la colonne « Niveau IC Énergie » (affiché avant « IC Énergie IC Énergie 2025 »).
+  // Un seul libellé (sans « Niveau ») et une seule clé ; « Voir Mentions » renvoie à la colonne Mentions, ce n'est pas une performance.
+  function dataPerfName(n){return String(n||'').trim().split('\n').map(l=>{l=l.trim();return /^niveau\s+(?=[^\d\s])/i.test(l)?l.replace(/^niveau\s+/i,''):l;}).join('\n');}
+  function dataTagKey(n,kind){return kind==='performance'?dataNorm(dataPerfName(n)).replace(/\s*-\s*/g,'-'):dataNorm(n);}
+  function dataIsPerfPointer(n){return /^voir (les )?mentions?$/.test(dataNorm(n));}
+  function dataLevelLabel(h,v){const sub=String(h).replace(/^Niveau\s+/i,'').trim(),sv=String(v??'').trim();if(dataBoolish(v))return sub;const val=dataPerfName(sv);return dataNorm(val).startsWith(dataNorm(sub))?val:`${sub} ${sv}`;}
   function dataAggregateTags(ops,kind){
     const m=new Map();
-    const addGlobal=(n,o)=>{n=String(n||'').trim();if(!n)return;const k=dataNorm(n);if(!m.has(k))m.set(k,{name:n,value:0,dwellings:0,buildings:0});const item=m.get(k);if(n.includes('\n')&&!String(item.name||'').includes('\n'))item.name=n;item.value++;item.dwellings+=Math.max(0,num(o?.dwellings));item.buildings+=Math.max(0,num(o?.buildings));};
+    const addGlobal=(n,o)=>{n=String(n||'').trim();if(!n)return;if(kind==='performance')n=dataPerfName(n);const k=dataTagKey(n,kind);if(!m.has(k))m.set(k,{name:n,value:0,dwellings:0,buildings:0});const item=m.get(k);if(n.includes('\n')&&!String(item.name||'').includes('\n'))item.name=n;item.value++;item.dwellings+=Math.max(0,num(o?.dwellings));item.buildings+=Math.max(0,num(o?.buildings));};
     ops.forEach(o=>{
       // Un même libellé n'est compté qu'une fois par opération, même s'il apparaît
       // à la fois dans la cellule agrégée et dans une colonne dédiée Oui/Non.
       const perOperation=new Map();
-      const add=n=>{n=String(n||'').trim();if(!n)return;const k=dataNorm(n);if(!perOperation.has(k)||(!String(perOperation.get(k)||'').includes('\n')&&n.includes('\n')))perOperation.set(k,n);};
+      const add=n=>{n=String(n||'').trim();if(!n||(kind==='performance'&&dataIsPerfPointer(n)))return;const k=dataTagKey(n,kind);if(!perOperation.has(k)||(!String(perOperation.get(k)||'').includes('\n')&&n.includes('\n')))perOperation.set(k,n);};
       dataSplitValues(kind==='mention'?o.mentions:o.performance).forEach(add);
       const rows=o.rawRows||[o.raw];
       rows.forEach(r=>Object.entries(r||{}).forEach(([h,v])=>{
         const hn=dataNorm(h), sv=String(v??'').trim();
         if(kind==='mention'&&hn.startsWith('mention ')&&dataBoolish(v))add(h.replace(/^Mention\s+/i,''));
         if(kind==='mention'&&hn==='sans mention'&&dataBoolish(v))add('Sans mention');
-        if(kind==='performance'&&hn.startsWith('niveau ')&&sv&&!/^(0|non|false)$/i.test(sv))add(dataBoolish(v)?h.replace(/^Niveau\s+/i,''): `${h.replace(/^Niveau\s+/i,'')} ${sv}`);
+        if(kind==='performance'&&hn.startsWith('niveau ')&&sv&&!/^(0|non|false)$/i.test(sv))add(dataLevelLabel(h,v));
         if(kind==='performance'&&/performance (environnementale|renforcee|renforcée)/.test(hn)&&sv&&dataBoolish(v))add(h);
       }));
       perOperation.forEach(n=>addGlobal(n,o));
@@ -7154,15 +7161,15 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     return [...m.values()].sort((a,b)=>b.value-a.value||a.name.localeCompare(b.name,'fr'));
   }
   function dataOperationHasTag(o,kind,label){
-    const wanted=dataNorm(label), found=new Set();
-    const add=n=>{n=String(n||'').trim();if(n)found.add(dataNorm(n));};
+    const wanted=dataTagKey(label,kind), found=new Set();
+    const add=n=>{n=String(n||'').trim();if(n)found.add(dataTagKey(n,kind));};
     dataSplitValues(kind==='mention'?o.mentions:o.performance).forEach(add);
     const rows=o.rawRows||[o.raw];
     rows.forEach(r=>Object.entries(r||{}).forEach(([h,v])=>{
       const hn=dataNorm(h), sv=String(v??'').trim();
       if(kind==='mention'&&hn.startsWith('mention ')&&dataBoolish(v))add(h.replace(/^Mention\s+/i,''));
       if(kind==='mention'&&hn==='sans mention'&&dataBoolish(v))add('Sans mention');
-      if(kind==='performance'&&hn.startsWith('niveau ')&&sv&&!/^(0|non|false)$/i.test(sv))add(dataBoolish(v)?h.replace(/^Niveau\s+/i,''): `${h.replace(/^Niveau\s+/i,'')} ${sv}`);
+      if(kind==='performance'&&hn.startsWith('niveau ')&&sv&&!/^(0|non|false)$/i.test(sv))add(dataLevelLabel(h,v));
       if(kind==='performance'&&/performance (environnementale|renforcee|renforcée)/.test(hn)&&sv&&dataBoolish(v))add(h);
     }));
     return found.has(wanted);

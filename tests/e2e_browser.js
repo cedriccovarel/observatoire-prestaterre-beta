@@ -34,11 +34,15 @@ rr('OP-4', 'EVA-OP-4', 'Bailleur B', 'BEE Logement Rénovation', '18/06/2025', [
 rr('OP-1', 'EVA-OP-1-ANC', 'Promoteur A', 'BEE Logement Neuf', '01/02/2023', ['1.1.1', '4.B.2']);
 for (let i = 0; i < 40; i++) rr('OP-X' + i, 'EVA-X' + i, 'Promoteur Z', 'BEE Logement Neuf', '04/05/2026', ['1.1.1', '2.1.1']);
 
+const TILE_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP89+/ffwAJ+QP8L7ZJ3QAAAABJRU5ErkJggg==', 'base64');
 async function scenario(browser, origin, properties, { jsonFails = false, matrix = MATRIX, noKey = false, viewport, extraSheets = {}, delayMs = 0, noConnect = false, beforeGoto = null } = {}) {
   const gs = loadGs('Code_Operations.gs', { matrix, properties: { NEWOSB_ACCESS_KEY: KEY, ...properties }, extraSheets });
   const gsReq = loadGs('Code_Exigences.gs', { matrix: RAPPORT, sheetName: 'RAPPORT', properties: { NEWOSB_ACCESS_KEY: KEY, ...properties } });
   const context = await browser.newContext({ acceptDownloads: true, viewport: viewport || { width: 1280, height: 900 } });
   const requests = [];
+  // V6.62 : fond de carte (Plan IGN / OpenStreetMap) : tuile neutre servie localement, jamais d'appel réseau pendant les tests.
+  context.tileRequests = [];
+  await context.route(/data\.geopf\.fr|tile\.openstreetmap\.org/, route => { context.tileRequests.push(route.request().url()); return route.fulfill({ contentType: 'image/png', headers: { 'Access-Control-Allow-Origin': '*' }, body: TILE_PNG }); });
   await context.route('https://script.google.com/**', async route => {
     const url = new URL(route.request().url());
     requests.push(url.toString());
@@ -939,16 +943,27 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
         await page.evaluate(() => document.querySelector('button[data-page="overview"]').click());
         const ready = () => page.waitForFunction(() => /sur \d/.test(document.querySelector('[data-ovmap-count]')?.textContent || ''), null, { timeout: 30000 }).catch(() => {});
         await ready();
-        const info = () => page.evaluate(() => ({ count: document.querySelector('[data-ovmap-count]')?.textContent || '', note: document.querySelector('[data-ovmap-note]')?.textContent || '', pts: document.querySelectorAll('.obs-ovmap-pt').length, approx: document.querySelectorAll('.obs-ovmap-pt.is-approx').length, clusters: document.querySelectorAll('.obs-ovmap-cluster').length, html: document.querySelector('.obs-ovmap-card')?.innerHTML || '' }));
+        const info = () => page.evaluate(() => ({ count: document.querySelector('[data-ovmap-count]')?.textContent || '', note: document.querySelector('[data-ovmap-note]')?.textContent || '', pts: document.querySelectorAll('.obs-ovmap-pt').length, approx: document.querySelectorAll('.obs-ovmap-pt.is-approx').length, clusters: document.querySelectorAll('.obs-ovmap-cluster').length, inClusters: [...document.querySelectorAll('.obs-ovmap-cluster')].reduce((s, e) => s + Number(e.textContent), 0), leaflet: !!document.querySelector('#obsOverviewMap.leaflet-container .leaflet-tile-pane'), html: document.querySelector('.obs-ovmap-card')?.innerHTML || '' }));
         const a = await info();
         if (vp.tag === 'desktop') {
           check(/^4 projets géolocalisés sur \d+/.test(a.count) && /échantillon faible/.test(a.count), 'comptage : « 4 projets géolocalisés sur N » (2 précis, 2 au centre de la commune) + échantillon faible — ' + a.count);
           check(/2 positions précises · 2 positions approximatives/.test(a.note) && /non localisés \(voir la liste\)/.test(a.note), 'classification précise / approximative / non localisée — ' + a.note);
-          check(a.clusters === 1 && a.pts === 2, `Bordeaux : point précis et centre de commune regroupés en une pastille (${a.clusters} pastille, ${a.pts} points)`);
+          check(a.leaflet && a.pts + a.inClusters === 4, `fond Plan IGN (Leaflet) : 4 projets sur la carte (${a.pts} points, ${a.clusters} pastille(s) groupée(s))`);
+          await page.waitForTimeout(400);
+          const tiles = context.tileRequests;
+          check(tiles.length > 0 && tiles.every(u => /^https:\/\/data\.geopf\.fr\/wmts\?SERVICE=WMTS&REQUEST=GetTile&VERSION=1\.0\.0&LAYER=GEOGRAPHICALGRIDSYSTEMS\.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image\/png&TILEMATRIX=\d+&TILEROW=\d+&TILECOL=\d+$/.test(u)), `tuiles Plan IGN : seuls zoom / ligne / colonne sont envoyés (${tiles.length} tuiles)`);
+          await page.click('[data-ovmap-zoom="out"]'); await page.waitForTimeout(450); await page.click('[data-ovmap-zoom="out"]'); await page.waitForTimeout(450);
+          const zo = await info(); check(zo.clusters >= 1, `dézoom : Libourne et Bordeaux regroupés en une pastille (${zo.clusters} pastille(s), ${zo.pts} points)`);
           check(geoReqs.length > 0 && geoReqs.every(u => /\/departements\/\w+\/communes\?fields=nom,code,centre/.test(u)) && !geoReqs.some(u => /rue|all%C3%A9e|allée|Exemple/i.test(decodeURIComponent(u))), `geo.api.gouv.fr interrogé par code département seulement, jamais avec une adresse (${geoReqs.length} requêtes)`);
-          await page.click('.obs-ovmap-cluster'); await page.waitForTimeout(300);
-          const z = await info(); check(z.pts === 4 && z.clusters === 0, 'clic sur une pastille groupée : zoom, les points se séparent');
-          await page.click('[data-ovmap-zoom="reset"]'); await page.waitForTimeout(200);
+          await page.click('.obs-ovmap-cluster'); await page.waitForTimeout(700);
+          const z = await info(); check(z.clusters === 0 && z.pts >= 2, `clic sur une pastille groupée : zoom, les points se séparent (${z.pts} points visibles)`);
+          await page.click('[data-ovmap-zoom="reset"]'); await page.waitForTimeout(500);
+          // Export PDF : vue affichée, pastilles cliquables vers les fiches en annexe.
+          const pdfText = async () => { const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click('[data-ovmap-pdf]')]); const buf = fs.readFileSync(await dl.path()); const zlib = require('zlib'); let txt = buf.toString('latin1'); const re = /stream\r?\n([\s\S]*?)\r?\nendstream/g; let m; while ((m = re.exec(buf.toString('latin1')))) { try { txt += '\n' + zlib.inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'); } catch {} } return { name: dl.suggestedFilename(), size: buf.length, txt }; };
+          const pdf = await pdfText();
+          const links = (pdf.txt.match(/\/Subtype \/Link/g) || []).length;
+          check(/^Observatoire_carte_projets_\d{4}-\d{2}-\d{2}\.pdf$/.test(pdf.name) && /^%PDF-/.test(pdf.txt) && /\/Subtype \/Image/.test(pdf.txt), `export PDF : ${pdf.name} (${Math.round(pdf.size / 1024)} Ko) avec le fond de carte en image`);
+          check(links >= 4 && /Fiches des projets/.test(pdf.txt) && /Les Jardins/.test(pdf.txt) && /Retour a la carte|Retour \\340 la carte|Retour à la carte/.test(pdf.txt), `PDF : ${links} liens (pastilles → fiches en annexe, retour à la carte), noms des projets en annexe`);
           await page.click('[data-ovmap-missing]'); await page.waitForTimeout(200);
           check(/projets non localisés/.test(await page.textContent('[data-ovmap-panel]')), 'liste des projets non localisés');
           await page.keyboard.press('Escape'); await page.waitForTimeout(150);
@@ -966,6 +981,17 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
           await page.click('.obs-ovmap-open'); await page.waitForTimeout(400);
           check(await page.evaluate(() => document.querySelector('.obs-project-window')?.classList.contains('is-open')), '« Ouvrir la fiche complète » : fiche projet ouverte');
           await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+          await page.click('[data-territory-unit="city"]'); await page.waitForTimeout(400);
+          const city = await page.evaluate(() => { const c = document.querySelector('.obs-territory-unit-card'); return { title: c?.querySelector('h2')?.textContent, rows: [...(c?.querySelectorAll('.obs-bar-row b[title]') || [])].map(b => b.textContent) }; });
+          check(/Villes/.test(city.title) && city.rows.includes('Bordeaux (33)') && city.rows.includes('Libourne (33)'), 'Territoires : répartition par ville (commune + département) — ' + city.rows.join(', '));
+          const beforeCity = (await info()).count;
+          await page.click('.obs-territory-unit-card .obs-bar-row[data-cross-key="commune"]'); await page.waitForTimeout(500); await ready();
+          const afterCity = (await info()).count; check(afterCity !== beforeCity && /^1 projet géolocalisé/.test(afterCity), `clic sur une ville : filtre croisé, carte mise à jour (${beforeCity} → ${afterCity})`);
+          await page.click('.obs-territory-unit-card .obs-bar-row.is-active'); await page.waitForTimeout(400);
+          await page.evaluate(() => document.querySelector('button[data-page="territories"]').click()); await page.waitForTimeout(500);
+          check(await page.evaluate(() => /Villes de la sélection/.test(document.body.textContent) && /Commune/.test(document.querySelector('.obs-table thead')?.textContent || '')), 'onglet Territoires : tableau par ville (même choix)');
+          await page.click('[data-territory-unit="department"]'); await page.waitForTimeout(300);
+          await page.evaluate(() => document.querySelector('button[data-page="overview"]').click()); await ready(); await page.waitForTimeout(300);
           check(await page.evaluate(() => { try { return !Object.keys(localStorage).some(k => /ovmap|overview.?map/i.test(k)) && sessionStorage.length <= 1; } catch { return false; } }), 'aucune donnée de carte écrite dans localStorage / sessionStorage');
           await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(true)); await page.waitForTimeout(500);
           await page.evaluate(() => document.querySelector('button[data-page="overview"]').click()); await ready(); await page.waitForTimeout(300);
@@ -975,6 +1001,9 @@ async function scenario(browser, origin, properties, { jsonFails = false, matrix
           await page.evaluate(() => document.querySelector('[data-ovmap-panel] [data-ovmap-op]')?.click()); await page.waitForTimeout(200);
           const ap = await page.evaluate(() => document.querySelector('[data-ovmap-panel]')?.textContent || '');
           check(/Adresse et nom masqués/.test(ap) && !/12 rue Exemple|Les Jardins/.test(ap), 'mode anonymisé : la fiche indique que l’adresse est masquée');
+          await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+          const apdf = await pdfText();
+          check(!/12 rue Exemple|3 all.e Test|Les Jardins|Le Parc|33063/.test(apdf.txt) && /mode anonymis/.test(apdf.txt), 'PDF en mode anonymisé : ni nom, ni adresse, ni INSEE');
           await page.evaluate(() => window.NEWOSB_PRIVACY.setEnabled(false));
         } else {
           check(/4 projets géolocalisés/.test(a.count) && await page.evaluate(() => document.querySelector('.obs-ovmap').getBoundingClientRect().height <= 320), 'mobile : carte de hauteur réduite');

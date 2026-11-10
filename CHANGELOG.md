@@ -1,5 +1,25 @@
 # Historique
 
+## V6.62 — Carte sur fond Plan IGN, export PDF, Territoires par ville
+- Carte de la Vue d'ensemble sur fond **Plan IGN v2** (Géoplateforme : gratuit, sans clé, noms des villes et communes), avec
+  OpenStreetMap en secours si le service IGN ne répond pas. Bibliothèque Leaflet 1.9.4 intégrée au site (`leaflet.js`, `leaflet.css`).
+  Mêmes pastilles qu'avant (couleur d'avancement, pointillés = position approximative, regroupement des points proches, clic = fiche
+  résumé, liste des non localisés). Les serveurs de tuiles ne reçoivent que zoom / ligne / colonne, jamais une donnée projet.
+  Mode anonymisé : positions inchangées (commune si ≥ 5 projets, sinon département) et zoom limité au niveau 12.
+- **Exporter en PDF** (vue affichée, A4) : fond de carte redessiné à ×1, ×2 ou ×4 la résolution de l'écran (choix « Netteté PDF » ;
+  ×2 et ×4 gardent les noms lisibles quand on zoome dans le PDF), pastilles en vecteur numérotées. Chaque pastille est un lien vers sa
+  fiche en annexe (code, nom, adresse, avancement, référentiel, logements, MOA, mentions, performances, tags), avec « Retour à la
+  carte ». Projets non localisés : liste compacte des codes. Mode anonymisé : codes pseudonymisés, ni nom ni adresse. jsPDF 2.5.2
+  (`jspdf.umd.min.js`) chargé seulement au premier export. Avancement affiché sur le bouton (tuiles chargées).
+- **Territoires : Départements / Villes** (Vue d'ensemble et tableau de l'onglet Territoires). Ville = colonne « Ville » du Sheet,
+  complétée par TotalRecoll ; graphies regroupées (« LILLE », « Lille Cedex ») mais homonymes de départements différents séparés ;
+  clic = filtre croisé sur la commune. Mode anonymisé : communes de moins de 5 projets regroupées en « Autres communes ».
+- Performances : un niveau RE2020 n'est plus compté deux fois (« Niveau IC Énergie 2025 » de la cellule Performance et
+  « IC Énergie IC Énergie 2025 » de la colonne « Niveau IC Énergie ») ; « Voir Mentions » n'est plus une performance (comme Obslide V29.16).
+- Correctif : les barres des encarts de la Vue d'ensemble (surfaces, territoires, maîtres d'ouvrage…) étaient vides (remplissage sans
+  `display:block`) et les valeurs pouvaient sortir des encarts étroits.
+- Écran de chargement : minuscule pastille de repère en laiton scellée dans l'enduit à droite du compteur d'eau.
+
 ## V6.61 — Stock C dans « Marge au seuil » (Carbone)
 - Nouvelle jauge **Stock C** (kgC/m²) dans l'encart « Marge au seuil » de l'onglet Carbone, masquable depuis ⓘ comme les autres.
 - Source : colonne « Stock C/m² » lue par ExtracTerre et envoyée par TotalRecoll (complément en mémoire), ou une colonne

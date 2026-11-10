@@ -158,6 +158,27 @@ test('V6.61 : Stock C sans seuil : répartition (min, quartiles, max), jamais de
   const few = C.valueSpread(ops.slice(0, 3), 'stockC'); assert.strictEqual(few.lowSample, true); assert.strictEqual(few.valueQ1, null);
   const none = C.valueSpread([], 'stockC'); assert.strictEqual(none.n, 0); assert(/aucune valeur/.test(none.reason));
 });
+
+test('V6.62 : répartition par commune (graphies fusionnées, homonymes séparés, petits effectifs masqués en mode anonymisé)', () => {
+  const ops = [{ city: 'LILLE', department: '59' }, { city: 'Lille', department: '59' }, { city: 'Lille Cedex', department: '59' }, { city: 'Saint-Denis', department: '93' }, { city: 'St Denis', department: '974' }, { city: '', department: '59' }];
+  const g = C.cityGroups(ops);
+  assert.strictEqual(g[0].name, 'Lille (59)'); assert.strictEqual(g[0].value, 3);
+  assert.strictEqual(g.filter(x => /Denis/.test(x.name)).length, 2, 'Saint-Denis (93) et (974) restent séparées');
+  assert.strictEqual(JSON.stringify(g[g.length - 1]), JSON.stringify({ key: '', name: 'Commune non renseignée', value: 1, missing: true }));
+  assert.strictEqual(C.cityKey({ city: 'St-Andre-lez-Lille', department: '59' }), C.cityKey({ city: 'SAINT ANDRE LEZ LILLE', department: '59' }));
+  assert.strictEqual(C.prettyCity("VILLENEUVE D'ASCQ"), "Villeneuve d'Ascq"); assert.strictEqual(C.prettyCity('Roubaix'), 'Roubaix');
+  const many = Array.from({ length: 5 }, () => ({ city: 'Roubaix', department: '59' })).concat(ops);
+  const a = C.cityGroups(many, { anonymized: true });
+  assert.strictEqual(a[0].name, 'Roubaix (59)'); assert(!a.some(x => /Lille|Denis/.test(x.name)), 'aucune commune de moins de 5 projets nommée');
+  const other = a.find(x => x.merged); assert.strictEqual(other.value, 5); assert.strictEqual(other.communes, 3);
+});
+
+test('V6.62 : tuiles Web Mercator couvrant la vue exportée en PDF', () => {
+  const t = C.tileRange(300, 100, 600, 300, 3);
+  assert.strictEqual(t.length, 6); assert.strictEqual(JSON.stringify(t[0]), JSON.stringify({ x: 1, y: 0, dx: -44, dy: -100 }));
+  const w = C.tileRange(-100, 0, 300, 10, 2); assert.strictEqual(w.map(x => x.x).join(','), '3,0', 'passage de l’antiméridien');
+  assert.strictEqual(C.tileRange(0, 2000, 256, 256, 2).length, 0, 'hors du monde en latitude : aucune tuile');
+});
 test('n = 0 : non calculable avec la raison, jamais un faux 0 %', () => {
   const none = C.thresholdMargin([mk('A', { cep: '' })], 'cep', 'cepMax');
   assert.strictEqual(none.n, 0); assert.strictEqual(none.margin, null); assert.strictEqual(none.medianRatio, null); assert(/aucune valeur/.test(none.reason));

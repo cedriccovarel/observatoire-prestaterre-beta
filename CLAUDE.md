@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.62 | Minuscule pastille de repère en laiton scellée dans l'enduit à droite du compteur d'eau. |
 | V6.61 | Minuscule éclat d'enduit plus clair, avec son ombre fine, à gauche du compteur d'eau. |
 | V6.60 | Minuscule tache d'humidité sur l'enduit, sous le robinet du compteur d'eau. |
 | V6.59 | Fine ligne de joint sur l'enduit au-dessus du compteur d'eau. |
@@ -90,3 +91,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   réglementaire, donc jauge de répartition (`core.valueSpread` : min, quartiles, max), jamais de marge ni de seuil inventé.
 - V6.61 : Présentation, slide standard : `presSlideMetrics` / `presStageVars` (hauteur d'en-tête et de bas de page selon les tailles,
   zone des visuels entre les deux, `--pres-fit` réduit `.obs-pres-items` sans changer sa mise en page 1160×450) ; export PPTX aligné.
+- V6.62 : carte de la Vue d'ensemble sur fond Plan IGN v2 (Leaflet, `leaflet.js` local ; OSM en secours), export PDF avec liens
+  pastille → fiche en annexe (jsPDF local, chargé au premier export). Les tuiles ne reçoivent que zoom / x / y. En e2e, toutes les tuiles
+  sont servies localement (`TILE_PNG` dans `scenario()`). Territoires : Départements / Villes (`core.cityGroups`, filtre croisé `commune`).
