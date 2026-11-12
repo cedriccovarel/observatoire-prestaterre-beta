@@ -7363,6 +7363,24 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     dataRuntime.sourceOperations=ops;dataRuntime.operations=dataPrivacyApply(ops);dataRuntime.filtered=[...dataRuntime.operations];
     dataPopulateFilters();dataSyncViews();try{window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE?.getRuntime?.()}));}catch{}
     dataRenderSourceInfo();return true;}
+  // V6.63 — complément TotalRecoll joint aux liens partagés : JSON compressé (gzip) en base64.
+  async function dataGzipB64(obj){const s=new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('gzip'));const b=new Uint8Array(await new Response(s).arrayBuffer());let out='';for(let i=0;i<b.length;i+=0x8000)out+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(out);}
+  async function dataGunzipB64(b64){const bin=atob(String(b64||''));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);const s=new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'));return JSON.parse(await new Response(s).text());}
+  function dataShareComplement(codes){const R=window.NEWOSB_RECOLL,rc=dataRuntime.recoll,rows=dataRuntime.sourceMeta?.rows;
+    if(!R?.buildShareComplement||!rc?.payload||rc.shared||!Array.isArray(rows)||!rows.length)return null;
+    const keys=dataRecollKeys(rows);
+    const c=R.buildShareComplement(rows,rc.payload,keys,codes||(keys.code?rows.map(r=>r[keys.code]).filter(Boolean):[]));
+    return {complement:c,buildings:c.buildings.length,operations:new Set(c.buildings.map(b=>b.code)).size};}
+  async function dataShareComplementPacked(codes){const c=dataShareComplement(codes);if(!c||!c.buildings)return null;return {...c,b64:await dataGzipB64(c.complement)};}
+  // Destinataire d'un lien : complément joint au lien, fusionné avec le même code que chez l'administrateur.
+  async function dataShareApplyComplement(url,rows){const R=window.NEWOSB_RECOLL;if(!R||!Array.isArray(rows)||!rows.length)return rows;
+    let res=null;try{res=await dataAppsScriptRequest(url,{mode:'complement'},90000);}catch{return rows;}
+    if(!res||res.ok===false||!res.complement)return rows;
+    let payload=null;try{payload=R.validatePayload(await dataGunzipB64(res.complement));}catch{return rows;}
+    if(!payload||!payload.buildings.length)return rows;
+    const keys=dataRecollKeys(rows),m=R.merge(rows,payload,keys);
+    dataRuntime.recoll={payload,stats:m.stats,details:m.details,appliedAt:Date.now(),shared:true,gains:dataRecollGains(rows,m.rows,keys)};
+    return m.rows;}
   function dataRecollOpen(){if(dataRecollWin&&!dataRecollWin.closed){dataRecollWin.focus();return;}
     dataRecollWin=window.open(window.NEWOSB_TOTALRECOLL_URL||DATA_TOTALRECOLL_URL,'newosb-totalrecoll');
     if(!dataRecollWin)dataFeedback('Le navigateur a bloqué l’ouverture de TotalRecoll : autorise les fenêtres pour l’Observatoire.',true);}
@@ -7441,7 +7459,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       if(json&&json.ok===false)throw new Error(json.error||'Erreur Apps Script');
       if(!json?.shared||!json?.share)throw new Error('Le script OPERATIONS ne reconnaît pas les liens de partage : il doit être mis à jour (Code_Operations.gs V6.15).');
       if(window.NEWOSB_SHARE)window.NEWOSB_SHARE.forcePrivacy=!!json.share.anonymized;
-      const rows=json.operations||[];
+      dataRuntime.recoll=null;
+      const rows=await dataShareApplyComplement(url,json.operations||[]);
       dataRuntime.sourceHeaders=Array.isArray(json.headers)?json.headers.map(h=>String(h??'').trim()):Object.keys(rows[0]||{});
       const ops=rows.length?dataRowsToOperations(rows):[];
       dataLocateDiagnosticColumns(Array.isArray(json.headers)?json.headers:Object.keys(rows[0]||{}));
@@ -7621,6 +7640,8 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     shareAdminRequest:dataShareAdminRequest,
     shareAdminClose(){dataBridge?.closePopupSoon(0);},
     resolveRealCodes:dataResolveRealCodes,
+    shareComplement:dataShareComplement,
+    shareComplementPacked:dataShareComplementPacked,
     cancelGoogleSlides(){dataBridge?.closePopupSoon(0);}
   };
   const newosbSignal=()=>window.dispatchEvent(new CustomEvent('newosb:datachange',{detail:window.NEWOSB_ENGINE.getRuntime()}));

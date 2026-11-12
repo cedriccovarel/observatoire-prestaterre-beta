@@ -9,6 +9,11 @@
  * Changements V6.42 : la reponse « meta » indique le classeur, l'onglet lus et la date de modification
  *   du classeur (sourceInfo), affiches dans la fenetre « Donnees » de l'Observatoire. Aucune donnee metier.
  *
+ * Changements V6.46 : complement TotalRecoll des liens de partage (onglet masque OBSERVATOIRE_PARTAGES_COMPLEMENTS).
+ *   A la creation d'un lien (ou ensuite, mode sharecomplement), l'administrateur peut joindre les valeurs techniques
+ *   TotalRecoll des seules operations du perimetre (JSON compresse gzip, base64). Le destinataire les recoit (mode
+ *   complement) ; un lien anonymise recoit ces valeurs pseudonymisees / retirees selon les memes regles que les lignes
+ *   (newosbColumnRule_) et rattachees par code interne pseudonymise. Supprime a la revocation du lien.
  * Changements V6.35 : archivage des liens de partage (mode sharearchive, colonne « Archive le (ms) »
  *   ajoutee a OBSERVATOIRE_PARTAGES). Archiver ne change pas l'acces : un lien actif archive fonctionne
  *   toujours tant qu'il n'est pas revoque ou expire.
@@ -67,7 +72,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.45',
+  VERSION: '06.46',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -168,7 +173,7 @@ function newosbApiRequest_(params) {
     return newosbRapportRequest_(params, mode, { anonymized: newosbAnonymizedOnly_() });
   }
 
-  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend' || mode === 'sharearchive' || mode === 'visitorrevoke' || mode === 'visitorextend') {
+  if (mode === 'sharecreate' || mode === 'sharelist' || mode === 'sharerevoke' || mode === 'shareextend' || mode === 'sharearchive' || mode === 'sharecomplement' || mode === 'visitorrevoke' || mode === 'visitorextend') {
     return newosbShareAdmin_(mode, params);
   }
 
@@ -722,8 +727,93 @@ const NEWOSB_SHARE_CONFIG = {
   VISITOR_SHEET: 'OBSERVATOIRE_PARTAGES_VISITEURS',
   VISITOR_HEADERS: ['Identifiant', 'Empreinte du jeton', 'Lien', 'Nom', 'Prenom', 'Societe', 'Enregistre le (ms)', 'Expire le (ms)', 'Revoque le (ms)', 'Dernier acces (ms)', "Nombre d'acces"],
   MAX_VISITORS: 500,
-  TOKEN_PROPERTY_PREFIX: 'NEWOSB_SHARE_TOKEN_'
+  TOKEN_PROPERTY_PREFIX: 'NEWOSB_SHARE_TOKEN_',
+  // V6.46 : complement TotalRecoll joint au lien (JSON gzip en base64, decoupe en morceaux de 45 000 caracteres).
+  COMPLEMENT_SHEET: 'OBSERVATOIRE_PARTAGES_COMPLEMENTS',
+  COMPLEMENT_HEADERS: ['Identifiant', 'Morceau', 'Donnees', 'Mis a jour (ms)', 'Batiments'],
+  COMPLEMENT_CHUNK: 45000,
+  COMPLEMENT_MAX_CHARS: 12000000
 };
+
+// ---- V6.46 : complement TotalRecoll des liens de partage ----
+function newosbComplementSheet_(create) {
+  const ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(NEWOSB_SHARE_CONFIG.COMPLEMENT_SHEET);
+  if (!sheet && create) {
+    sheet = ss.insertSheet(NEWOSB_SHARE_CONFIG.COMPLEMENT_SHEET);
+    sheet.getRange(1, 1, 1, NEWOSB_SHARE_CONFIG.COMPLEMENT_HEADERS.length).setNumberFormat('@').setValues([NEWOSB_SHARE_CONFIG.COMPLEMENT_HEADERS]);
+    try { sheet.hideSheet(); } catch (e) {}
+    try { sheet.protect().setDescription('Complements TotalRecoll des liens de partage (gere par le script)').setWarningOnly(true); } catch (e) {}
+  }
+  return sheet || null;
+}
+function newosbComplementRows_(sheet, id) {
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  return sheet.getRange(2, 1, sheet.getLastRow() - 1, NEWOSB_SHARE_CONFIG.COMPLEMENT_HEADERS.length).getValues()
+    .map(function(r, i) { return { row: i + 2, id: String(r[0] || ''), part: Number(r[1]) || 0, data: String(r[2] || '').replace(/^~/, ''), updatedAt: Number(r[3]) || 0, buildings: Number(r[4]) || 0 }; })
+    .filter(function(r) { return r.id === id; });
+}
+function newosbComplementDelete_(sheet, id) {
+  newosbComplementRows_(sheet, id).map(function(r) { return r.row; }).sort(function(a, b) { return b - a; }).forEach(function(row) { sheet.deleteRow(row); });
+}
+// Controle du complement envoye par l'Observatoire : base64 d'un JSON gzip, taille bornee, forme attendue.
+function newosbComplementCheck_(b64) {
+  const text = String(b64 || '');
+  if (!text) return null;
+  if (text.length > NEWOSB_SHARE_CONFIG.COMPLEMENT_MAX_CHARS || !/^[A-Za-z0-9+/=]+$/.test(text)) throw new Error('Complement TotalRecoll invalide ou trop volumineux.');
+  const data = newosbComplementDecode_(text);
+  if (!data || data.type !== 'newosb:share-complement' || data.v !== 1 || !Array.isArray(data.buildings)) throw new Error('Complement TotalRecoll illisible.');
+  return { b64: text, buildings: data.buildings.length };
+}
+function newosbComplementDecode_(b64) {
+  const blob = Utilities.newBlob(Utilities.base64Decode(b64), 'application/x-gzip');
+  return JSON.parse(Utilities.ungzip(blob).getDataAsString('UTF-8'));
+}
+function newosbComplementEncode_(data) {
+  return Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(JSON.stringify(data), 'application/json')).getBytes());
+}
+// Ne garde que les batiments des operations du perimetre du lien (codes internes normalises).
+function newosbComplementRestrict_(checked, codes) {
+  if (!checked) return null;
+  const want = {}; (codes || []).forEach(function(c) { want[newosbShareNormCode_(c)] = true; });
+  const data = newosbComplementDecode_(checked.b64);
+  data.buildings = (data.buildings || []).filter(function(b) { return b && want[newosbShareNormCode_(b.code)]; });
+  if (!data.buildings.length) return null;
+  return { b64: newosbComplementEncode_(data), buildings: data.buildings.length };
+}
+function newosbComplementSave_(id, checked, now) {
+  const sheet = newosbComplementSheet_(true);
+  newosbComplementDelete_(sheet, id);
+  if (!checked) return null;
+  const size = NEWOSB_SHARE_CONFIG.COMPLEMENT_CHUNK, rows = [];
+  for (let i = 0; i * size < checked.b64.length; i++) rows.push([id, String(i), '~' + checked.b64.slice(i * size, (i + 1) * size), String(now), String(checked.buildings)]);
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setNumberFormat('@').setValues(rows);
+  return { updatedAt: now, buildings: checked.buildings };
+}
+function newosbComplementInfo_(sheet, id) {
+  const parts = newosbComplementRows_(sheet, id);
+  return parts.length ? { updatedAt: parts[0].updatedAt, buildings: parts[0].buildings } : null;
+}
+function newosbComplementLoad_(id) {
+  const parts = newosbComplementRows_(newosbComplementSheet_(false), id).sort(function(a, b) { return a.part - b.part; });
+  return parts.map(function(p) { return p.data; }).join('');
+}
+// Lien anonymise : code interne pseudonymise comme dans les lignes, contrat et OPE retires, colonnes traitees par newosbColumnRule_.
+function newosbComplementScrub_(data, codeHeader) {
+  const secret = newosbPseudoSecret_();
+  const codeRule = newosbColumnRule_(codeHeader);
+  const buildings = (data.buildings || []).map(function(b) {
+    const cells = {};
+    Object.keys(b.cells || {}).forEach(function(k) {
+      const rule = newosbColumnRule_(k);
+      if (rule === 'keep') cells[k] = b.cells[k];
+      else if (rule !== 'drop') cells[k] = newosbPseudonym_(rule, b.cells[k], secret);
+    });
+    return { code: codeRule === 'keep' ? b.code : newosbPseudonym_(codeRule, b.code, secret), building: b.building, cells: cells };
+  });
+  return { type: data.type, v: 1, sentAt: data.sentAt || '', buildings: buildings };
+}
+
 
 function newosbShareStoredToken_(id) {
   try { return String(PropertiesService.getScriptProperties().getProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + id) || ''); } catch (e) { return ''; }
@@ -843,11 +933,13 @@ function newosbShareAdmin_(mode, params) {
   const now = Date.now();
   if (mode === 'sharelist') {
     const visitors = newosbVisitorRecords_(newosbVisitorSheet_(false));
+    const complementSheet = newosbComplementSheet_(false);
     return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, now: now, anonymizedOnly: newosbAnonymizedOnly_(), shares: newosbShareRecords_(newosbShareSheet_(false)).map(function(r) {
       const pub = newosbSharePublic_(r, now);
       // Lien recopiable par l'administrateur (cle deja verifiee) ; liens crees avant V6.34 : non recuperables.
       if (!r.revokedAt) { const t = newosbShareStoredToken_(r.id); if (t) pub.token = t; }
       pub.visitors = visitors.filter(function(v) { return v.shareId === r.id; }).map(function(v) { return newosbVisitorPublic_(v, r, now); }).reverse();
+      pub.complement = newosbComplementInfo_(complementSheet, r.id);
       return pub;
     }).reverse() };
   }
@@ -876,6 +968,7 @@ function newosbShareAdmin_(mode, params) {
     const label = newosbShareText_(params.label, 120) || 'Observatoire partage';
     const summary = newosbShareText_(params.summary, 2000);
     const allowedFilters = newosbShareCleanAllowed_(params.allowedFilters, tabs);
+    const complement = newosbComplementCheck_(params.complement);
     const row = [id, hash, label, String(now), String(expiresAt), '', tabs.join(','), anonymized ? '1' : '0', codeHeader, summary, String(codes.length), '', '0', landing, '~' + JSON.stringify(reqFilters)].concat(slices).concat(['~' + JSON.stringify(allowedFilters), '']);
     const lock = newosbShareLock_();
     try {
@@ -886,8 +979,26 @@ function newosbShareAdmin_(mode, params) {
       sheet.getRange(target, 1, 1, row.length).setNumberFormat('@').setValues([row]);
     } finally { if (lock) lock.releaseLock(); }
     try { PropertiesService.getScriptProperties().setProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + id, token); } catch (e) {}
+    let complementInfo = null;
+    const restricted = newosbComplementRestrict_(complement, codes);
+    if (restricted) { const clock = newosbShareLock_(); try { complementInfo = newosbComplementSave_(id, restricted, now); } finally { if (clock) clock.releaseLock(); } }
     const rec = { id: id, label: label, createdAt: now, expiresAt: expiresAt, revokedAt: 0, tabs: tabs, anonymized: anonymized, summary: summary, operationCount: codes.length, lastAccessAt: 0, accessCount: 0, landing: landing, reqFilters: reqFilters, allowedFilters: allowedFilters };
-    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: newosbSharePublic_(rec, now) };
+    const pubCreated = newosbSharePublic_(rec, now); pubCreated.complement = complementInfo;
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, token: token, share: pubCreated };
+  }
+  if (mode === 'sharecomplement') {
+    // Mise a jour (ou retrait, complement vide) des donnees TotalRecoll d'un lien existant.
+    const id = String(params.id || '');
+    const checked = newosbComplementCheck_(params.complement);
+    const lock = newosbShareLock_();
+    try {
+      const rec = newosbShareRecords_(newosbShareSheet_(false)).filter(function(r) { return r.id === id; })[0];
+      if (!rec) throw new Error('Lien de partage introuvable.');
+      if (rec.revokedAt) throw new Error('Lien revoque : cree un nouveau lien.');
+      const info = newosbComplementSave_(id, newosbComplementRestrict_(checked, newosbShareCodes_(newosbShareSheet_(false), rec)), now);
+      const pub = newosbSharePublic_(rec, now); pub.complement = info;
+      return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, share: pub };
+    } finally { if (lock) lock.releaseLock(); }
   }
   if (mode === 'sharerevoke' || mode === 'shareextend') {
     const id = String(params.id || '');
@@ -899,6 +1010,7 @@ function newosbShareAdmin_(mode, params) {
       if (mode === 'sharerevoke') {
         if (!rec.revokedAt) { rec.revokedAt = now; sheet.getRange(rec.row, 6).setNumberFormat('@').setValue(String(now)); }
         try { PropertiesService.getScriptProperties().deleteProperty(NEWOSB_SHARE_CONFIG.TOKEN_PROPERTY_PREFIX + rec.id); } catch (e) {}
+        try { const cs = newosbComplementSheet_(false); if (cs) newosbComplementDelete_(cs, rec.id); } catch (e) {}
       }
       else {
         if (rec.revokedAt) throw new Error('Un lien revoque ne peut pas etre prolonge : cree un nouveau lien.');
@@ -1205,6 +1317,14 @@ function newosbShareRequest_(access, params) {
   if (mode === 'reqmeta' || mode === 'reqchunk') {
     if (rec.tabs.indexOf('requirements') < 0) throw new Error("L'onglet Exigences n'est pas inclus dans ce lien.");
     return newosbShareRapport_(access, params, mode);
+  }
+  if (mode === 'complement') {
+    // V6.46 : valeurs TotalRecoll jointes au lien (perimetre deja filtre a la creation) ; pseudonymisees si le lien est anonymise.
+    const b64 = newosbComplementLoad_(rec.id);
+    if (!b64) return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, complement: null };
+    let out = b64;
+    if (base.share.anonymized) out = newosbComplementEncode_(newosbComplementScrub_(newosbComplementDecode_(b64), rec.codeHeader));
+    return { ok: true, service: 'NEWOSB OPERATIONS', version: OBSERVATOIRE_CONFIG.VERSION, shared: true, complement: out };
   }
   if (mode !== 'meta' && mode !== 'chunk') throw new Error("Action non autorisee avec un lien de partage.");
   const meta = getSheetMeta_();

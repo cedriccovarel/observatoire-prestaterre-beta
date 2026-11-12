@@ -1,5 +1,15 @@
 # Historique
 
+## V6.63 — Liens partagés : données techniques TotalRecoll incluses
+- Création d'un lien : option « Joindre les données techniques TotalRecoll » (cochée si TotalRecoll est chargé). Seules les opérations
+  du périmètre sont gardées (filtrage par le serveur). Les données sont enregistrées avec le lien dans l'onglet masqué
+  OBSERVATOIRE_PARTAGES_COMPLEMENTS, compressées, et supprimées à la révocation. Le destinataire voit Solutions constructives,
+  Énergie & transitions, Carbone & DPE comme l'administrateur (même fusion).
+- Lien anonymisé : code interne pseudonymisé comme les lignes, n° de contrat et adresses retirés, noms pseudonymisés.
+- « Liens existants » : « Mettre à jour TotalRecoll » remplace les données d'un lien par celles chargées maintenant.
+- Script Code_Operations.gs 06.46 (à redéployer).
+- Écran de chargement : minuscule trait de crayon de relève à gauche du cadran du compteur d'eau.
+
 ## V6.62 — Carte sur fond Plan IGN, export PDF, Territoires par ville
 - Carte de la Vue d'ensemble sur fond **Plan IGN v2** (Géoplateforme : gratuit, sans clé, noms des villes et communes), avec
   OpenStreetMap en secours si le service IGN ne répond pas. Bibliothèque Leaflet 1.9.4 intégrée au site (`leaflet.js`, `leaflet.css`).

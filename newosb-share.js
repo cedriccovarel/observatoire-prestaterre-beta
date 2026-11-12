@@ -288,12 +288,26 @@
       label: String(m.querySelector('[data-share-label]')?.value || '').trim(),
       tabs, landing: m.querySelector('[data-share-landing]')?.value || tabs[0] || 'overview',
       durationSel, expiresAt, anonymized: !!m.querySelector('[data-share-anonymized]')?.checked,
+      complement: !!m.querySelector('[data-share-complement]')?.checked,
       allowGlobal: [...m.querySelectorAll('[data-share-allow-global]:checked')].map(i => i.value),
       allowReq: [...m.querySelectorAll('[data-share-allow-req]:checked')].map(i => i.value)
     };
   }
 
   function allowedSummary(s) { const a = s.allowedFilters || {}; const n = (a.global || []).length + (a.req || []).length; return n ? ` · ${esc(plural(n, 'filtre autorisé', 'filtres autorisés'))}` : ''; }
+
+  // V6.63 — données techniques TotalRecoll (Solutions, Énergie, Carbone & DPE…) jointes au lien.
+  function complementOptionHtml(previous) {
+    const c = engine()?.shareComplement?.(scopeInfo(false).resolved.codes);
+    if (!c) return '<p class="obs-share-muted">Données techniques TotalRecoll non chargées : le lien ne contiendra que les données du Sheet. Pour les joindre, ouvrez TotalRecoll depuis « Données » puis revenez ici.</p>';
+    if (!c.buildings) return '<p class="obs-share-muted">TotalRecoll est chargé, mais aucune de ses valeurs ne concerne les opérations de ce périmètre.</p>';
+    const on = previous ? previous.complement !== false : true;
+    return `<label class="obs-share-check"><input type="checkbox" data-share-complement${on ? ' checked' : ''}><span><b>Joindre les données techniques TotalRecoll</b><small>${esc(plural(c.operations, 'opération', 'opérations'))} · ${esc(plural(c.buildings, 'bâtiment', 'bâtiments'))} : solutions constructives, énergie, carbone, DPE… Enregistrées avec le lien (anonymisées avec lui) ; mettez-les à jour depuis « Liens existants ».</small></span></label>`;
+  }
+  function complementInfoHtml(s) {
+    const c = s.complement; if (!c) return '';
+    return `<small class="obs-share-complement">TotalRecoll : ${esc(plural(c.buildings, 'bâtiment', 'bâtiments'))} · ${esc(fmtShort(c.updatedAt))}</small>`;
+  }
 
   function statusLabel(s) { return s.status === 'active' ? 'Actif' : (s.status === 'revoked' ? `Révoqué le ${fmtShort(s.revokedAt)}` : 'Expiré'); }
 
@@ -344,8 +358,10 @@
     const tabs = (s.tabs || []).map(t => PAGE_LABELS[t] || t).join(', ');
     const copy = isValidToken(s.token) ? `<button type="button" class="btn btn-secondary btn-small" data-share-copy-id="${esc(s.id)}">Copier le lien</button>` : '<button type="button" class="btn btn-secondary btn-small" disabled title="Lien créé avant la V6.34 : il n’a pas été conservé et ne peut pas être recopié.">Copier le lien</button>';
     const archiveBtn = archived ? `<button type="button" class="btn btn-secondary btn-small" data-share-unarchive="${esc(s.id)}">Restaurer</button>` : `<button type="button" class="btn btn-secondary btn-small" data-share-archive-id="${esc(s.id)}">Archiver</button>`;
-    const actions = (s.status === 'revoked' ? '' : `${copy}<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`) + archiveBtn;
-    return `<tr class="is-${esc(s.status)}"><td><b>${esc(s.label)}</b>${archived ? `<small>archivé le ${esc(fmtShort(s.archivedAt))}</small>` : ''}<small>${esc(s.summary || '')}</small></td><td title="${esc(tabs)}">${esc(plural((s.tabs || []).length, 'onglet', 'onglets'))}${s.anonymized ? '<small>anonymisé</small>' : ''}</td><td>${esc((s.operationCount || 0).toLocaleString('fr-FR'))}</td><td>${esc(fmtShort(s.createdAt))}</td><td>${esc(fmtDate(s.expiresAt))}</td><td><span class="obs-share-status is-${esc(s.status)}">${esc(statusLabel(s))}</span></td><td>${esc(String(s.accessCount || 0))}${s.lastAccessAt ? `<small>dernier : ${esc(fmtShort(s.lastAccessAt))}</small>` : ''}</td><td class="obs-share-actions">${actions}</td></tr><tr class="obs-share-people-row"><td colspan="8"><details data-share-people="${esc(s.id)}"${admin.openVisitors.has(s.id) ? ' open' : ''}><summary>${esc(plural((s.visitors || []).length, 'personne', 'personnes'))}${(s.visitors || []).length ? ` · ${esc(plural((s.visitors || []).filter(v => v.status === 'active').length, 'accès actif', 'accès actifs'))}` : ''}${allowedSummary(s)}</summary>${visitorsHtml(s)}</details></td></tr>`;
+    const canComplement = s.status !== 'revoked' && engine()?.shareComplement?.(null) != null;
+    const complementBtn = canComplement ? `<button type="button" class="btn btn-secondary btn-small" data-share-complement-id="${esc(s.id)}" title="Remplacer les données techniques TotalRecoll de ce lien par celles chargées maintenant">Mettre à jour TotalRecoll</button>` : '';
+    const actions = (s.status === 'revoked' ? '' : `${copy}${complementBtn}<span class="obs-share-extend"><select data-share-extend-sel="${esc(s.id)}" aria-label="Nouvelle durée">${DURATIONS.filter(d => d[0] !== 'date').map(d => `<option value="${d[0]}"${d[0] === '30' ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><button type="button" class="btn btn-secondary btn-small" data-share-extend="${esc(s.id)}">Prolonger</button></span><button type="button" class="btn btn-secondary btn-small obs-share-revoke" data-share-revoke="${esc(s.id)}">Révoquer</button>`) + archiveBtn;
+    return `<tr class="is-${esc(s.status)}"><td><b>${esc(s.label)}</b>${archived ? `<small>archivé le ${esc(fmtShort(s.archivedAt))}</small>` : ''}<small>${esc(s.summary || '')}</small></td><td title="${esc(tabs)}">${esc(plural((s.tabs || []).length, 'onglet', 'onglets'))}${s.anonymized ? '<small>anonymisé</small>' : ''}${complementInfoHtml(s)}</td><td>${esc((s.operationCount || 0).toLocaleString('fr-FR'))}</td><td>${esc(fmtShort(s.createdAt))}</td><td>${esc(fmtDate(s.expiresAt))}</td><td><span class="obs-share-status is-${esc(s.status)}">${esc(statusLabel(s))}</span></td><td>${esc(String(s.accessCount || 0))}${s.lastAccessAt ? `<small>dernier : ${esc(fmtShort(s.lastAccessAt))}</small>` : ''}</td><td class="obs-share-actions">${actions}</td></tr><tr class="obs-share-people-row"><td colspan="8"><details data-share-people="${esc(s.id)}"${admin.openVisitors.has(s.id) ? ' open' : ''}><summary>${esc(plural((s.visitors || []).length, 'personne', 'personnes'))}${(s.visitors || []).length ? ` · ${esc(plural((s.visitors || []).filter(v => v.status === 'active').length, 'accès actif', 'accès actifs'))}` : ''}${allowedSummary(s)}</summary>${visitorsHtml(s)}</details></td></tr>`;
   }
 
   function render(keepForm) {
@@ -379,6 +395,7 @@
     <select id="obsShareLanding" data-share-landing>${landingOptions}</select>
     <label for="obsShareDuration">Durée d’accès</label>
     <div class="obs-share-duration"><select id="obsShareDuration" data-share-duration>${DURATIONS.map(d => `<option value="${d[0]}"${d[0] === duration ? ' selected' : ''}>${esc(d[1])}</option>`).join('')}</select><input type="date" data-share-date min="${minDate}" max="${maxDate}" value="${esc(previous && previous.durationSel === 'date' && previous.expiresAt ? new Date(previous.expiresAt).toISOString().slice(0, 10) : '')}" ${duration === 'date' ? '' : 'hidden'} aria-label="Date d’expiration"></div>
+    ${complementOptionHtml(previous)}
     <label class="obs-share-check"><input type="checkbox" data-share-anonymized${anonymized ? ' checked' : ''}><span><b>Anonymiser les données pour le destinataire</b><small>MOA, noms d’opérations et codes pseudonymisés par le serveur ; adresses, contacts et montants retirés.</small></span></label>
   </div>
   <div class="data-source-card obs-share-scope">
@@ -426,11 +443,27 @@ ${listHtml()}
     const { resolved, summary, reqFilters } = scopeInfo(v.anonymized);
     if (!resolved.codes.length) { admin.error = 'Aucune opération avec un code interne dans le périmètre actuel.'; render(true); return; }
     admin.busy = true; admin.error = ''; render(true);
+    let complement = '';
+    if (v.complement) { try { complement = (await engine()?.shareComplementPacked?.(resolved.codes))?.b64 || ''; } catch (err) { admin.error = 'Données TotalRecoll non jointes : ' + String(err?.message || err); } }
     try {
-      const res = await call({ mode: 'shareCreate', label: v.label || summary.slice(0, 120), tabs: v.tabs, landing: v.tabs.includes(v.landing) ? v.landing : v.tabs[0], expiresAt: v.expiresAt, anonymized: v.anonymized, codes: resolved.codes, codeHeader: resolved.codeHeader, summary, reqFilters: v.tabs.includes('requirements') ? reqFilters : {}, allowedFilters: { global: v.allowGlobal, req: v.tabs.includes('requirements') ? v.allowReq.filter(k => !(k in reqFilters)) : [] } });
+      const res = await call({ mode: 'shareCreate', ...(complement ? { complement } : {}), label: v.label || summary.slice(0, 120), tabs: v.tabs, landing: v.tabs.includes(v.landing) ? v.landing : v.tabs[0], expiresAt: v.expiresAt, anonymized: v.anonymized, codes: resolved.codes, codeHeader: resolved.codeHeader, summary, reqFilters: v.tabs.includes('requirements') ? reqFilters : {}, allowedFilters: { global: v.allowGlobal, req: v.tabs.includes('requirements') ? v.allowReq.filter(k => !(k in reqFilters)) : [] } });
       if (!isValidToken(res.token)) throw new Error('Réponse du script inattendue : lien non créé.');
       admin.lastLink = buildLink(location.origin + location.pathname, res.token, admin.prepared.sourceUrl);
       admin.shares = [{ visitors: [], ...res.share }, ...admin.shares.filter(s => s.id !== res.share.id)];
+    } catch (err) { admin.error = String(err?.message || err); }
+    admin.busy = false; render(true);
+  }
+
+  // V6.63 — remplace les données TotalRecoll d'un lien existant (opérations de son périmètre, d'après les codes du lien).
+  async function updateComplement(id) {
+    const s = admin.shares.find(x => x.id === id); if (!s) return;
+    admin.busy = true; admin.error = ''; render(true);
+    try {
+      // Toutes les opérations chargées : le serveur ne garde que celles du périmètre du lien.
+      const packed = await engine()?.shareComplementPacked?.(null);
+      if (!packed?.b64) throw new Error('Aucune donnée TotalRecoll chargée pour les opérations de ce lien.');
+      const res = await call({ mode: 'shareComplement', id, complement: packed.b64 });
+      admin.shares = admin.shares.map(x => x.id === id ? { ...x, ...res.share, visitors: x.visitors } : x);
     } catch (err) { admin.error = String(err?.message || err); }
     admin.busy = false; render(true);
   }
@@ -497,6 +530,7 @@ ${listHtml()}
     const rv = e.target.closest('[data-share-revoke]'); if (rv) { if (prepare()) revoke(rv.dataset.shareRevoke); else render(true); return; }
     const vr = e.target.closest('[data-visitor-revoke]'); if (vr) { if (prepare()) visitorRevoke(vr.dataset.visitorShare, vr.dataset.visitorRevoke); else render(true); return; }
     const vx = e.target.closest('[data-visitor-extend]'); if (vx) { const sel = admin.modal.querySelector(`[data-visitor-extend-sel="${CSS.escape(vx.dataset.visitorExtend)}"]`); if (prepare()) visitorExtend(vx.dataset.visitorShare, vx.dataset.visitorExtend, sel?.value || '30'); else render(true); return; }
+    const cu = e.target.closest('[data-share-complement-id]'); if (cu) { if (prepare()) updateComplement(cu.dataset.shareComplementId); else render(true); return; }
     const ex = e.target.closest('[data-share-extend]'); if (ex) { const sel = admin.modal.querySelector(`[data-share-extend-sel="${CSS.escape(ex.dataset.shareExtend)}"]`); if (prepare()) extend(ex.dataset.shareExtend, sel?.value || '30'); else render(true); }
   }
 

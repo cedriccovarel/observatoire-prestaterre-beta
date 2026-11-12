@@ -452,7 +452,7 @@ test('V6.45 : lignes non comptées (regroupées, sans code ni nom, vides) avec n
   assert(a.includes("rowNumbers:json?.rowNumbers||null,emptyRows:json?.emptyRows??null"));
 });
 test('V6.44 : fenêtre Données — lien du classeur lu et vérification d’une opération (absente, ignorée, fusionnée, hors statistiques, masquée)', () => {
-  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.45');
+  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.46');
   const a = read('app.js'), start = a.indexOf('  function dataLookupReport('), end = a.indexOf('\n  function dataLookup(){');
   const dataNorm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const win = { NEWOSB_CORE: { isExcludedOperation: o => /perdu/i.test(o.stage || ''), affairStage: o => o.stage } };
@@ -1331,7 +1331,9 @@ section('14. Complément TotalRecoll (newosb-recoll.js) — V6.49');
     assert.deepStrictEqual(p.buildings.length, 1); assert.deepStrictEqual(p.buildings[0].cells, { c: 'ok', d: 3 });
   });
   test('l’Observatoire n’écoute que l’onglet TotalRecoll qu’il a ouvert, sur la même origine', () => { const a = read('app.js'); assert(a.includes("e.origin!==location.origin||!dataRecollWin||e.source!==dataRecollWin")); });
-  test('le complément n’est ni stocké ni envoyé au script', () => { const a = read('app.js'), seg = a.slice(a.indexOf('V6.49 : complément TotalRecoll'), a.indexOf('// Où est passée une opération')); assert(!/localStorage|sessionStorage|indexedDB|dataAppsScriptRequest|fetch\(/.test(seg)); assert(!/localStorage|sessionStorage|fetch\(/.test(read('newosb-recoll.js'))); });
+  // V6.63 : le complément n'est jamais stocké sur le poste ; il n'est envoyé au script que pour un lien partagé (création ou
+  // « Mettre à jour TotalRecoll »), et le destinataire ne fait que le lire (mode complement).
+  test('le complément n’est jamais stocké sur le poste ; envoyé au script seulement pour un lien partagé', () => { const a = read('app.js'), seg = a.slice(a.indexOf('V6.49 : complément TotalRecoll'), a.indexOf('// Où est passée une opération')); assert(!/localStorage|sessionStorage|indexedDB|fetch\(/.test(seg)); assert.deepStrictEqual([...seg.matchAll(/dataAppsScriptRequest\(([^)]*)\)/g)].map(m => m[1]), ["url,{mode:'complement'},90000"]); assert(!/localStorage|sessionStorage|fetch\(/.test(read('newosb-recoll.js'))); const sh = read('newosb-share.js'); assert(/mode: 'shareCreate', \.\.\.\(complement \? \{ complement \} : \{\}\)/.test(sh) && /mode: 'shareComplement', id, complement: packed\.b64/.test(sh)); });
 }
 
 section('7. Cohérence du paquet');
@@ -1345,6 +1347,44 @@ test('un seul script Apps Script OPERATIONS à la racine (pas de doGet en double
 test('plus de copie périmée du script dans app.js', () => assert(!/NEWOSB V05\.22\\n \* Source OPERATIONS/.test(read('app.js'))));
 test('syntaxe JavaScript valide', () => { for (const f of ['app.js', 'newosb.js', 'newosb-core.js', 'newosb-rules.js', 'privacy.js', 'requirements.js', 'auth.js', 'newosb-bridge.js', 'newosb-share.js', 'newosb-loader.js', 'newosb-mentions.js', 'mentions_catalog.js', 'newosb-recoll.js']) new vm.Script(read(f), { filename: f }); for (const f of ['Code_Operations.gs', 'Code_Exigences.gs']) new vm.Script(read(f), { filename: f }); });
 test('l’avancement n’est plus déduit de « État du dossier » ni du statut commercial', () => { const a = read('app.js'); assert(!a.includes('dataRawValue(r,fields.status)||dataRawValue(r,fields.dossierState)||affairStage')); });
+
+test('V6.46 : complément TotalRecoll d’un lien partagé (création, destinataire, anonymisé, mise à jour, révocation)', () => {
+  const zlib = require('zlib');
+  const R = require(path.join(ROOT, 'newosb-recoll.js'));
+  const pack = o => zlib.gzipSync(Buffer.from(JSON.stringify(o))).toString('base64');
+  const unpack = b => JSON.parse(zlib.gunzipSync(Buffer.from(b, 'base64')).toString('utf8'));
+  const comp = { type: R.SHARE_TYPE, v: 1, buildings: [{ code: 'OP-1', contract: '00001234', ope: '', building: 'Bât A', cells: { 'Isolant mur': 'Laine de roche', 'Stock C/m²': '12,3', 'Adresse': '1 rue Fictive', "Nom de l'opération": 'Les Jardins' } }] };
+  const gs = opsGs();
+  const created = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['carbon'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + DAYMS, complement: pack(comp) });
+  assert.strictEqual(created.ok, true); assert.strictEqual(created.share.complement.buildings, 1);
+  assert(gs.sheets.OBSERVATOIRE_PARTAGES_COMPLEMENTS.hidden, 'onglet des compléments masqué');
+  const got = shareReq(gs, created.token, { mode: 'complement' });
+  assert.strictEqual(got.ok, true); assert.deepStrictEqual(unpack(got.complement).buildings[0].cells['Isolant mur'], 'Laine de roche');
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareList', key: KEY }).shares[0].complement.buildings, 1);
+  // Lien anonymisé : code pseudonymisé comme la ligne, adresse retirée, nom pseudonymisé, contrat retiré.
+  const anon = gs.newosbBridgeRequest({ mode: 'shareCreate', key: KEY, tabs: ['carbon'], codes: ['OP-1'], codeHeader: CODE_H, expiresAt: Date.now() + DAYMS, anonymized: true, complement: pack(comp) });
+  const ac = unpack(shareReq(gs, anon.token, { mode: 'complement' }).complement).buildings[0];
+  const meta = shareReq(gs, anon.token, { mode: 'meta' }), chunk = shareReq(gs, anon.token, { mode: 'chunk', offset: 0, limit: 10 });
+  const codeIdx = meta.headers.indexOf(CODE_H);
+  assert.strictEqual(ac.code, chunk.rows[0][codeIdx], 'code pseudonymisé identique à celui de la ligne');
+  assert(!('contract' in ac) && !('Adresse' in ac.cells) && ac.cells['Stock C/m²'] === '12,3' && /^Operation /.test(ac.cells["Nom de l'opération"]));
+  assert(!JSON.stringify(ac).includes('Les Jardins') && !JSON.stringify(ac).includes('00001234'));
+  // Fusion côté destinataire (même code que l'Observatoire).
+  const rows = [Object.fromEntries(meta.headers.map((h, i) => [h, chunk.rows[0][i]]))];
+  const merged = R.merge(rows, R.validatePayload(unpack(shareReq(gs, anon.token, { mode: 'complement' }).complement)), { code: CODE_H });
+  assert.strictEqual(merged.stats.matchedOperations, 1); assert.strictEqual(merged.rows[0]['Isolant mur'], 'Laine de roche');
+  // Mise à jour puis retrait ; refus d'un complément mal formé ; suppression à la révocation.
+  const upd = gs.newosbBridgeRequest({ mode: 'shareComplement', key: KEY, id: created.share.id, complement: pack({ ...comp, buildings: [...comp.buildings, { ...comp.buildings[0], building: 'Bât B' }, { ...comp.buildings[0], code: 'OP-2', building: 'hors périmètre' }] }) });
+  assert.strictEqual(upd.share.complement.buildings, 2, 'opération hors périmètre écartée par le serveur');
+  assert(!JSON.stringify(unpack(shareReq(gs, created.token, { mode: 'complement' }).complement)).includes('hors périmètre'));
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareComplement', key: KEY, id: created.share.id, complement: 'pas du base64 !' }).ok, false);
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareComplement', key: KEY, id: created.share.id, complement: '' }).share.complement, null);
+  assert.strictEqual(shareReq(gs, created.token, { mode: 'complement' }).complement, null);
+  gs.newosbBridgeRequest({ mode: 'shareRevoke', key: KEY, id: anon.share.id });
+  assert(!gs.sheets.OBSERVATOIRE_PARTAGES_COMPLEMENTS.data.some(r => r[0] === anon.share.id), 'complément supprimé à la révocation');
+  // Sans clé ni lien : aucun accès au mode d'administration du complément.
+  assert.strictEqual(gs.newosbBridgeRequest({ mode: 'shareComplement', key: 'mauvaise', id: created.share.id, complement: '' }).ok, false);
+});
 
 (async () => {
   for (const [name, fn] of asyncTests) {

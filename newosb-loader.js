@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.62 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.63 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -647,6 +647,8 @@
     if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     // V6.44 : petite étiquette « m³ » sous le cadran du compteur (même pendant les mouvements réduits).
     ctx.fillStyle = '#5d7480'; ctx.font = '600 3px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('m³', x + 7, y + 12.6); ctx.textAlign = 'start';
+    // V6.63 : minuscule trait de crayon de relève à gauche du cadran du compteur (fixe).
+    ctx.strokeStyle = 'rgba(70,70,80,.35)'; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.moveTo(x + 1.2, y + 4.2); ctx.lineTo(x + 2.4, y + 4.6); ctx.stroke();
     // V6.62 : minuscule pastille de repère cadastral (laiton) scellée dans l'enduit à droite du compteur (fixe).
     ctx.fillStyle = 'rgba(176,140,60,.75)'; ctx.beginPath(); ctx.arc(x + 17.2, y + 7.6, 0.6, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(255,240,200,.6)'; ctx.fillRect(x + 16.95, y + 7.3, 0.3, 0.2);
     // V6.61 : minuscule éclat d'enduit plus clair à gauche du compteur, avec son ombre fine (fixe).

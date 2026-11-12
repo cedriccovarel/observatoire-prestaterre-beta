@@ -1,7 +1,7 @@
 'use strict';
 // Exécute Code_Operations.gs dans Node avec des doublures des services Google,
 // sur une feuille OPERATIONS fictive (ligne 1 titre, ligne 2 en-têtes, données dès la ligne 4).
-const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = require('crypto');
+const fs = require('fs'), path = require('path'), vm = require('vm'), crypto = require('crypto'), zlib = require('zlib');
 
 function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache = true, extraSheets = {} }) {
   const props = { ...properties };
@@ -23,6 +23,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
         return range;
       },
       hideSheet() { sh.hidden = true; return sh; },
+      deleteRow(r) { data.splice(r - 1, 1); return sh; },
       protect() { sh.protected = true; return { setDescription() { return this; }, setWarningOnly() { return this; } }; }
     };
     return sh;
@@ -39,7 +40,10 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       computeHmacSha256Signature: (v, k) => Array.from(crypto.createHmac('sha256', k).update(v).digest()).map(b => (b > 127 ? b - 256 : b)),
-      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: (bytes, type, name) => ({ bytes: bytes && bytes.length, type, name, getBytes: () => Array.from(Buffer.from(bytes || '')) }),
+      formatDate: d => String(d), base64Decode: s => Buffer.from(s, 'base64'), newBlob: (bytes, type, name) => ({ bytes: bytes && bytes.length, type, name, getBytes: () => Array.from(Buffer.from(bytes || '')), getDataAsString: () => Buffer.from(bytes || '').toString('utf8') }),
+      base64Encode: b => Buffer.from(b).toString('base64'),
+      gzip: blob => { const out = zlib.gzipSync(Buffer.from(blob.getBytes())); return { getBytes: () => Array.from(out) }; },
+      ungzip: blob => { const out = zlib.gunzipSync(Buffer.from(blob.getBytes())); return { getBytes: () => Array.from(out), getDataAsString: () => out.toString('utf8') }; },
       DigestAlgorithm: { SHA_256: 'sha256' }, computeDigest: (a, v) => Array.from(crypto.createHash('sha256').update(String(v)).digest()).map(b => (b > 127 ? b - 256 : b))
     },
     Logger: { log: (...a) => { logs.push(a.join(' ')); } },

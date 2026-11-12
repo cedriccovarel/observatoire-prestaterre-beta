@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.63 | Minuscule trait de crayon de relève à gauche du cadran du compteur d'eau. |
 | V6.62 | Minuscule pastille de repère en laiton scellée dans l'enduit à droite du compteur d'eau. |
 | V6.61 | Minuscule éclat d'enduit plus clair, avec son ombre fine, à gauche du compteur d'eau. |
 | V6.60 | Minuscule tache d'humidité sur l'enduit, sous le robinet du compteur d'eau. |
@@ -94,3 +95,5 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - V6.62 : carte de la Vue d'ensemble sur fond Plan IGN v2 (Leaflet, `leaflet.js` local ; OSM en secours), export PDF avec liens
   pastille → fiche en annexe (jsPDF local, chargé au premier export). Les tuiles ne reçoivent que zoom / x / y. En e2e, toutes les tuiles
   sont servies localement (`TILE_PNG` dans `scenario()`). Territoires : Départements / Villes (`core.cityGroups`, filtre croisé `commune`).
+- V6.63 : liens partagés avec complément TotalRecoll (option à la création, « Mettre à jour TotalRecoll ») ; stocké par le script
+  (OBSERVATOIRE_PARTAGES_COMPLEMENTS, gzip base64), filtré au périmètre, pseudonymisé pour un lien anonymisé, supprimé à la révocation.
