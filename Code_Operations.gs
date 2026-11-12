@@ -1,5 +1,5 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.45 (script OPERATIONS, version API 06.45)
+ * PRESTATERRE OBSERVATOIRE - V6.63 (script OPERATIONS, version API 06.46)
  *
  * Changements V6.45 : chaque bloc (mode chunk) indique le numero de ligne du classeur de chaque ligne
  *   transmise (rowNumbers) ; la fenetre Donnees liste ainsi les lignes non comptees comme operations.
