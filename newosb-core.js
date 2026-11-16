@@ -60,7 +60,7 @@
     {key:'moaType',label:'Famille de maître d’ouvrage',unit:'',source:'OPERATIONS',type:'source',definition:'Secteur/famille du maître d’ouvrage.',method:"Colonne Nom de la société: Secteur d'activité."},
     {key:'department',label:'Département',unit:'',source:'OPERATIONS',type:'normalized',definition:'Code département de l’opération.',method:"Colonne Département de l'opération ; repli sur CP/adresse si nécessaire."},
     {key:'region',label:'Région',unit:'',source:'OPERATIONS',type:'normalized',definition:'Région administrative de l’opération.',method:"Colonne Région de l'opération ; repli sur la correspondance département → région si absente."},
-    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année de la décision de certification. Utilisée par le filtre « Année certification » et la courbe d’évolution.',method:"Année de la colonne Date de décision de certification (date : 15/03/2024, 15/03/24, 2024-03-15 ou numéro de série). Aucun repli sur une autre date : un projet sans décision n’a pas d’année de certification. Dates illisibles signalées en Qualité."},
+    {key:'year',label:'Année de certification',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année de la décision de certification. Utilisée par le filtre « Année certification » et la courbe d’évolution.',method:"Année de la colonne « Certification: Date de décision CD » (certificat définitif), sinon de l’ancienne colonne « Date de décision de certification » (les deux ne sont jamais remplies ensemble). Formats : 15/03/2024, 15/03/24, 2024-03-15 ou numéro de série. Jamais la date AP ni la date de réception : un projet sans décision n’a pas d’année de certification. Dates illisibles signalées en Qualité."},
     {key:'createdYear',label:'Année de création',unit:'',source:'OPERATIONS',type:'normalized',definition:'Année de création du dossier. Utilisée par le filtre « Année de création » et la chronologie de l’avancement.',method:'Année de la colonne Date de création (mêmes formats de date acceptés). Dates illisibles signalées en Qualité.'},
     {key:'constructionYear',label:'Année de construction',unit:'',source:'OPERATIONS',type:'source',definition:'Année de construction du bâtiment en particulier pour les opérations de rénovation.',method:"Colonne Année de construction (alias Année conservé pour compatibilité). Donnée descriptive du bâtiment, distincte de l'année de certification."},
     {key:'referential',label:'Référentiel',unit:'',source:'OPERATIONS',type:'normalized',definition:'Référentiel de certification.',method:'Colonne Référentiel.'},
@@ -112,7 +112,7 @@
   // Clés lues comme des nombres (contrôle de lisibilité en Qualité & données).
   const NUMERIC_KEYS = [...DICTIONARY.filter(d=>d.unit&&d.unit!=='classe'&&d.type!=='calculated'&&d.key!=='surface'&&!/^icConstruction20/.test(d.key)).map(d=>d.key),'roofThickness','wallThickness','floorThickness'];
   // Colonnes de dates lues pour les années (contrôle de lisibilité en Qualité).
-  const DATE_KEYS = {certificationDecisionDate:'Date de décision de certification',createdDate:'Date de création'};
+  const DATE_KEYS = {certificationDecisionDate:'Date de décision CD (sinon Date de décision de certification)',createdDate:'Date de création'};
   function provenance(op,key){
     const d=dictByKey[key]||{key,label:key,source:'NEWOSB',type:'unknown',definition:'',method:''};
     const header=op?.fields?.[key]||'';

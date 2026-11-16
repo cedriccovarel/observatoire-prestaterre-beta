@@ -6847,13 +6847,17 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
   // Lettre de colonne (A, B, … BC) des colonnes utilisées, d'après la ligne d'en-têtes complète de la Sheet.
   function dataLocateDiagnosticColumns(headers){
     const letter=h=>{const i=(headers||[]).indexOf(h);return i>=0&&DATA_RULES?DATA_RULES.columnLetter(i):'';};
-    const yd=dataRuntime.yearDiagnostics;if(yd){if(yd.certification?.header)yd.certification.column=letter(yd.certification.header);if(yd.created?.header)yd.created.column=letter(yd.created.header);}
+    const yd=dataRuntime.yearDiagnostics;if(yd){if(yd.certification?.header)yd.certification.column=letter(yd.certification.header);if(yd.certification?.legacy?.header)yd.certification.legacy.column=letter(yd.certification.legacy.header);if(yd.created?.header)yd.created.column=letter(yd.created.header);}
   }
   function dataResolveYearFields(headers,fields){
-    const cert=DATA_RULES?DATA_RULES.resolveExactHeader(headers,DATA_RULES.CERTIFICATION_DATE_HEADER):{header:null,match:'absent'};
+    const legacy=DATA_RULES?DATA_RULES.resolveExactHeader(headers,DATA_RULES.CERTIFICATION_DATE_HEADER):{header:null,match:'absent'};
+    // V6.65 : date CD d'abord (« Certification: Date de décision CD »), sinon l'ancienne colonne « Date de décision de certification ».
+    const cd=DATA_RULES&&DATA_RULES.CERTIFICATION_CD_HEADER?DATA_RULES.resolveExactHeader(headers,DATA_RULES.CERTIFICATION_CD_HEADER):{header:null,match:'absent'};
     const created=DATA_RULES?DATA_RULES.resolveExactHeader(headers,DATA_RULES.CREATION_DATE_HEADER):{header:null,match:'absent'};
-    fields.certificationDecisionDate=cert.header||null;
+    fields.certificationDecisionDate=cd.header||legacy.header||null;
+    fields.certificationDecisionDateLegacy=cd.header&&legacy.header?legacy.header:null;
     fields.createdDate=created.header||null;
+    const cert=cd.header?{...cd,legacy:legacy.header?legacy:null}:legacy;
     dataRuntime.yearDiagnostics={certification:cert,created};
   }
   function dataBoolish(v){ const s=dataNorm(v); return /^(1|oui|yes|true|x|vrai)$/.test(s); }
@@ -6966,7 +6970,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       const contractNumber=String(dataRawValue(r,fields.contractNumber)||'').trim();
       const analysisExcluded=dataIsLostAbandonedStage(affairStage);
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||'';
-      const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||'';
+      const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||dataDateYear(dataRawValue(r,fields.certificationDecisionDateLegacy))||'';
       const createdYear=dataDateYear(dataRawValue(r,fields.createdDate))||'';
       let nature=String(dataRawValue(r,fields.nature)||'').trim();
       if(fields.nature && dataNorm(fields.nature)==='renovation') nature=dataBoolish(dataRawValue(r,fields.nature))?'Rénovation':''; if(!nature){const rr=dataNorm(dataRawValue(r,fields.referential));nature=/renov/.test(rr)?'Rénovation':(/neuf/.test(rr)?'Neuf':'');}
@@ -7018,7 +7022,7 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
       if(DATA_RULES?.applyContractStage)progress=DATA_RULES.applyContractStage(progress,affairStage);
       const rawStatus=progress.label;
       const constructionYear=dataConstructionYear(dataRawValue(r,fields.constructionYear))||project.constructionYear||'';
-      const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||project.certificationYear||'';
+      const certificationYear=dataDateYear(dataRawValue(r,fields.certificationDecisionDate))||dataDateYear(dataRawValue(r,fields.certificationDecisionDateLegacy))||project.certificationYear||'';
       const createdYear=dataDateYear(dataRawValue(r,fields.createdDate))||project.createdYear||'';
       let nature=String(dataRawValue(r,fields.nature)||project.nature||'').trim();
       if(fields.nature && dataNorm(fields.nature)==='renovation') nature=dataBoolish(dataRawValue(r,fields.nature))?'Rénovation':nature;

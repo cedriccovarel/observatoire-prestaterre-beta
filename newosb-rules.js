@@ -431,6 +431,10 @@
     return { header: null, match: ends.length > 1 ? 'ambigu' : 'absent', candidates: ends };
   }
   const CERTIFICATION_DATE_HEADER = 'Date de décision de certification';
+  // V6.65 (validé par l'utilisateur) : la décision de certification récente est saisie dans « Certification: Date de décision CD »
+  // (certificat définitif) ; l'ancienne colonne ne sert que pour les fiches anciennes. Les deux ne sont jamais remplies ensemble.
+  // Année de certification = année de la date CD, sinon de l'ancienne colonne. Jamais la date AP ni la date de réception.
+  const CERTIFICATION_CD_HEADER = 'Date de décision CD';
   const CREATION_DATE_HEADER = 'Date de création';
 
   // Lettre de colonne Google Sheets à partir d'un index (0 → A, 54 → BC).
@@ -516,7 +520,7 @@
 
   const api = {
     VERSION, stripAccents, looseNorm, headerKey, isPlaceholder, extractNumbers,
-    parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CREATION_DATE_HEADER,
+    parseNumber, parseMeasure, MEASURES, parseDateYear, columnLetter, resolveExactHeader, CERTIFICATION_DATE_HEADER, CERTIFICATION_CD_HEADER, CREATION_DATE_HEADER,
     PROGRESS_SOURCE_HEADER, PROGRESS_STATUSES, PROGRESS_KEYS, PROGRESS_MIN_VALID_RATIO,
     realignShiftedRows, shiftLayout, isPreliminaryContract, applyContractStage, PROGRESS_FALLBACK_HEADER, resolveProgressFallback, readProgress, progressMatch, progressStatus, columnProgressStats, PROGRESS_BY_KEY, levenshtein, resolveProgressColumn, PROGRESS_COLUMN_LETTER, PROGRESS_COLUMN_INDEX, stripNumbering
   };

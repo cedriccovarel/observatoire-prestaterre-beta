@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.65 | Minuscule ombre portée de la tête de clou sous le trait de crayon du compteur d'eau. |
 | V6.64 | Minuscule tête de clou sombre, avec son reflet, sous le trait de crayon de relève du compteur d'eau. |
 | V6.63 | Minuscule trait de crayon de relève à gauche du cadran du compteur d'eau. |
 | V6.62 | Minuscule pastille de repère en laiton scellée dans l'enduit à droite du compteur d'eau. |
@@ -101,3 +102,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - V6.64 : « Générateur de rapports » transmet toujours le jeton `newosbScope` à Obslide, même si le stockage du navigateur est plein
   (l'enregistrement du périmètre est facultatif : les données passent par postMessage). Stockage partagé par tous les sites de
   cedriccovarel.github.io : ne pas y écrire de gros volumes (Obslide V29.19.2 allège aussi sa sauvegarde).
+- V6.65 (validé par l'utilisateur) : année de certification = « Certification: Date de décision CD », sinon ancienne colonne « Date de
+  décision de certification » (jamais remplies ensemble ; 18 → ~390 opérations certifiées en 2026). Jamais la date AP ni la date de réception
+  (retirées en V6.13.1 parce qu'elles faussaient le filtre).

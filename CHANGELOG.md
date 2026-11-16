@@ -1,5 +1,13 @@
 # Historique
 
+## V6.65 — Année de certification : date de décision CD
+- Année de certification = année de « Certification: Date de décision CD » (certificat définitif), sinon de l'ancienne colonne
+  « Date de décision de certification ». Les deux ne sont jamais remplies sur la même ligne : les décisions récentes sont dans la
+  colonne CD. Avant, seule l'ancienne colonne était lue (export du 09/11/2026 : 18 opérations certifiées en 2026 au lieu d'environ 390).
+- Jamais la date AP (attestation provisoire) ni la date de réception du dossier.
+- Qualité & données : le diagnostic des années indique les deux colonnes lues.
+- Écran de chargement : minuscule ombre portée de la tête de clou sous le trait de crayon du compteur d'eau.
+
 ## V6.64 — Générateur de rapports : transmission à Obslide même avec un stockage plein
 - Le bouton « Générateur de rapports » ouvre toujours Obslide avec son jeton : Obslide reçoit les données de l'Observatoire par
   message même si le stockage du navigateur est plein (il est partagé par tous les sites de cedriccovarel.github.io). Avant, un
