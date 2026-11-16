@@ -1,5 +1,12 @@
 # Historique
 
+## V6.64 — Générateur de rapports : transmission à Obslide même avec un stockage plein
+- Le bouton « Générateur de rapports » ouvre toujours Obslide avec son jeton : Obslide reçoit les données de l'Observatoire par
+  message même si le stockage du navigateur est plein (il est partagé par tous les sites de cedriccovarel.github.io). Avant, un
+  stockage plein ouvrait Obslide sans jeton, et Obslide affichait « Lecture directe désactivée ».
+- L'ancien périmètre enregistré est effacé avant d'écrire le nouveau.
+- Écran de chargement : minuscule tête de clou sombre, avec son reflet, sous le trait de crayon de relève du compteur d'eau.
+
 ## V6.63 — Liens partagés : données techniques TotalRecoll incluses
 - Création d'un lien : option « Joindre les données techniques TotalRecoll » (cochée si TotalRecoll est chargé). Seules les opérations
   du périmètre sont gardées (filtrage par le serveur). Les données sont enregistrées avec le lien dans l'onglet masqué

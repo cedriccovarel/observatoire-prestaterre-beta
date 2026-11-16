@@ -7595,14 +7595,18 @@ Exemple 2	9">${esc(model.importPaste || '')}</textarea></div>
     // obslide). Si ce site ne répond pas, la copie intégrée generator.html est ouverte à la place.
     openGenerator(scope,buildData){
       let query='';
-      try{
-        if(scope&&Array.isArray(scope.operationCodes)){
-          const token=`newosb_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
-          const payload={...scope,token,createdAt:Date.now()};
-          localStorage.setItem(DATA_GENERATOR_SCOPE_STORAGE_KEY,JSON.stringify(payload));
-          query=`?newosbScope=${encodeURIComponent(token)}`;
-        }else localStorage.removeItem(DATA_GENERATOR_SCOPE_STORAGE_KEY);
-      }catch(e){console.warn('NEWOSB transfert filtres vers OSBslide:',e);}
+      // V6.64 : le jeton est TOUJOURS transmis. Le stockage du navigateur est partagé par tous les sites de
+      // cedriccovarel.github.io ; s'il est plein, l'enregistrement du périmètre échoue, mais Obslide reçoit quand même
+      // les données par postMessage (le jeton suffit). Avant, un stockage plein ouvrait Obslide sans jeton : Obslide
+      // appelait alors le pont directement, qui refuse (« Lecture directe désactivée »).
+      if(scope&&Array.isArray(scope.operationCodes)){
+        const token=`newosb_${Date.now()}_${Math.random().toString(36).slice(2,10)}`;
+        query=`?newosbScope=${encodeURIComponent(token)}`;
+        try{
+          localStorage.removeItem(DATA_GENERATOR_SCOPE_STORAGE_KEY); // libère l'ancien périmètre avant d'écrire le nouveau
+          localStorage.setItem(DATA_GENERATOR_SCOPE_STORAGE_KEY,JSON.stringify({...scope,token,createdAt:Date.now()}));
+        }catch(e){console.warn('NEWOSB périmètre non enregistré (stockage du navigateur plein) : transmis à Obslide par message seulement.',e);}
+      }else{ try{localStorage.removeItem(DATA_GENERATOR_SCOPE_STORAGE_KEY);}catch{} }
       const latest=OBSLIDE_URL+query,legacy=new URL('generator.html'+query,location.href).href;
       // Fenêtre ouverte pendant le clic (sinon bloquée), puis dirigée vers la bonne adresse. Elle garde le lien
       // vers l'Observatoire : Obslide y demande les données déjà chargées (voir dataGeneratorHandoff).

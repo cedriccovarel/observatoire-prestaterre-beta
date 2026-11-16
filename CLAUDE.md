@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.64 | Minuscule tête de clou sombre, avec son reflet, sous le trait de crayon de relève du compteur d'eau. |
 | V6.63 | Minuscule trait de crayon de relève à gauche du cadran du compteur d'eau. |
 | V6.62 | Minuscule pastille de repère en laiton scellée dans l'enduit à droite du compteur d'eau. |
 | V6.61 | Minuscule éclat d'enduit plus clair, avec son ombre fine, à gauche du compteur d'eau. |
@@ -97,3 +98,6 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
   sont servies localement (`TILE_PNG` dans `scenario()`). Territoires : Départements / Villes (`core.cityGroups`, filtre croisé `commune`).
 - V6.63 : liens partagés avec complément TotalRecoll (option à la création, « Mettre à jour TotalRecoll ») ; stocké par le script
   (OBSERVATOIRE_PARTAGES_COMPLEMENTS, gzip base64), filtré au périmètre, pseudonymisé pour un lien anonymisé, supprimé à la révocation.
+- V6.64 : « Générateur de rapports » transmet toujours le jeton `newosbScope` à Obslide, même si le stockage du navigateur est plein
+  (l'enregistrement du périmètre est facultatif : les données passent par postMessage). Stockage partagé par tous les sites de
+  cedriccovarel.github.io : ne pas y écrire de gros volumes (Obslide V29.19.2 allège aussi sa sauvegarde).
