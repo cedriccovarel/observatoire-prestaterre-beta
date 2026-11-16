@@ -1,5 +1,13 @@
 # Historique
 
+## V6.66 — Publication depuis TotalRecoll
+- TotalRecoll publie son tableau recollé (export Salesforce « Suivi tous contrats enrichi » complété par ExtracTerre) dans l'onglet
+  OPERATIONS, avec la clé de l'Observatoire : plus de copier-coller dans la Sheet. Les liens partagés lisent ces nouvelles données.
+- Sécurité : l'ancien contenu d'OPERATIONS est sauvegardé dans l'onglet masqué OPERATIONS_SAUVEGARDE ; les lignes transitent par un
+  onglet masqué et OPERATIONS n'est remplacé qu'une fois toutes les lignes reçues. Refusé pour un lien partagé et en mode anonymisé.
+- Script Code_Operations.gs 06.47 (à redéployer).
+- Écran de chargement : minuscule éraflure claire sur l'enduit au-dessus de la tête de clou du compteur d'eau.
+
 ## V6.65 — Année de certification : date de décision CD
 - Année de certification = année de « Certification: Date de décision CD » (certificat définitif), sinon de l'ancienne colonne
   « Date de décision de certification ». Les deux ne sont jamais remplies sur la même ligne : les décisions récentes sont dans la

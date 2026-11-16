@@ -1,5 +1,5 @@
 /*
- * Observatoire Prestaterre — V6.65 — écran de chargement des données.
+ * Observatoire Prestaterre — V6.66 — écran de chargement des données.
  *
  * Un chantier de rénovation en cinq étapes avance avec le chargement réel : diagnostic thermique,
  * isolation de la façade, menuiseries, énergie (panneaux solaires, pompe à chaleur), végétalisation.
@@ -647,6 +647,8 @@
     if (watering) { ctx.fillStyle = '#d5e2e8'; ctx.fillRect(x + 3, y + 10.2, 8, 1); ctx.fillStyle = '#2f7fbf'; ctx.fillRect(x + 3, y + 10.2, 8 * (still ? 0.5 : (t * 0.35) % 1), 1); }
     // V6.44 : petite étiquette « m³ » sous le cadran du compteur (même pendant les mouvements réduits).
     ctx.fillStyle = '#5d7480'; ctx.font = '600 3px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('m³', x + 7, y + 12.6); ctx.textAlign = 'start';
+    // V6.66 : minuscule éraflure claire sur l'enduit, juste au-dessus de la tête de clou (fixe).
+    ctx.strokeStyle = 'rgba(245,240,228,.45)'; ctx.lineWidth = 0.2; ctx.beginPath(); ctx.moveTo(x + 1.0, y + 5.55); ctx.lineTo(x + 1.9, y + 5.4); ctx.stroke();
     // V6.65 : minuscule ombre portée de la tête de clou, décalée vers le bas à droite (fixe).
     ctx.fillStyle = 'rgba(40,35,30,.18)'; ctx.beginPath(); ctx.ellipse(x + 1.85, y + 6.5, 0.4, 0.22, 0.3, 0, Math.PI * 2); ctx.fill();
     // V6.64 : minuscule tête de clou sombre, avec son reflet, sous le trait de crayon de relève (fixe).

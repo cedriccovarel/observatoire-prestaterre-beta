@@ -454,7 +454,7 @@ test('V6.45 : lignes non comptées (regroupées, sans code ni nom, vides) avec n
   assert(a.includes("rowNumbers:json?.rowNumbers||null,emptyRows:json?.emptyRows??null"));
 });
 test('V6.44 : fenêtre Données — lien du classeur lu et vérification d’une opération (absente, ignorée, fusionnée, hors statistiques, masquée)', () => {
-  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.46');
+  const m = opsGs().newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.sourceInfo.spreadsheet, 'Test'); assert.strictEqual(m.version, '06.47');
   const a = read('app.js'), start = a.indexOf('  function dataLookupReport('), end = a.indexOf('\n  function dataLookup(){');
   const dataNorm = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const win = { NEWOSB_CORE: { isExcludedOperation: o => /perdu/i.test(o.stage || ''), affairStage: o => o.stage } };
@@ -1336,6 +1336,41 @@ section('14. Complément TotalRecoll (newosb-recoll.js) — V6.49');
   // V6.63 : le complément n'est jamais stocké sur le poste ; il n'est envoyé au script que pour un lien partagé (création ou
   // « Mettre à jour TotalRecoll »), et le destinataire ne fait que le lire (mode complement).
   test('le complément n’est jamais stocké sur le poste ; envoyé au script seulement pour un lien partagé', () => { const a = read('app.js'), seg = a.slice(a.indexOf('V6.49 : complément TotalRecoll'), a.indexOf('// Où est passée une opération')); assert(!/localStorage|sessionStorage|indexedDB|fetch\(/.test(seg)); assert.deepStrictEqual([...seg.matchAll(/dataAppsScriptRequest\(([^)]*)\)/g)].map(m => m[1]), ["url,{mode:'complement'},90000"]); assert(!/localStorage|sessionStorage|fetch\(/.test(read('newosb-recoll.js'))); const sh = read('newosb-share.js'); assert(/mode: 'shareCreate', \.\.\.\(complement \? \{ complement \} : \{\}\)/.test(sh) && /mode: 'shareComplement', id, complement: packed\.b64/.test(sh)); });
+}
+
+section('15. Publication TotalRecoll → OPERATIONS — V6.66');
+{
+  const pub = (props = {}) => loadGs('Code_Operations.gs', { matrix: MATRIX.map(r => r.slice()), properties: { NEWOSB_ACCESS_KEY: KEY, ...props } });
+  const H2 = ['Opération: Code interne', "Nom de l'opération", 'Certification: Date de décision CD', 'Total logements', 'Note'];
+  const R2 = [['OP-10', 'Résidence A', '12/03/2026', 40, '=HYPERLINK("x")'], ['OP-11', 'Résidence B', '', 12, '-'], ['OP-12', 'Résidence C', '05/01/2025', '', '+33 6']];
+  test('publication complète : OPERATIONS remplacé, ancien contenu sauvegardé, transit supprimé', () => {
+    const gs = pub(); const before = gs.sheets.OPERATIONS.data.map(r => r.slice());
+    const b = gs.newosbBridgeRequest({ mode: 'publishbegin', key: KEY, headers: H2, total: 3 }); assert.strictEqual(b.ok, true, b.error);
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishchunk', key: KEY, id: b.id, offset: 0, rows: R2.slice(0, 2) }).received, 2);
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishchunk', key: KEY, id: b.id, offset: 2, rows: R2.slice(2) }).received, 3);
+    const c = gs.newosbBridgeRequest({ mode: 'publishcommit', key: KEY, id: b.id }); assert.strictEqual(c.ok, true, c.error); assert.strictEqual(c.rows, 3);
+    const ops = gs.sheets.OPERATIONS.data; assert.deepStrictEqual(ops[0], H2); assert.strictEqual(ops.length, 4); assert.strictEqual(ops[1][0], 'OP-10'); assert.strictEqual(ops[1][3], 40);
+    assert.strictEqual(ops[1][4], "'=HYPERLINK(\"x\")", 'jamais de formule'); assert.strictEqual(ops[2][4], "'-"); assert.strictEqual(ops[3][4], "'+33 6");
+    const trim = r => { const x = r.map(v => String(v ?? '')); while (x.length && x[x.length - 1] === '') x.pop(); return x; };
+    assert.deepStrictEqual(gs.sheets.OPERATIONS_SAUVEGARDE.data.map(trim), before.map(trim));
+    assert.strictEqual(gs.sheets.OPERATIONS_SAUVEGARDE.hidden, true); assert.strictEqual(gs.sheets.OBSERVATOIRE_PUBLICATION, undefined);
+    const m = gs.newosbBridgeRequest({ mode: 'meta', key: KEY }); assert.strictEqual(m.ok, true); assert(m.headers.includes('Certification: Date de décision CD'));
+  });
+  test('publication interrompue : OPERATIONS intact, commit refusé', () => {
+    const gs = pub(); const before = JSON.stringify(gs.sheets.OPERATIONS.data);
+    const b = gs.newosbBridgeRequest({ mode: 'publishbegin', key: KEY, headers: H2, total: 3 });
+    gs.newosbBridgeRequest({ mode: 'publishchunk', key: KEY, id: b.id, offset: 0, rows: R2.slice(0, 1) });
+    const c = gs.newosbBridgeRequest({ mode: 'publishcommit', key: KEY, id: b.id }); assert.strictEqual(c.ok, false); assert(/incomplete/.test(c.error));
+    assert.strictEqual(JSON.stringify(gs.sheets.OPERATIONS.data), before);
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishchunk', key: KEY, id: b.id, offset: 0, rows: R2.slice(1, 2) }).ok, false, 'bloc hors séquence refusé');
+  });
+  test('publication refusée sans la bonne clé, en mode anonymisé, ou sans colonne code', () => {
+    const gs = pub();
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishbegin', key: 'mauvaise-cle-0000000000', headers: H2, total: 3 }).ok, false);
+    assert.strictEqual(pub({ NEWOSB_ANONYMIZED_ONLY: '1' }).newosbBridgeRequest({ mode: 'publishbegin', key: KEY, headers: H2, total: 3 }).ok, false);
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishbegin', key: KEY, headers: ['Nom', 'Ville'], total: 1 }).ok, false);
+    assert.strictEqual(gs.newosbBridgeRequest({ mode: 'publishchunk', key: KEY, id: 'inconnu', offset: 0, rows: R2 }).ok, false);
+  });
 }
 
 section('7. Cohérence du paquet');

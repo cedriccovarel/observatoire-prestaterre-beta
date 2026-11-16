@@ -20,6 +20,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 |---|---|
 | V6.22 | Écran de chargement : bâtiment de 1955, technicien, CO₂ capté dans la barre. |
 | V6.23 | Chantier en 5 étapes, ciel qui s'éclaircit, arbres, oiseaux ; barre unique OPERATIONS + RAPPORT. |
+| V6.66 | Minuscule éraflure claire sur l'enduit au-dessus de la tête de clou du compteur d'eau. |
 | V6.65 | Minuscule ombre portée de la tête de clou sous le trait de crayon du compteur d'eau. |
 | V6.64 | Minuscule tête de clou sombre, avec son reflet, sous le trait de crayon de relève du compteur d'eau. |
 | V6.63 | Minuscule trait de crayon de relève à gauche du cadran du compteur d'eau. |
@@ -105,3 +106,7 @@ qualité du rendu, nouvel élément, mouvement plus vivant, accessibilité, perf
 - V6.65 (validé par l'utilisateur) : année de certification = « Certification: Date de décision CD », sinon ancienne colonne « Date de
   décision de certification » (jamais remplies ensemble ; 18 → ~390 opérations certifiées en 2026). Jamais la date AP ni la date de réception
   (retirées en V6.13.1 parce qu'elles faussaient le filtre).
+- V6.66 : publication TotalRecoll → onglet OPERATIONS (script 06.47, modes publishbegin / publishchunk / publishcommit, même clé que
+  l'Observatoire, choix de l'utilisateur). Transit par l'onglet masque OBSERVATOIRE_PUBLICATION ; au commit, OPERATIONS est sauvegardé dans
+  OPERATIONS_SAUVEGARDE (masqué, remplacé à chaque publication) puis remplacé. Refusé en déploiement anonymisé et pour un lien partagé.
+  Aucune valeur écrite comme formule (préfixe ' pour = + - @). TotalRecoll applique son niveau de fiabilité avant publication.

@@ -23,6 +23,9 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
         return range;
       },
       hideSheet() { sh.hidden = true; return sh; },
+      clear() { data.length = 0; return sh; },
+      getMaxRows: () => Math.max(1000, data.length), getMaxColumns: () => Math.max(26, ...data.map(r => r.length)),
+      insertRowsAfter() { return sh; }, insertColumnsAfter() { return sh; },
       deleteRow(r) { data.splice(r - 1, 1); return sh; },
       protect() { sh.protected = true; return { setDescription() { return this; }, setWarningOnly() { return this; } }; }
     };
@@ -30,7 +33,7 @@ function loadGs(file, { matrix, properties = {}, sheetName = 'OPERATIONS', cache
   };
   const sheets = { [sheetName]: makeSheet(matrix) };
   Object.entries(extraSheets).forEach(([n, m]) => { sheets[n] = makeSheet(m); });
-  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet([])), getSpreadsheetTimeZone: () => 'Europe/Paris' };
+  const ss = { getId: () => 'TEST', getName: () => 'Test', getSheetByName: n => sheets[n] || null, insertSheet: n => (sheets[n] = makeSheet([])), deleteSheet: s => { Object.keys(sheets).forEach(k => { if (sheets[k] === s) delete sheets[k]; }); }, getSpreadsheetTimeZone: () => 'Europe/Paris' };
   const ctx = {
     console, Date, JSON, Math, String, Number, Array, Object, RegExp, Error,
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); }, deleteProperty: k => { delete props[k]; } }) },

@@ -1,5 +1,9 @@
 /**
- * PRESTATERRE OBSERVATOIRE - V6.63 (script OPERATIONS, version API 06.46)
+ * PRESTATERRE OBSERVATOIRE - V6.66 (script OPERATIONS, version API 06.47)
+ * Changements V6.66 : publication depuis TotalRecoll (modes publishbegin / publishchunk / publishcommit, meme cle).
+ *   Le tableau recolle remplace le contenu de l'onglet OPERATIONS, apres sauvegarde dans l'onglet masque
+ *   OPERATIONS_SAUVEGARDE ; les lignes transitent par l'onglet masque OBSERVATOIRE_PUBLICATION (supprime au commit).
+ *   Refuse sur un deploiement anonymise et pour un lien de partage. Aucune valeur ecrite comme formule.
  *
  * Changements V6.45 : chaque bloc (mode chunk) indique le numero de ligne du classeur de chaque ligne
  *   transmise (rowNumbers) ; la fenetre Donnees liste ainsi les lignes non comptees comme operations.
@@ -72,7 +76,7 @@ const OBSERVATOIRE_CONFIG = {
   DATA_SCAN_ROWS: 30,
   DEFAULT_CHUNK_SIZE: 500,
   MAX_CHUNK_SIZE: 750,
-  VERSION: '06.46',
+  VERSION: '06.47',
   MIN_KEY_LENGTH: 16,
   ALLOWED_ORIGINS_PROPERTY: 'NEWOSB_ALLOWED_ORIGINS',
   ACCESS_KEY_PROPERTY: 'NEWOSB_ACCESS_KEY',
@@ -187,6 +191,12 @@ function newosbApiRequest_(params) {
   if (mode === 'importslides') {
     if (newosbAnonymizedOnly_()) throw new Error('Creation Google Slides desactivee sur un deploiement anonymise.');
     return newosbImportPptxSlides_(params.presentation || {});
+  }
+
+  // V6.66 : publication depuis TotalRecoll (meme cle que l'Observatoire) : remplace le contenu de l'onglet OPERATIONS.
+  if (mode === 'publishbegin' || mode === 'publishchunk' || mode === 'publishcommit') {
+    if (newosbAnonymizedOnly_()) throw new Error('Publication desactivee sur un deploiement anonymise.');
+    return newosbPublish_(mode, params);
   }
 
   if (mode === 'meta') {
@@ -350,6 +360,97 @@ html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;backgr
 }
 
 // V6.14 : plus de JSONP (aucun parametre « prefix ») ; JSON uniquement, sans donnee du classeur hors pont.
+// -----------------------------------------------------------------------------
+// V6.66 - Publication TotalRecoll -> onglet OPERATIONS
+// -----------------------------------------------------------------------------
+// TotalRecoll envoie, par le pont et avec la cle d'acces, le tableau recolle (export Salesforce complete par
+// ExtracTerre) en trois temps : publishbegin (en-tetes), publishchunk (blocs de lignes), publishcommit.
+// Les lignes sont d'abord ecrites dans un onglet masque de transit ; au commit seulement, l'onglet OPERATIONS
+// est sauvegarde (onglet masque OPERATIONS_SAUVEGARDE, remplace a chaque publication) puis remplace.
+// Une publication interrompue ne touche donc jamais OPERATIONS. Aucune cellule n'est ecrite comme formule.
+const NEWOSB_PUBLISH = { STAGING: 'OBSERVATOIRE_PUBLICATION', BACKUP: 'OPERATIONS_SAUVEGARDE', STATE: 'NEWOSB_PUBLISH_STATE', MAX_COLUMNS: 400, MAX_ROWS: 60000, MAX_CHUNK: 1000, BLOCK: 2000 };
+
+function newosbPublishCell_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return isFinite(v) ? v : '';
+  if (typeof v === 'boolean') return v ? 'Oui' : 'Non';
+  const s = String(v).slice(0, 50000);
+  // Une valeur commencant par = + - @ serait lue comme une formule : elle est gardee comme texte (sauf nombre negatif).
+  return /^[=+@]/.test(s) || (/^-/.test(s) && !/^-\d/.test(s)) ? "'" + s : s;
+}
+
+function newosbPublishEnsureSize_(sheet, rows, cols) {
+  if (typeof sheet.getMaxRows === 'function' && sheet.getMaxRows() < rows) sheet.insertRowsAfter(sheet.getMaxRows(), rows - sheet.getMaxRows());
+  if (typeof sheet.getMaxColumns === 'function' && sheet.getMaxColumns() < cols) sheet.insertColumnsAfter(sheet.getMaxColumns(), cols - sheet.getMaxColumns());
+}
+
+function newosbPublishCopy_(from, to, rows, cols) {
+  newosbPublishEnsureSize_(to, rows, cols);
+  for (let r = 1; r <= rows; r += NEWOSB_PUBLISH.BLOCK) {
+    const n = Math.min(NEWOSB_PUBLISH.BLOCK, rows - r + 1);
+    const values = from.getRange(r, 1, n, cols).getValues().map(function(row) { return row.map(newosbPublishCell_); });
+    to.getRange(r, 1, n, cols).setNumberFormat('@').setValues(values);
+  }
+}
+
+function newosbPublish_(mode, params) {
+  const lock = newosbShareLock_();
+  if (!lock) throw new Error('Publication deja en cours : reessaie dans un instant.');
+  try {
+    const ss = getSpreadsheet_();
+    const props = PropertiesService.getScriptProperties();
+    const loadState = function() { try { return JSON.parse(props.getProperty(NEWOSB_PUBLISH.STATE) || 'null'); } catch (e) { return null; } };
+    if (mode === 'publishbegin') {
+      const headers = Array.isArray(params.headers) ? params.headers.map(function(h) { return String(h == null ? '' : h).trim(); }) : [];
+      const total = Number(params.total);
+      if (!headers.length || headers.length > NEWOSB_PUBLISH.MAX_COLUMNS) throw new Error('En-tetes invalides (1 a ' + NEWOSB_PUBLISH.MAX_COLUMNS + ' colonnes).');
+      if (!headers.some(function(h) { return /code interne|numero du contrat|numéro du contrat/i.test(h); })) throw new Error('Colonne « Code interne » ou « Numero du contrat » absente : publication refusee.');
+      if (!(total >= 1 && total <= NEWOSB_PUBLISH.MAX_ROWS && Math.floor(total) === total)) throw new Error('Nombre de lignes invalide.');
+      let staging = ss.getSheetByName(NEWOSB_PUBLISH.STAGING);
+      if (staging) ss.deleteSheet(staging);
+      staging = ss.insertSheet(NEWOSB_PUBLISH.STAGING);
+      staging.hideSheet();
+      newosbPublishEnsureSize_(staging, total + 1, headers.length);
+      staging.getRange(1, 1, 1, headers.length).setNumberFormat('@').setValues([headers.map(newosbPublishCell_)]);
+      const state = { id: Utilities.getUuid(), total: total, received: 0, cols: headers.length, startedAt: Date.now() };
+      props.setProperty(NEWOSB_PUBLISH.STATE, JSON.stringify(state));
+      return { ok: true, id: state.id, total: total, columns: headers.length, version: OBSERVATOIRE_CONFIG.VERSION };
+    }
+    const state = loadState();
+    if (!state || state.id !== String(params.id || '')) throw new Error('Publication inconnue ou expiree : relance la publication.');
+    const staging = ss.getSheetByName(NEWOSB_PUBLISH.STAGING);
+    if (!staging) throw new Error('Onglet de transit introuvable : relance la publication.');
+    if (mode === 'publishchunk') {
+      const rows = Array.isArray(params.rows) ? params.rows : [];
+      if (Number(params.offset) !== state.received) throw new Error('Bloc hors sequence (attendu a partir de la ligne ' + state.received + ').');
+      if (!rows.length || rows.length > NEWOSB_PUBLISH.MAX_CHUNK || state.received + rows.length > state.total) throw new Error('Bloc de lignes invalide.');
+      const values = rows.map(function(row) { const r = Array.isArray(row) ? row.slice(0, state.cols) : []; while (r.length < state.cols) r.push(''); return r.map(newosbPublishCell_); });
+      staging.getRange(2 + state.received, 1, values.length, state.cols).setNumberFormat('@').setValues(values);
+      state.received += values.length;
+      props.setProperty(NEWOSB_PUBLISH.STATE, JSON.stringify(state));
+      return { ok: true, received: state.received, total: state.total };
+    }
+    // publishcommit
+    if (state.received !== state.total) throw new Error('Publication incomplete : ' + state.received + ' lignes recues sur ' + state.total + '.');
+    const ops = ss.getSheetByName(OBSERVATOIRE_CONFIG.SHEET_NAME);
+    if (!ops) throw new Error('Onglet "' + OBSERVATOIRE_CONFIG.SHEET_NAME + '" introuvable.');
+    // Sauvegarde de l'onglet actuel (valeurs), remplacee a chaque publication.
+    let backup = ss.getSheetByName(NEWOSB_PUBLISH.BACKUP);
+    if (backup) ss.deleteSheet(backup);
+    backup = ss.insertSheet(NEWOSB_PUBLISH.BACKUP);
+    backup.hideSheet();
+    const oldRows = ops.getLastRow(), oldCols = ops.getLastColumn();
+    if (oldRows && oldCols) newosbPublishCopy_(ops, backup, oldRows, oldCols);
+    ops.clear();
+    newosbPublishCopy_(staging, ops, state.total + 1, state.cols);
+    ss.deleteSheet(staging);
+    props.deleteProperty(NEWOSB_PUBLISH.STATE);
+    return { ok: true, published: true, rows: state.total, columns: state.cols, backupRows: Math.max(0, oldRows), backupSheet: NEWOSB_PUBLISH.BACKUP, publishedAt: new Date().toISOString() };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
 function jsonOutput_(payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
